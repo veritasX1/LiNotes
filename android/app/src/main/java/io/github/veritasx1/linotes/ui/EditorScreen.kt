@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.github.veritasx1.linotes.data.Keep
 import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncObject
 import io.github.veritasx1.linotes.data.Vault
@@ -69,6 +70,20 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var locking by remember { mutableStateOf<Boolean?>(null) }
     var styleTick by remember { mutableIntStateOf(0) }
     var sortChecked by remember { mutableStateOf(false) }
+    var keepChoice by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
+
+    // Content that only lives on the server is fetched when the note opens.
+    DisposableEffect(noteId) {
+        sync.openNote = noteId
+        sync.markOpened(noteId)
+        onDispose { if (sync.openNote == noteId) sync.openNote = null; sync.markOpened(noteId) }
+    }
+    LaunchedEffect(noteId, note?.evicted) {
+        if (note?.evicted == true) {
+            loadFailed = withContext(Dispatchers.IO) { try { sync.fetchNote(noteId) == null } catch (error: Exception) { true } }
+        }
+    }
 
     if (note == null) {
         LaunchedEffect(Unit) { state.pop() }
@@ -87,7 +102,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         RichEditor(context, editorColors) { fileId, done ->
             scope.launch {
                 val bitmap: Bitmap? = withContext(Dispatchers.IO) {
-                    try { RichEditor.decodeImage(sync.fetchFile(fileId).readBytes()) } catch (error: Exception) { null }
+                    try { RichEditor.decodeImage(sync.fetchFile(fileId, sync.get(noteId)?.share).readBytes()) } catch (error: Exception) { null }
                 }
                 done(bitmap)
             }
@@ -97,6 +112,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
 
     fun currentBody(): JSONArray? {
         val current = sync.get(noteId) ?: return null
+        if (current.evicted) return null
         if (current.data.has("enc")) {
             val key = state.vaultKey ?: return null
             return try { Vault.openBody(key, current.data.getJSONObject("enc")) } catch (error: Exception) { null }
@@ -106,7 +122,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
 
     fun save() {
         val current = sync.get(noteId) ?: return
-        if (current.data.has("trashed")) return
+        if (current.data.has("trashed") || current.evicted) return
+        if (current.data.has("enc") && state.vaultKey == null) return
         val blocks = JSONArray(editor.toBlocks())
         val serialized = blocks.toString()
         if (serialized == loadedBlocks.value) return
@@ -119,7 +136,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         } else {
             data.put("body", blocks)
         }
-        sync.put("note", data, current.space, current.id)
+        sync.put("note", data, current.share, current.id)
     }
 
     // Load the note (and reload it when it changes on another device).
@@ -161,7 +178,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         NavBar(
             title = "", backLabel = backLabel, onBack = { save(); state.pop() }, background = colors.plain,
             actions = {
-                if (!trashed && !locked) BarButton(Glyph.Share, "In gemeinsamen Ordner verschieben") { save(); moving = true }
+                if (!trashed && !locked) BarButton(Glyph.Share, "Teilen") { save(); state.push(Route.Share(note.id)) }
                 BarButton(Glyph.More, "Mehr") { save(); showMenu = true }
             },
         )
@@ -170,6 +187,18 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 Text("Diese Notiz liegt in „Zuletzt gelöscht“.", style = Type.footnote, color = colors.label, modifier = Modifier.weight(1f))
                 TextButton("Wiederherstellen") { restoreNote(state, note) }
             }
+        }
+        if (note.evicted) {
+            Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                GlyphIcon(if (loadFailed) Glyph.CloudOff else Glyph.Cloud, colors.secondary, 56.dp)
+                Spacer(Modifier.height(16.dp))
+                Text(if (loadFailed) "Die Notiz liegt nur auf dem Server" else "Wird vom Server geladen …", style = Type.title3, color = colors.label)
+                if (loadFailed) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Sie kann geöffnet werden, sobald eine Verbindung besteht.", style = Type.subheadline, color = colors.secondary)
+                }
+            }
+            return@Column
         }
         if (locked && body == null) {
             LockedPlaceholder(state) { unlockedRevision++ }
@@ -190,7 +219,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     else state.pickImage { bytes, mime ->
                         scope.launch {
                             try {
-                                val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, mime, note.space) }
+                                val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
                                 editor.insertImage(id)
                             } catch (error: Exception) {
                                 state.showToast(errorText(error))
@@ -211,13 +240,24 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             } else {
                 add(SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
                 add(SheetAction("Verschieben …") { moving = true })
+                if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
                 add(SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = !locked })
+                add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
                 add(SheetAction(if (sortChecked) "Abgehakte nicht mehr sortieren" else "Abgehakte nach unten sortieren") { sortChecked = !sortChecked })
                 add(SheetAction("Löschen", destructive = true) { trashNote(state, note); state.pop() })
             }
         }) { showMenu = false }
     }
     if (moving) MoveSheet(state, note) { moving = false }
+    if (keepChoice) {
+        val current = note.data.optString("keep")
+        ActionSheet("Wie lange soll diese Notiz auf dem Handy bleiben?",
+            listOf(SheetAction("Wie in den Einstellungen (${Keep.label(sync.keepDefault())})" + if (current.isEmpty()) " ✓" else "") {
+                sync.update(note.id) { it.remove("keep") }
+            }) + Keep.choices.map { (value, label) ->
+                SheetAction(label + if (value == current) " ✓" else "") { sync.update(note.id) { it.put("keep", value) } }
+            }) { keepChoice = false }
+    }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
 }
 
@@ -225,14 +265,19 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
 private fun LockedPlaceholder(state: AppState, onUnlocked: () -> Unit) {
     val colors = palette
     var asking by remember { mutableStateOf(false) }
+    fun unlock() {
+        if (state.biometricEnabled) state.unlockWithBiometric { ok -> if (ok) onUnlocked() else asking = true }
+        else asking = true
+    }
+    LaunchedEffect(Unit) { if (state.biometricEnabled) unlock() }
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         GlyphIcon(Glyph.Lock, colors.secondary, 56.dp)
         Spacer(Modifier.height(16.dp))
         Text("Diese Notiz ist gesperrt", style = Type.title3, color = colors.label)
         Spacer(Modifier.height(6.dp))
-        Text("Gib dein Notizen-Passwort ein, um sie anzusehen.", style = Type.subheadline, color = colors.secondary)
+        Text(if (state.biometricEnabled) "Entsperre sie mit Fingerabdruck, PIN oder Muster." else "Gib dein Notizen-Passwort ein, um sie anzusehen.", style = Type.subheadline, color = colors.secondary)
         Spacer(Modifier.height(24.dp))
-        PrimaryButton("Notiz anzeigen", modifier = Modifier.width(220.dp)) { asking = true }
+        PrimaryButton("Notiz anzeigen", modifier = Modifier.width(220.dp)) { unlock() }
     }
     if (asking) UnlockDialog(state, onDismiss = { asking = false }) { asking = false; onUnlocked() }
 }
@@ -268,20 +313,20 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             val body = data.optJSONArray("body") ?: JSONArray()
             data.remove("body")
             data.put("enc", Vault.sealBody(key, body)).put("modified", Model.now())
-            sync.put("note", data, current.space, current.id)
+            sync.put("note", data, current.share, current.id)
             state.toastLater("Notiz gesperrt")
         } else {
             val body = Vault.openBody(key, data.getJSONObject("enc"))
             data.remove("enc")
             data.put("body", body)
-            sync.put("note", data, current.space, current.id)
+            sync.put("note", data, current.share, current.id)
             state.toastLater("Sperre entfernt")
         }
         onDone()
     }
 
     when {
-        lock && note.space == "shared" -> {
+        lock && note.share != null -> {
             LaunchedEffect(Unit) { state.showToast("Geteilte Notizen können nicht gesperrt werden."); onDone() }
         }
         state.vaultKey != null -> LaunchedEffect(Unit) { state.touchVault(); perform() }
@@ -302,8 +347,16 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
                 }
             }
         }
-        else -> UnlockDialog(state, onDismiss = onDone) { perform() }
+        else -> VaultUnlock(state, onDismiss = onDone) { perform() }
     }
+}
+
+/** Fingerprint / PIN / pattern if switched on, otherwise (or as fallback) the notes password. */
+@Composable
+fun VaultUnlock(state: AppState, onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+    var password by remember { mutableStateOf(!state.biometricEnabled) }
+    if (!password) LaunchedEffect(Unit) { state.unlockWithBiometric { ok -> if (ok) onUnlocked() else password = true } }
+    else UnlockDialog(state, onDismiss = onDismiss, onUnlocked = onUnlocked)
 }
 
 @Composable

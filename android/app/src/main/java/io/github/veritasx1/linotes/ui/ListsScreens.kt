@@ -73,7 +73,7 @@ fun ListsScreen(state: AppState, revision: Long) {
                 val open = items.count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }
                 GroupRow(
                     title = list.data.optString("name", "Liste"),
-                    subtitle = if (list.space == "shared") "Geteilt" else "Nur für mich",
+                    subtitle = shareLabel(sync, list),
                     detail = "$open",
                     divider = index < lists.lastIndex,
                     onLongClick = { menu = list },
@@ -85,20 +85,12 @@ fun ListsScreen(state: AppState, revision: Long) {
     }
 
     if (creating) {
-        var space by remember { mutableStateOf<String?>(null) }
-        if (space == null) {
-            ActionSheet("Neue Liste", listOf(
-                SheetAction("Gemeinsam (für alle Konten)") { space = "shared" },
-                SheetAction("Nur für mich") { space = "private" },
-            )) { if (space == null) creating = false }
-        } else {
-            AlertDialog("Neue Liste", confirm = "Erstellen", fields = listOf(AlertField("z. B. Drogerie")), onDismiss = { creating = false }) { values ->
-                if (values[0].isNotBlank()) {
-                    val list = sync.put("list", JSONObject().put("name", values[0].trim()).put("grocery", true).put("order", Model.now()), space!!)
-                    state.push(Route.ListDetail(list.id))
-                }
-                creating = false
+        AlertDialog("Neue Liste", confirm = "Erstellen", fields = listOf(AlertField("z. B. Drogerie")), onDismiss = { creating = false }) { values ->
+            if (values[0].isNotBlank()) {
+                val list = sync.put("list", JSONObject().put("name", values[0].trim()).put("grocery", true).put("order", Model.now()))
+                state.push(Route.ListDetail(list.id))
             }
+            creating = false
         }
     }
     menu?.let { list -> ListMenu(state, list, onRename = { renaming = list }) { menu = null } }
@@ -116,6 +108,7 @@ private fun ListMenu(state: AppState, list: SyncObject, onRename: () -> Unit, on
     val sync = state.sync
     ActionSheet(list.data.optString("name"), listOf(
         SheetAction("Umbenennen") { onRename() },
+        SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
         SheetAction(if (list.data.optBoolean("grocery")) "Warengruppen ausschalten" else "Nach Warengruppen sortieren") {
             sync.update(list.id) { it.put("grocery", !it.optBoolean("grocery")) }
         },
@@ -149,7 +142,7 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
         val base = Model.now()
         text.lines().map { it.trim(' ', '-', '•', '\t') }.filter { it.isNotEmpty() }.forEachIndexed { index, line ->
             sync.put("item", JSONObject().put("list", listId).put("text", line).put("done", false)
-                .put("order", base + index * 0.001).put("by", sync.userId), list.space)
+                .put("order", base + index * 0.001).put("by", sync.userId), list.share)
         }
     }
 
@@ -157,7 +150,7 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
         Box(Modifier.weight(1f)) {
             LargeTitleScreen(
                 title = list.data.optString("name", "Liste"),
-                subtitle = "${open.size} offen · " + if (list.space == "shared") "geteilt mit allen" else "nur für dich",
+                subtitle = "${open.size} offen · " + shareLabel(sync, list),
                 backLabel = "Listen",
                 onBack = { state.pop() },
                 actions = { BarButton(Glyph.More, "Mehr") { menu = true } },
@@ -213,6 +206,7 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
                 val index = LIST_COLORS.indexOfFirst { it.first == list.data.optString("color") }
                 sync.update(list.id) { it.put("color", LIST_COLORS[(index + 1).mod(LIST_COLORS.size)].first) }
             },
+            SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
             SheetAction("Umbenennen") { renaming = true },
         )) { menu = false }
     }
@@ -266,7 +260,7 @@ private fun ItemRow(state: AppState, item: SyncObject, accent: Color, divider: B
                         modifier = Modifier.weight(1f).clickable { editing = true }.padding(vertical = 12.dp))
                 }
                 val by = item.data.optInt("by")
-                if (by != 0 && by != sync.userId && item.space == "shared") {
+                if (by != 0 && by != sync.userId && item.share != null) {
                     Text(sync.userName(by).take(1), style = Type.caption, color = colors.label,
                         modifier = Modifier.clip(CircleShape).background(accent.copy(alpha = 0.25f)).padding(horizontal = 7.dp, vertical = 2.dp))
                 }

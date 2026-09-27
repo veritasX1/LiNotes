@@ -36,14 +36,18 @@ fun LiNotesApp(state: AppState) {
                 state.showToast("Bitte melde dich erneut an.")
             }
         }
+        LaunchedEffect(Unit) {
+            state.sync.requests.collect { request -> if (state.incoming.none { it.optString("channel") == request.optString("channel") }) state.incoming.add(request) }
+        }
         Box(Modifier.fillMaxSize().background(colors.background)) {
             if (!state.signedIn) {
-                LoginScreen(state)
+                OnboardingScreen(state)
             } else {
                 BackHandler(enabled = state.stack.size > 1) { state.pop() }
                 val route = state.route
                 val depth = state.stack.size
-                val onEditor = route is Route.Editor || route is Route.ListDetail || route is Route.Board || route is Route.Settings
+                val onEditor = route is Route.Editor || route is Route.ListDetail || route is Route.Board || route is Route.Settings ||
+                    route is Route.People || route is Route.Verify || route is Route.Share || route is Route.Help
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
                         AnimatedContent(
@@ -65,6 +69,10 @@ fun LiNotesApp(state: AppState) {
                                 Route.Boards -> BoardsScreen(state, revision)
                                 is Route.Board -> BoardScreen(state, current.boardId, revision)
                                 Route.Settings -> SettingsScreen(state, revision)
+                                Route.People -> PeopleScreen(state, revision)
+                                is Route.Verify -> VerifyScreen(state, current.userId)
+                                is Route.Share -> ShareScreen(state, current.objectId, revision)
+                                Route.Help -> HelpScreen(state)
                             }
                         }
                     }
@@ -78,6 +86,11 @@ fun LiNotesApp(state: AppState) {
                     }
                 }
             }
+            if (state.signedIn) {
+                IncomingRequests(state)
+                if (state.askKeyfile) KeyfileDialog(state, firstTime = true) { state.askKeyfile = false }
+            }
+            QrScannerOverlay(state)
             Toast(state.toast)
         }
     }

@@ -354,10 +354,11 @@ class SyncEngine:
         for index, existing in enumerate(pending):
             if existing["id"] == obj["id"]:
                 change["base"] = existing["base"]
-                pending[index] = change
+                # Move to the end: a new share must reach the server before
+                # the objects that were just moved into it.
+                del pending[index]
                 break
-        else:
-            pending.append(change)
+        pending.append(change)
         self.wake.set()
 
     # ========================================================

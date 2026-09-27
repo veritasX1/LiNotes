@@ -256,7 +256,6 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
     def on_channel(self, channel):
         """Another device wants to join, or someone wants to verify."""
-        print("LiNotes: Anfrage", channel.get("purpose"), flush=True)
         if channel["purpose"] == "link":
             security_ui.approve_device(self, channel)
         elif channel["purpose"] == "verify":
