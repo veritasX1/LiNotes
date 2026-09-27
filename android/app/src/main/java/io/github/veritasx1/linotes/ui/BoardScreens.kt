@@ -62,36 +62,29 @@ fun BoardsScreen(state: AppState, revision: Long) {
     val boards = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
     val cards = remember(revision) { sync.all("card") }
     var creating by remember { mutableStateOf<String?>(null) }
-    var asking by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
         title = "Aufgaben",
-        bottomBar = { BottomToolbar(center = "", leading = { TextButton("+ Neues Board", bold = true) { asking = true } }) },
+        bottomBar = { BottomToolbar(center = "", leading = { TextButton("+ Neues Board", bold = true) { creating = "new" } }) },
     ) {
         if (boards.isEmpty()) item { EmptyState("Keine Boards", glyph = Glyph.Board) }
         section("boards", header = "Boards") {
             boards.forEachIndexed { index, board ->
                 GroupRow(board.data.optString("name", "Board"), Glyph.Board,
-                    subtitle = if (board.space == "shared") "Geteilt" else "Nur für mich",
+                    subtitle = shareLabel(sync, board),
                     detail = "${cards.count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
                     divider = index < boards.lastIndex, onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
             }
         }
     }
-    if (asking) {
-        ActionSheet("Neues Board", listOf(
-            SheetAction("Gemeinsam (für alle Konten)") { creating = "shared" },
-            SheetAction("Nur für mich") { creating = "private" },
-        )) { asking = false }
-    }
-    creating?.let { space ->
+    creating?.let { _ ->
         AlertDialog("Neues Board", confirm = "Erstellen", fields = listOf(AlertField("z. B. Haushalt")), onDismiss = { creating = null }) { values ->
             if (values[0].isNotBlank()) {
-                val board = sync.put("board", JSONObject().put("name", values[0].trim()).put("order", Model.now()), space)
+                val board = sync.put("board", JSONObject().put("name", values[0].trim()).put("order", Model.now()))
                 Model.defaultColumns.forEachIndexed { order, (_, name) ->
-                    sync.put("column", JSONObject().put("board", board.id).put("name", name).put("order", order), space)
+                    sync.put("column", JSONObject().put("board", board.id).put("name", name).put("order", order))
                 }
                 state.push(Route.Board(board.id))
             }
@@ -101,6 +94,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
     menu?.let { board ->
         ActionSheet(board.data.optString("name"), listOf(
             SheetAction("Umbenennen") { renaming = board },
+            SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
             SheetAction("Board löschen", destructive = true) {
                 for (child in sync.all("card") + sync.all("column")) if (child.data.optString("board") == board.id) sync.delete(child.id)
                 sync.delete(board.id)
@@ -133,10 +127,11 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
         NavBar(board.data.optString("name"), "Aufgaben", { state.pop() }, actions = {
+            BarButton(Glyph.Share, "Teilen") { state.push(Route.Share(board.id)) }
             BarButton(Glyph.Plus, "Spalte hinzufügen") { addColumn = true }
         })
         Text(board.data.optString("name"), style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
-        Text("${cards.size} Karten · " + if (board.space == "shared") "geteilt mit allen" else "nur für dich",
+        Text("${cards.size} Karten · " + shareLabel(sync, board),
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(10.dp))
         LazyRow(Modifier.weight(1f).navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
@@ -160,7 +155,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
                     AddCardField(colors.accent) { title ->
                         val order = (columnCards.lastOrNull()?.data?.optDouble("order", 0.0) ?: 0.0) + 1
                         sync.put("card", JSONObject().put("board", boardId).put("column", column.id).put("title", title)
-                            .put("order", order).put("created_by", sync.userId), board.space)
+                            .put("order", order).put("created_by", sync.userId), board.share)
                     }
                 }
             }
@@ -199,7 +194,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
         AlertDialog("Neue Spalte", confirm = "Hinzufügen", fields = listOf(AlertField("Name")), onDismiss = { addColumn = false }) { values ->
             if (values[0].isNotBlank()) {
                 val order = (columns.lastOrNull()?.data?.optDouble("order", 0.0) ?: -1.0) + 1
-                sync.put("column", JSONObject().put("board", boardId).put("name", values[0].trim()).put("order", order), board.space)
+                sync.put("column", JSONObject().put("board", boardId).put("name", values[0].trim()).put("order", order), board.share)
             }
             addColumn = false
         }

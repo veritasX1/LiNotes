@@ -2,7 +2,13 @@ package io.github.veritasx1.linotes
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,7 +25,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private lateinit var state: AppState
     private var pendingImage: ((ByteArray, String) -> Unit)? = null
@@ -33,6 +39,47 @@ class MainActivity : ComponentActivity() {
         callback(bytes, mime)
     }
 
+    private var pendingSave: Pair<ByteArray, (Boolean) -> Unit>? = null
+    private var pendingOpen: ((ByteArray?) -> Unit)? = null
+    private var pendingCamera: ((Boolean) -> Unit)? = null
+
+    private val saver = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val (content, done) = pendingSave ?: return@registerForActivityResult
+        pendingSave = null
+        done(uri != null && try {
+            contentResolver.openOutputStream(uri, "wt")?.use { it.write(content) } != null
+        } catch (error: Exception) {
+            false
+        })
+    }
+
+    private val opener = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val done = pendingOpen ?: return@registerForActivityResult
+        pendingOpen = null
+        done(uri?.let { try { contentResolver.openInputStream(it)?.use { input -> input.readBytes() } } catch (error: Exception) { null } })
+    }
+
+    private val camera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        pendingCamera?.invoke(granted)
+        pendingCamera = null
+    }
+
+    private fun authenticate(title: String, done: (Boolean) -> Unit) {
+        val allowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        else BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
+            state.toastLater("Auf diesem Handy ist keine Displaysperre eingerichtet.")
+            return done(false)
+        }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = done(true)
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = done(false)
+        })
+        prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle(title)
+            .setSubtitle("Fingerabdruck, Gesicht, PIN oder Muster").setAllowedAuthenticators(allowed).build())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -42,13 +89,30 @@ class MainActivity : ComponentActivity() {
             pendingImage = callback
             picker.launch("image/*")
         }
+        state.authenticate = { title, done -> authenticate(title, done) }
+        state.saveDocument = { name, content, done ->
+            pendingSave = content to done
+            saver.launch(name)
+        }
+        state.openDocument = { done ->
+            pendingOpen = done
+            opener.launch(arrayOf("*/*"))
+        }
+        state.requestCamera = { done ->
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) done(true)
+            else {
+                pendingCamera = done
+                camera.launch(Manifest.permission.CAMERA)
+            }
+        }
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 state.checkAutoLock()
                 if (state.signedIn) {
                     state.sync.launch {
-                        state.sync.syncNow()
+                        try { state.sync.syncNow() } catch (error: Exception) { }
                         withContext(Dispatchers.Main) { state.ensureDefaults() }
+                        state.sync.evict()
                     }
                     state.sync.start()
                 }
@@ -80,7 +144,7 @@ class MainActivity : ComponentActivity() {
         val sync = state.sync
         val now = Model.now()
         val note = sync.put("note", JSONObject().put("folder", Model.privateFolder(sync.userId)).put("body", body)
-            .put("created", now).put("modified", now), "private")
+            .put("created", now).put("modified", now))
         state.tab = 0
         state.push(Route.Editor(note.id))
         intent.action = null

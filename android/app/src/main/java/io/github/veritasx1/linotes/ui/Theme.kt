@@ -63,6 +63,7 @@ val DarkPalette = Palette(
 
 object Type {
     val largeTitle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
+    val title1 = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)
     val title2 = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold)
     val title3 = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
     val headline = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold)

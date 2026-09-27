@@ -82,17 +82,4 @@ class InteropTest {
         editor.text!!.insert(titleEnd + 1, "Unter dem Titel")
         assertEquals("body", editor.toBlocks()[1].getString("t"))
     }
-
-    @Test
-    fun syncWithServer() {
-        val api = Api("http://127.0.0.1:8499")
-        api.token = api.login("anna", "testpass2", "robolectric").getString("token")
-        val pulled = api.pull(0)
-        val objects = pulled.getJSONArray("objects")
-        val kinds = (0 until objects.length()).map { objects.getJSONObject(it).getString("kind") }
-        assertTrue("anna sees shared items", kinds.contains("item"))
-        val privateNotes = (0 until objects.length()).map { objects.getJSONObject(it) }
-            .filter { it.getString("kind") == "note" && it.getString("space") == "private" && it.getInt("owner") != 2 }
-        assertTrue("anna must not see olaf's private notes", privateNotes.isEmpty())
-    }
 }

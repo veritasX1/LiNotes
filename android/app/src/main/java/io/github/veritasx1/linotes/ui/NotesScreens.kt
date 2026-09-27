@@ -94,7 +94,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
         }
         section("mine", header = "Meine Notizen") {
             GroupRow("Alle Notizen", Glyph.Notes, detail = "${live.size}") { state.push(Route.NoteList("all")) }
-            folders.filter { it.space == "private" }.forEach { folder ->
+            folders.filter { it.share == null }.forEach { folder ->
                 GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder, detail = "${count { it.data.optString("folder") == folder.id }}",
                     onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
@@ -103,8 +103,12 @@ fun FoldersScreen(state: AppState, revision: Long) {
                 state.push(Route.NoteList("trash"))
             }
         }
-        section("shared", header = "Gemeinsam", footer = "Notizen hier sehen und bearbeiten alle Konten.") {
-            val shared = folders.filter { it.space == "shared" }
+        val shared = folders.filter { it.share != null }
+        val loose = live.filter { it.share != null && sync.get(it.data.optString("folder")) == null }
+        if (shared.isNotEmpty() || loose.isNotEmpty()) section("shared", header = "Geteilt", footer = "Geteilte Ordner und Notizen – Ende-zu-Ende verschlüsselt.") {
+            if (loose.isNotEmpty()) GroupRow("Mit mir geteilt", Glyph.Person, detail = "${loose.size}", divider = shared.isNotEmpty()) {
+                state.push(Route.NoteList("shared-notes"))
+            }
             shared.forEachIndexed { index, folder ->
                 GroupRow(folder.data.optString("name", "Ordner"), Glyph.FolderShared, detail = "${count { it.data.optString("folder") == folder.id }}",
                     divider = index < shared.lastIndex, onLongClick = { folderMenu = folder }) {
@@ -130,14 +134,15 @@ fun FoldersScreen(state: AppState, revision: Long) {
 
     if (newFolder) {
         FolderDialog(onDismiss = { newFolder = false }) { name, isShared ->
-            sync.put("folder", JSONObject().put("name", name).put("order", Model.now()), if (isShared) "shared" else "private")
+            sync.put("folder", JSONObject().put("name", name).put("order", Model.now()))
             newFolder = false
         }
     }
     folderMenu?.let { folder ->
-        val protected = folder.id == Model.privateFolder(sync.userId) || folder.id == Model.SHARED_FOLDER
+        val protected = folder.id == Model.privateFolder(sync.userId)
         ActionSheet(folder.data.optString("name"), buildList {
             add(SheetAction("Umbenennen") { rename = folder })
+            add(SheetAction("Teilen …") { state.push(Route.Share(folder.id)) })
             if (!protected) add(SheetAction("Ordner löschen", destructive = true) {
                 for (note in sync.all("note")) if (note.data.optString("folder") == folder.id) sync.update(note.id) { it.put("trashed", Model.now()) }
                 sync.delete(folder.id)
@@ -155,17 +160,9 @@ fun FoldersScreen(state: AppState, revision: Long) {
 
 @Composable
 fun FolderDialog(onDismiss: () -> Unit, onCreate: (String, Boolean) -> Unit) {
-    var sharedChoice by remember { mutableStateOf<String?>(null) }
-    if (sharedChoice == null) {
-        ActionSheet("Wo soll der neue Ordner liegen?", listOf(
-            SheetAction("Meine Notizen (nur für mich)") { sharedChoice = "private" },
-            SheetAction("Gemeinsam (für alle Konten)") { sharedChoice = "shared" },
-        )) { if (sharedChoice == null) onDismiss() }
-    } else {
-        AlertDialog("Neuer Ordner", "Gib einen Namen für diesen Ordner ein.", "Sichern",
-            fields = listOf(AlertField("Name")), onDismiss = onDismiss) { values ->
-            if (values[0].isNotBlank()) onCreate(values[0].trim(), sharedChoice == "shared") else onDismiss()
-        }
+    AlertDialog("Neuer Ordner", "Neue Ordner sind privat. Über „Teilen“ kannst du sie freigeben.", "Sichern",
+        fields = listOf(AlertField("Name")), onDismiss = onDismiss) { values ->
+        if (values[0].isNotBlank()) onCreate(values[0].trim(), false) else onDismiss()
     }
 }
 
@@ -175,7 +172,7 @@ fun newNote(state: AppState, folderKey: String?) {
     val now = Model.now()
     val body = org.json.JSONArray().put(JSONObject().put("t", "title").put("x", ""))
     val note = sync.put("note", JSONObject().put("folder", folder?.id).put("body", body).put("created", now).put("modified", now),
-        folder?.space ?: "private")
+        folder?.share)
     state.push(Route.Editor(note.id))
 }
 
@@ -189,6 +186,7 @@ fun notesFor(sync: SyncEngine, key: String): Pair<List<SyncObject>, String> {
     val live = notes.filter { !it.data.has("trashed") }
     return when {
         key == "locked" -> live.filter { it.data.has("enc") } to "Gesperrt"
+        key == "shared-notes" -> live.filter { it.share != null && sync.get(it.data.optString("folder")) == null } to "Mit mir geteilt"
         key.startsWith("folder:") -> {
             val id = key.removePrefix("folder:")
             live.filter { it.data.optString("folder") == id } to (sync.get(id)?.data?.optString("name") ?: "Ordner")
@@ -248,6 +246,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         ) else listOf(
             SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } },
             SheetAction("Verschieben …") { moving = note },
+            SheetAction("Teilen …") { if (locked) state.toastLater("Gesperrte Notizen können nicht geteilt werden.") else state.push(Route.Share(note.id)) },
             SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = note to !locked },
             SheetAction("Löschen", destructive = true) { trashNote(state, note) },
         )) { menu = null }
@@ -266,7 +265,7 @@ fun restoreNote(state: AppState, note: SyncObject) {
     sync.update(note.id) { data ->
         data.remove("trashed")
         if (sync.get(data.optString("folder")) == null)
-            data.put("folder", if (note.space == "private") Model.privateFolder(sync.userId) else Model.SHARED_FOLDER)
+            data.put("folder", Model.privateFolder(sync.userId))
     }
     state.toastLater("Notiz wiederhergestellt")
 }
@@ -322,7 +321,7 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: ((
                     }
                     Text(Model.title(note), style = Type.headline, color = colors.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false))
-                    if (note.space == "shared") {
+                    if (note.share != null) {
                         Spacer(Modifier.width(6.dp))
                         GlyphIcon(Glyph.Person, colors.secondary, 14.dp)
                     }
@@ -333,13 +332,13 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: ((
                     Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) "Gesperrt" else "Kein weiterer Text" },
                         style = Type.subheadline, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (note.space == "shared" && note.updatedBy != 0 && note.updatedBy != sync.userId) {
+                if (note.share != null && note.updatedBy != 0 && note.updatedBy != sync.userId) {
                     Text("Zuletzt bearbeitet von ${sync.userName(note.updatedBy)}", style = Type.footnote, color = colors.secondary)
                 }
             }
             if (image != null) {
                 Spacer(Modifier.width(10.dp))
-                Thumbnail(sync, image, 48)
+                Thumbnail(sync, image, note.share, 48)
             }
         }
         if (divider) HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
@@ -347,11 +346,11 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: ((
 }
 
 @Composable
-fun Thumbnail(sync: SyncEngine, fileId: String, size: Int) {
+fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int) {
     val bitmap by produceState<ImageBitmap?>(null, fileId) {
         value = withContext(Dispatchers.IO) {
             try {
-                val bytes = sync.fetchFile(fileId).readBytes()
+                val bytes = sync.fetchFile(fileId, share).readBytes()
                 val options = BitmapFactory.Options().apply { inSampleSize = 4 }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
             } catch (error: Exception) {
@@ -368,16 +367,18 @@ fun Thumbnail(sync: SyncEngine, fileId: String, size: Int) {
 fun MoveSheet(state: AppState, note: SyncObject, onDone: () -> Unit) {
     val sync = state.sync
     val folders = sync.all("folder").filter { it.id != note.data.optString("folder") }
-        .sortedWith(compareBy({ it.space }, { it.data.optString("name") }))
+        .sortedWith(compareBy({ it.share != null }, { it.data.optString("name") }))
     ActionSheet("Verschieben nach", folders.map { folder ->
-        val label = (if (folder.space == "shared") "Gemeinsam: " else "Meine Notizen: ") + folder.data.optString("name")
+        val label = folder.data.optString("name") + if (folder.share != null) " (geteilt)" else ""
         SheetAction(label) {
             when {
-                folder.space == "shared" && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")
-                folder.space != note.space && note.owner != sync.userId -> state.toastLater("Nur wer die Notiz erstellt hat, kann sie aus „Gemeinsam“ nehmen.")
-                else -> {
-                    val data = JSONObject(note.data.toString()).put("folder", folder.id)
-                    sync.put("note", data, folder.space, note.id)
+                folder.share != null && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")
+                folder.share != note.share && note.owner != sync.userId -> state.toastLater("Nur wer die Notiz erstellt hat, kann sie verschieben.")
+                else -> sync.launch {
+                    val current = sync.get(note.id) ?: return@launch
+                    val data = if (folder.share != current.share) sync.rekeyFiles(current, folder.share) else JSONObject(current.data.toString())
+                    data.put("folder", folder.id)
+                    sync.put("note", data, folder.share, current.id)
                     state.toastLater("Nach „${folder.data.optString("name")}“ verschoben")
                 }
             }

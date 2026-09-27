@@ -6,8 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import io.github.veritasx1.linotes.data.Keep
+import io.github.veritasx1.linotes.data.Pairing
 import io.github.veritasx1.linotes.data.Vault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,34 +18,44 @@ fun SettingsScreen(state: AppState, revision: Long) {
     val colors = palette
     val sync = state.sync
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
-    var inviteCode by remember { mutableStateOf<String?>(null) }
-    var changePassword by remember { mutableStateOf(false) }
+    var keyfile by remember { mutableStateOf(false) }
+    var keepChoice by remember { mutableStateOf(false) }
     var changeVault by remember { mutableStateOf(false) }
+    var enableBiometric by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
+    var biometricOn by remember { mutableStateOf(state.biometricEnabled) }
     val online by sync.online.collectAsStateCompat()
 
     LargeTitleScreen(title = "Einstellungen", backLabel = "Ordner", onBack = { state.pop() }) {
         section("account", header = "Konto") {
             GroupRow(sync.user?.name ?: "", Glyph.Person, subtitle = "@${sync.user?.username}", chevron = false)
             GroupRow(if (online) "Verbunden mit ${sync.server.removePrefix("https://")}" else "Offline – Änderungen werden später übertragen",
-                if (online) Glyph.Cloud else Glyph.CloudOff, tint = if (online) colors.accent else colors.red, chevron = false, divider = false)
+                if (online) Glyph.Cloud else Glyph.CloudOff, tint = if (online) colors.accent else colors.red, chevron = false)
+            GroupRow("Schlüsseldatei sichern …", Glyph.Lock, divider = false) { keyfile = true }
         }
-        section("people", header = "Familie", footer = "Mit einem Einladungscode kann sich jemand einmalig ein eigenes Konto anlegen.") {
-            val others = sync.users.filter { it.id != sync.userId }
-            others.forEach { GroupRow(it.name, Glyph.Person, subtitle = "@${it.username}", chevron = false) }
-            GroupRow("Jemanden einladen …", Glyph.Plus, divider = false) {
-                scope.launch {
-                    try {
-                        inviteCode = withContext(Dispatchers.IO) { sync.api!!.invite() }
-                    } catch (error: Exception) {
-                        state.showToast(errorText(error))
-                    }
-                }
+        section("people", header = "Personen", footer = "Verifiziere Personen, bevor du etwas mit ihnen teilst.") {
+            val others = otherUsers(sync)
+            val open = others.count { Pairing.verifiedState(sync, it) != "verified" }
+            GroupRow("Personen und Einladungen", Glyph.Person, detail = if (open > 0) "$open nicht verifiziert" else null, divider = false) {
+                state.push(Route.People)
             }
         }
-        section("security", header = "Sicherheit", footer = "Gesperrte Notizen sind Ende-zu-Ende verschlüsselt. Der Server kennt weder das Notizen-Passwort noch den Inhalt.") {
-            GroupRow("Kontopasswort ändern …", Glyph.Lock) { changePassword = true }
+        section("keep", header = "Auf diesem Handy", footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
+            "Danach liegt er nur noch verschlüsselt auf dem Server und wird beim Öffnen geladen. Angeheftete Notizen, Listen und Boards bleiben immer hier.") {
+            GroupRow("Notizen behalten", Glyph.Notes, detail = Keep.label(sync.keepDefault()), divider = false) { keepChoice = true }
+        }
+        section("security", header = "Gesperrte Notizen", footer = "Gesperrte Notizen sind zusätzlich mit deinem Notizen-Passwort verschlüsselt. " +
+            "Der Server kennt weder das Passwort noch den Inhalt.") {
+            GroupRow("Fingerabdruck / PIN / Muster", Glyph.Lock, chevron = false,
+                titleColor = if (state.hasVault()) colors.label else colors.tertiary,
+                detail = if (biometricOn) "Ein" else "Aus") {
+                when {
+                    !state.hasVault() -> state.toastLater("Sperre zuerst eine Notiz, um ein Notizen-Passwort festzulegen.")
+                    biometricOn -> { state.disableBiometric(); biometricOn = false }
+                    state.vaultKey != null -> state.enableBiometric { ok -> biometricOn = ok; if (!ok) state.toastLater("Nicht eingeschaltet.") }
+                    else -> enableBiometric = true
+                }
+            }
             GroupRow("Notizen-Passwort ändern …", Glyph.Lock, titleColor = if (state.hasVault()) colors.label else colors.tertiary) {
                 if (state.hasVault()) changeVault = true else state.toastLater("Du hast noch kein Notizen-Passwort festgelegt.")
             }
@@ -54,32 +64,22 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 state.toastLater("Gesperrte Notizen sind wieder gesperrt.")
             }
         }
-        section("about", header = "Über", footer = "LiNotes 1.0 · Deine Daten liegen auf deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
+        section("about", header = "Über", footer = "LiNotes 2.0 · Ende-zu-Ende verschlüsselt auf deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
+            GroupRow("Hilfe", Glyph.Notes) { state.push(Route.Help) }
             GroupRow("Abmelden", divider = false, chevron = false, titleColor = colors.red) { signOut = true }
         }
     }
 
-    inviteCode?.let { code ->
-        AlertDialog("Einladungscode", "Einmalig gültig:\n\n$code\n\nIn der App „Neues Konto mit Einladungscode“ wählen.", "Kopieren",
-            onDismiss = { inviteCode = null }) {
-            clipboard.setText(AnnotatedString(code))
-            inviteCode = null
-        }
+    if (keyfile) KeyfileDialog(state, firstTime = false) { keyfile = false }
+    if (keepChoice) {
+        ActionSheet("Notizen auf dem Handy behalten", Keep.choices.map { (value, label) ->
+            SheetAction(label + if (value == sync.keepDefault()) " ✓" else "") { sync.setKeepDefault(value); sync.evict() }
+        }) { keepChoice = false }
     }
-    if (changePassword) {
-        AlertDialog("Kontopasswort ändern", "Andere Geräte werden danach abgemeldet.", "Ändern",
-            fields = listOf(AlertField("Aktuelles Passwort", password = true), AlertField("Neues Passwort (min. 8 Zeichen)", password = true)),
-            onDismiss = { changePassword = false }) { values ->
-            changePassword = false
-            scope.launch {
-                try {
-                    val response = withContext(Dispatchers.IO) { sync.api!!.changePassword(values[0], values[1], sync.deviceName) }
-                    sync.updateToken(response.getString("token"))
-                    state.showToast("Passwort geändert.")
-                } catch (error: Exception) {
-                    state.showToast(errorText(error))
-                }
-            }
+    if (enableBiometric) {
+        UnlockDialog(state, "Gib einmal dein Notizen-Passwort ein.", onDismiss = { enableBiometric = false }) {
+            enableBiometric = false
+            state.enableBiometric { ok -> biometricOn = ok; if (!ok) state.toastLater("Nicht eingeschaltet.") }
         }
     }
     if (changeVault) {
@@ -90,6 +90,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
             scope.launch {
                 try {
                     val count = withContext(Dispatchers.Default) { state.changeVaultPassword(values[0], values[1], values[2]) }
+                    biometricOn = state.biometricEnabled
                     state.showToast("Geändert, $count Notizen neu verschlüsselt.")
                 } catch (error: Vault.WrongPassword) {
                     state.showToast("Falsches Passwort.")
@@ -98,13 +99,14 @@ fun SettingsScreen(state: AppState, revision: Long) {
         }
     }
     if (signOut) {
-        AlertDialog("Abmelden?", "Nicht übertragene Änderungen auf diesem Gerät gehen verloren.", "Abmelden", destructive = true,
+        AlertDialog("Abmelden?", "Auf diesem Gerät wird alles gelöscht. Nicht übertragene Änderungen gehen verloren. " +
+            "Hast du deine Schlüsseldatei gesichert oder ein anderes angemeldetes Gerät?", "Abmelden", destructive = true,
             onDismiss = { signOut = false }) {
             signOut = false
             sync.signOut()
             state.lockAll()
+            state.disableBiometric()
             state.signedIn = false
         }
     }
 }
-

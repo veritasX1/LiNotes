@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.veritasx1.linotes.data.BiometricStore
 import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.data.Vault
@@ -22,10 +23,14 @@ sealed class Route {
     data object Boards : Route()
     data class Board(val boardId: String) : Route()
     data object Settings : Route()
+    data object People : Route()
+    data class Verify(val userId: Int) : Route()
+    data class Share(val objectId: String) : Route()
+    data object Help : Route()
 }
 
 /** Everything the screens share: sync, navigation per tab, the vault key, toasts. */
-class AppState(val sync: SyncEngine) {
+class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var signedIn by mutableStateOf(sync.restore())
     var tab by mutableIntStateOf(0)
     val stacks = listOf(
@@ -38,6 +43,27 @@ class AppState(val sync: SyncEngine) {
         private set
     private var vaultUsed = 0L
     var pickImage: ((ByteArray, String) -> Unit) -> Unit = {}
+
+    // Platform hooks, filled in by MainActivity.
+    var authenticate: (title: String, done: (Boolean) -> Unit) -> Unit = { _, done -> done(false) }
+    var saveDocument: (name: String, content: ByteArray, done: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
+    var openDocument: (done: (ByteArray?) -> Unit) -> Unit = { it(null) }
+    var requestCamera: (done: (Boolean) -> Unit) -> Unit = { it(false) }
+
+    /** Offer to save the key file (right after creating an account). */
+    var askKeyfile by mutableStateOf(false)
+
+    /** Incoming link and verification requests (shown as dialogs). */
+    val incoming = mutableStateListOf<JSONObject>()
+
+    /** Set while the QR scanner is open; receives the scanned text. */
+    var scanner by mutableStateOf<((String) -> Unit)?>(null)
+
+    fun scanQr(onResult: (String) -> Unit) {
+        requestCamera { granted ->
+            if (granted) scanner = onResult else toastLater("Ohne Kamerazugriff kann kein QR-Code gescannt werden.")
+        }
+    }
 
     val stack get() = stacks[tab]
     val route: Route get() = stack.last()
@@ -86,9 +112,43 @@ class AppState(val sync: SyncEngine) {
         vaultKey = null
     }
 
+    val biometricEnabled: Boolean get() = biometric?.enabled == true
+
+    /** Keep the vault key behind fingerprint / PIN / pattern (needs the vault unlocked). */
+    fun enableBiometric(done: (Boolean) -> Unit) {
+        val key = vaultKey ?: return done(false)
+        val store = biometric ?: return done(false)
+        authenticate("Entsperren mit Fingerabdruck, PIN oder Muster einschalten") { ok ->
+            val stored = ok && try { store.store(key, vaultObject()?.id.orEmpty()); true } catch (error: Exception) { false }
+            done(stored)
+        }
+    }
+
+    fun disableBiometric() {
+        biometric?.clear()
+    }
+
+    fun unlockWithBiometric(done: (Boolean) -> Unit) {
+        val store = biometric?.takeIf { it.enabled } ?: return done(false)
+        authenticate("Gesperrte Notizen öffnen") { ok ->
+            if (!ok) return@authenticate done(false)
+            val key = try { store.load() } catch (error: Exception) { null }
+            val vault = vaultObject()
+            if (key == null || vault == null || !Vault.checkKey(vault.data, key)) {
+                // The notes password changed or the phone's lock was reset.
+                store.clear()
+                toastLater("Bitte einmal das Notizen-Passwort eingeben.")
+                return@authenticate done(false)
+            }
+            vaultKey = key
+            touchVault()
+            done(true)
+        }
+    }
+
     fun createVault(password: String, hint: String) {
         val (data, key) = Vault.create(password, hint)
-        sync.put("vault", data, "private", "vault-${sync.userId}")
+        sync.put("vault", data, null, "vault-${sync.userId}")
         vaultKey = key
         touchVault()
     }
@@ -109,10 +169,11 @@ class AppState(val sync: SyncEngine) {
             if (note.owner != sync.userId || !note.data.has("enc")) continue
             val body = Vault.openBody(oldKey, note.data.getJSONObject("enc"))
             val updated = JSONObject(note.data.toString()).put("enc", Vault.sealBody(newKey, body))
-            sync.put("note", updated, note.space, note.id)
+            sync.put("note", updated, note.share, note.id)
             count++
         }
-        sync.put("vault", data, "private", vault.id)
+        sync.put("vault", data, null, vault.id)
+        disableBiometric()
         vaultKey = newKey
         touchVault()
         return count
