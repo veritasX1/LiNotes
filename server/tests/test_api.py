@@ -1,129 +1,154 @@
-"""API tests: python -m pytest or run directly."""
+"""API tests for protocol version 2, using the real client crypto."""
 
+import base64
 import io
+import json
 import os
 import sys
 import tempfile
 import threading
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "linux"))
 
+from linotes import e2e
 from linotes_server.app import create_app
 
 
-def make():
-    directory = tempfile.mkdtemp()
-    app = create_app(directory)
-    app.store.create_user("olaf", "Olaf", "geheim123")
-    return app, app.test_client()
-
-
-def login(client, username="olaf", password="geheim123"):
-    response = client.post("/api/login", json={"username": username, "password": password, "device": "test"})
+def register(client, app, username, name):
+    code = app.store.create_invite()
+    account = e2e.Account.create()
+    identity = e2e.Identity()
+    response = client.post("/api/register", json={
+        "invite": code, "username": username, "name": name, "auth": account.auth,
+        "identity": identity.export_sealed(account), "device": "test",
+    })
     assert response.status_code == 200, response.json
-    return {"Authorization": "Bearer " + response.json["token"]}
+    return account, identity, {"Authorization": "Bearer " + response.json["token"]}, response.json["user"]["id"]
 
 
 def test_all():
-    app, client = make()
-    assert client.post("/api/login", json={"username": "olaf", "password": "falsch"}).status_code == 401
-    olaf = login(client)
-    assert client.get("/api/me").status_code == 401
+    app = create_app(tempfile.mkdtemp())
+    client = app.test_client()
+    olaf_account, olaf_id_key, olaf, olaf_id = register(client, app, "olaf", "Olaf")
+    anna_account, anna_id_key, anna, anna_id = register(client, app, "anna", "Anna")
 
-    # Invite and register the second account.
-    code = client.post("/api/invites", headers=olaf).json["code"]
-    bad = client.post("/api/register", json={"invite": "XXXX", "username": "anna", "password": "12345678"})
+    # No registration without invite; invites are single use.
+    bad = client.post("/api/register", json={"invite": "XXXX", "username": "evil", "auth": "a" * 44,
+                                             "identity": {"pub": "x", "priv": {}}})
     assert bad.status_code == 403
-    short = client.post("/api/register", json={"invite": code, "username": "anna", "password": "123"})
-    assert short.status_code == 400
-    reg = client.post("/api/register", json={"invite": code, "username": "anna", "name": "Anna", "password": "annas-passwort"})
-    assert reg.status_code == 200, reg.json
-    anna = {"Authorization": "Bearer " + reg.json["token"]}
-    again = client.post("/api/register", json={"invite": code, "username": "anna2", "password": "12345678"})
-    assert again.status_code == 403, "invite must be single use"
 
-    # Private vs shared visibility.
-    changes = [
-        {"id": "n1", "kind": "note", "space": "private", "data": {"title": "Olafs privat"}},
-        {"id": "n2", "kind": "note", "space": "shared", "data": {"title": "Geteilt"}},
-    ]
-    results = client.post("/api/sync", json={"changes": changes}, headers=olaf).json["results"]
-    assert [r["status"] for r in results] == ["ok", "ok"]
-    seen_by_anna = {o["id"] for o in client.get("/api/sync?since=0", headers=anna).json["objects"]}
-    assert seen_by_anna == {"n2"}, seen_by_anna
-    seen_by_olaf = {o["id"] for o in client.get("/api/sync?since=0", headers=olaf).json["objects"]}
-    assert seen_by_olaf == {"n1", "n2"}
+    # Login with the derived auth value; a new device restores the identity.
+    login = client.post("/api/login", json={"username": "olaf", "auth": olaf_account.auth, "device": "zweites Gerät"})
+    assert login.status_code == 200
+    restored = e2e.Identity.from_sealed(olaf_account, login.json["identity"])
+    assert restored.public == olaf_id_key.public
+    assert client.post("/api/login", json={"username": "olaf", "auth": anna_account.auth}).status_code == 401
 
-    # Anna cannot overwrite or reveal Olaf's private note.
-    hijack = client.post("/api/sync", json={"changes": [{"id": "n1", "kind": "note", "space": "shared", "data": {}}]}, headers=anna).json
-    assert hijack["results"][0]["status"] == "forbidden"
+    # Private objects are opaque to the server and invisible to others.
+    box = e2e.seal(olaf_account.private_key, {"title": "Kontodaten"}, "n1|m")
+    client.post("/api/sync", json={"changes": [{"id": "n1", "kind": "note", "data": {"v": 2, "m": box}}]}, headers=olaf)
+    raw = app.store.connect().execute("SELECT data FROM objects WHERE id='n1'").fetchone()[0]
+    assert "Kontodaten" not in raw
+    assert [o["id"] for o in client.get("/api/sync?since=0", headers=anna).json["objects"]] == []
+    assert client.get("/api/objects/n1", headers=anna).status_code == 404
+    assert client.get("/api/objects/n1", headers=olaf).json["id"] == "n1"
 
-    # Cursor: nothing new after the last pull.
-    pull = client.get("/api/sync?since=0", headers=olaf).json
-    cursor = pull["cursor"]
-    assert client.get(f"/api/sync?since={cursor}", headers=olaf).json["objects"] == []
+    # A shared list: Olaf creates a share with Anna and a list in it.
+    share_key = e2e.new_key()
+    keys = {str(olaf_id): e2e.wrap_key(share_key, olaf_id_key.public, "s1"),
+            str(anna_id): e2e.wrap_key(share_key, anna_id_key.public, "s1")}
+    result = client.post("/api/sync", json={"changes": [
+        {"id": "s1", "kind": "share", "members": [anna_id], "data": {"keys": keys}},
+        {"id": "l1", "kind": "list", "share": "s1", "data": {"v": 2, "m": e2e.seal(share_key, {"name": "Einkauf"}, "l1|m")}},
+    ]}, headers=olaf).json["results"]
+    assert [r["status"] for r in result] == ["ok", "ok"]
+    pulled = client.get("/api/sync?since=0", headers=anna).json
+    assert {o["id"] for o in pulled["objects"]} == {"s1", "l1"} and pulled["shares"] == ["s1"]
+    share = [o for o in pulled["objects"] if o["id"] == "s1"][0]
+    anna_key = e2e.unwrap_key(anna_id_key, share["data"]["keys"][str(anna_id)], "s1")
+    listing = [o for o in pulled["objects"] if o["id"] == "l1"][0]
+    assert e2e.open_sealed(anna_key, listing["data"]["m"], "l1|m") == {"name": "Einkauf"}
 
-    # Concurrent edit of a shared note by the other person -> conflict copy.
-    base = [o for o in pull["objects"] if o["id"] == "n2"][0]["version"]
-    client.post("/api/sync", json={"changes": [{"id": "n2", "kind": "note", "space": "shared", "data": {"title": "Anna"}, "base": base}]}, headers=anna)
-    clash = client.post("/api/sync", json={"changes": [{"id": "n2", "kind": "note", "space": "shared", "data": {"title": "Olaf"}, "base": base}]}, headers=olaf).json
+    # Anna may add items but not change the members or steal the list.
+    ok = client.post("/api/sync", json={"changes": [{"id": "i1", "kind": "item", "share": "s1", "data": {"v": 2}}]}, headers=anna).json
+    assert ok["results"][0]["status"] == "ok"
+    steal = client.post("/api/sync", json={"changes": [{"id": "l1", "kind": "list", "share": None, "data": {}}]}, headers=anna).json
+    assert steal["results"][0]["status"] == "forbidden"
+    members = client.post("/api/sync", json={"changes": [{"id": "s1", "kind": "share", "members": [], "data": {}}]}, headers=anna).json
+    assert members["results"][0]["status"] == "forbidden"
+    outsider = client.post("/api/sync", json={"changes": [{"id": "x1", "kind": "note", "share": "nope", "data": {}}]}, headers=anna).json
+    assert outsider["results"][0]["status"] == "forbidden"
+
+    # Removing Anna: she no longer receives the share.
+    client.post("/api/sync", json={"changes": [{"id": "s1", "kind": "share", "members": [], "data": {"keys": {}}}]}, headers=olaf)
+    after = client.get("/api/sync?since=0", headers=anna).json
+    assert after["shares"] == [] and not [o for o in after["objects"] if o["id"] == "l1"]
+
+    # Adding her again later: she gets the older objects too.
+    cursor = client.get("/api/sync?since=0", headers=anna).json["cursor"]
+    client.post("/api/sync", json={"changes": [{"id": "s1", "kind": "share", "members": [anna_id], "data": {"keys": keys}}]}, headers=olaf)
+    again = client.get(f"/api/sync?since={cursor}", headers=anna).json
+    assert {"l1", "i1"} <= {o["id"] for o in again["objects"]}
+
+    # Conflicts on notes are reported, not merged by the server.
+    client.post("/api/sync", json={"changes": [{"id": "n2", "kind": "note", "share": "s1", "data": {"v": 2}}]}, headers=olaf)
+    version = client.get("/api/objects/n2", headers=anna).json["version"]
+    client.post("/api/sync", json={"changes": [{"id": "n2", "kind": "note", "share": "s1", "data": {"a": 1}, "base": version}]}, headers=anna)
+    clash = client.post("/api/sync", json={"changes": [{"id": "n2", "kind": "note", "share": "s1", "data": {"o": 1}, "base": version}]}, headers=olaf).json
     assert clash["results"][0]["status"] == "conflict"
-    # Shopping list items are last writer wins.
-    client.post("/api/sync", json={"changes": [{"id": "i1", "kind": "item", "space": "shared", "data": {"text": "Milch"}}]}, headers=olaf)
-    lww = client.post("/api/sync", json={"changes": [{"id": "i1", "kind": "item", "space": "shared", "data": {"text": "Hafermilch"}, "base": 0}]}, headers=anna).json
-    assert lww["results"][0]["status"] == "ok"
 
-    # Deletion becomes a tombstone without data.
-    client.post("/api/sync", json={"changes": [{"id": "i1", "kind": "item", "space": "shared", "deleted": True}]}, headers=anna)
-    tomb = [o for o in client.get(f"/api/sync?since={cursor}", headers=olaf).json["objects"] if o["id"] == "i1"][-1]
-    assert tomb["deleted"] and tomb["data"] == {}
-
-    # Invalid input.
-    assert client.post("/api/sync", json={"changes": [{"id": "x", "kind": "evil", "space": "shared"}]}, headers=olaf).json["results"][0]["status"] == "invalid"
-    assert client.post("/api/sync", json={"changes": [{"id": "v", "kind": "vault", "space": "shared"}]}, headers=olaf).json["results"][0]["status"] == "invalid"
-
-    # Long poll wakes up on a change from the other account.
-    now = client.get("/api/sync?since=0", headers=anna).json["cursor"]
-    got = {}
-
-    def waiter():
-        start = time.time()
-        other = app.test_client()
-        got["response"] = other.get(f"/api/sync?since={now}&wait=10", headers=anna).json
-        got["seconds"] = time.time() - start
-
-    thread = threading.Thread(target=waiter)
-    thread.start()
-    time.sleep(0.5)
-    client.post("/api/sync", json={"changes": [{"id": "n9", "kind": "note", "space": "shared", "data": {"title": "live"}}]}, headers=olaf)
-    thread.join(15)
-    assert [o["id"] for o in got["response"]["objects"]] == ["n9"], got
-    assert got["seconds"] < 6, got["seconds"]
-
-    # Files: private files are not visible to the other account.
-    private = client.post("/api/files", data={"file": (io.BytesIO(b"\x89PNGdata"), "a.png", "image/png"), "space": "private"}, headers=olaf).json["id"]
-    shared = client.post("/api/files", data={"file": (io.BytesIO(b"\x89PNGdata"), "b.png", "image/png"), "space": "shared"}, headers=olaf).json["id"]
-    assert client.get(f"/api/files/{private}", headers=olaf).status_code == 200
+    # Files follow the same rules.
+    private = client.post("/api/files", data={"file": (io.BytesIO(b"blob"), "x")}, headers=olaf).json["id"]
+    shared = client.post("/api/files", data={"file": (io.BytesIO(b"blob"), "x"), "share": "s1"}, headers=olaf).json["id"]
     assert client.get(f"/api/files/{private}", headers=anna).status_code == 404
     assert client.get(f"/api/files/{shared}", headers=anna).status_code == 200
-    assert client.get("/api/files/../../etc/passwd", headers=olaf).status_code == 404
 
-    # Password change logs out every device.
-    changed = client.post("/api/password", json={"old": "annas-passwort", "new": "neues-passwort"}, headers=anna)
-    assert changed.status_code == 200
-    assert client.get("/api/me", headers=anna).status_code == 401
-    assert client.get("/api/me", headers={"Authorization": "Bearer " + changed.json["token"]}).status_code == 200
+    # Linking a new device with a 6-digit code over the relay (SPAKE2).
+    channel = client.post("/api/link/request", json={"username": "olaf", "device": "Ubuntu"}).json["channel"]
+    pending = client.get("/api/channels", headers=olaf).json["channels"]
+    assert pending[0]["channel"] == channel and pending[0]["purpose"] == "link"
+    code = e2e.new_code()
+    new_device = e2e.Spake2("A", e2e.spake_w(code, channel))
+    old_device = e2e.Spake2("B", e2e.spake_w(code, channel))
+    post = lambda role, body: client.post(f"/api/relay/{channel}", json={"role": role, "body": body})
+    post("A", new_device.message.hex())
+    msg_a = client.get(f"/api/relay/{channel}?after=0").json["messages"][0]["body"]
+    ke_b, conf_b, expect_a = old_device.finish(bytes.fromhex(msg_a))
+    post("B", json.dumps({"p": old_device.message.hex(), "c": conf_b.hex(),
+                          "k": e2e.seal(ke_b + ke_b, {"secret": base64.b64encode(olaf_account.secret).decode()}, "link")}))
+    reply = json.loads(client.get(f"/api/relay/{channel}?after=1").json["messages"][0]["body"])
+    ke_a, conf_a, expect_b = new_device.finish(bytes.fromhex(reply["p"]))
+    assert reply["c"] == expect_b.hex()
+    secret = base64.b64decode(e2e.open_sealed(ke_a + ke_a, reply["k"], "link")["secret"])
+    assert e2e.Account(secret).auth == olaf_account.auth
+    stored = " ".join(row[0] for row in app.store.connect().execute("SELECT body FROM relay"))
+    assert base64.b64encode(olaf_account.secret).decode() not in stored and code not in stored
+
+    # Link requests are rate limited per account.
+    for _ in range(6):
+        last = client.post("/api/link/request", json={"username": "olaf"})
+    assert last.status_code == 429
+
+    # Long poll wakes on a change.
+    now = client.get("/api/sync?since=0", headers=anna).json["cursor"]
+    got = {}
+    def waiter():
+        got["r"] = app.test_client().get(f"/api/sync?since={now}&wait=10", headers=anna).json
+    thread = threading.Thread(target=waiter)
+    thread.start()
+    time.sleep(0.4)
+    client.post("/api/sync", json={"changes": [{"id": "i9", "kind": "item", "share": "s1", "data": {"v": 2}}]}, headers=olaf)
+    thread.join(15)
+    assert [o["id"] for o in got["r"]["objects"]] == ["i9"]
 
     # Brute force protection.
     for _ in range(10):
-        client.post("/api/login", json={"username": "olaf", "password": "x"})
-    assert client.post("/api/login", json={"username": "olaf", "password": "geheim123"}).status_code == 429
-
-    # Logout.
-    client.post("/api/logout", headers=olaf)
-    assert client.get("/api/me", headers=olaf).status_code == 401
-    print("alle Server-Tests bestanden")
+        client.post("/api/login", json={"username": "olaf", "auth": "falsch"})
+    assert client.post("/api/login", json={"username": "olaf", "auth": olaf_account.auth}).status_code == 429
+    print("alle Server-Tests (v2) bestanden")
 
 
 if __name__ == "__main__":

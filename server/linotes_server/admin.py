@@ -1,41 +1,33 @@
 """Administration from the command line.
 
-    python -m linotes_server.admin create-user USERNAME "Display Name"
-    python -m linotes_server.admin invite
-    python -m linotes_server.admin users
-    python -m linotes_server.admin password USERNAME
+    python -m linotes_server.admin invite      create a one-time invite code
+    python -m linotes_server.admin users       list accounts
+    python -m linotes_server.admin sessions    list signed-in devices
+
+There are no passwords: accounts are created in the app with an invite
+code and are protected by keys that never leave the devices.
 """
 
-import getpass
 import os
 import sys
+import datetime
 
 from .store import Store
 
 
 def main(argv):
     store = Store(os.environ.get("LINOTES_DATA", "./data"))
-    if len(argv) < 2:
-        print(__doc__)
-        return 1
-    command = argv[1]
-    if command == "create-user" and len(argv) >= 3:
-        password = os.environ.get("LINOTES_PASSWORD") or getpass.getpass("Passwort: ")
-        user_id = store.create_user(argv[2], argv[3] if len(argv) > 3 else argv[2], password)
-        print(f"Benutzer {argv[2]} angelegt (id {user_id})")
-    elif command == "invite":
+    command = argv[1] if len(argv) > 1 else ""
+    if command == "invite":
         print(store.create_invite())
     elif command == "users":
         for user in store.users():
             print(user["id"], user["username"], user["name"])
-    elif command == "password" and len(argv) >= 3:
-        user = store.user_by_name(argv[2])
-        if user is None:
-            print("Unbekannter Benutzer")
-            return 1
-        password = os.environ.get("LINOTES_PASSWORD") or getpass.getpass("Neues Passwort: ")
-        store.set_password(user["id"], password)
-        print("Passwort geändert, alle Geräte abgemeldet.")
+    elif command == "sessions":
+        for user in store.users():
+            for session in store.sessions(user["id"]):
+                seen = datetime.datetime.fromtimestamp(session["seen"]).strftime("%Y-%m-%d %H:%M")
+                print(user["username"], "|", session["device"], "| zuletzt", seen)
     else:
         print(__doc__)
         return 1
