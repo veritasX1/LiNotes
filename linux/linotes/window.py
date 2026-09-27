@@ -1,0 +1,920 @@
+"""The LiNotes main window."""
+
+import mimetypes
+import time
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+
+from . import model, vault
+from .dialogs import LoginPage, ask_password, ask_text, confirm, error_text, run_async
+from .icons import Icon, icon_button, icon_menu_button
+from .kanban import BoardView
+from .lists import ShoppingListView
+from .notes import NoteList, NotePane
+from .sidebar import Sidebar
+from .sync import device_name
+
+
+DECORATION_LAYOUT = "close,minimize,maximize:"
+AUTO_LOCK_SECONDS = 10 * 60
+TRASH_DAYS = 30
+
+PARAGRAPH_MENU = [
+    ("title", "Titel", "<Control><Shift>t"),
+    ("heading", "Überschrift", "<Control><Shift>h"),
+    ("subheading", "Unterüberschrift", "<Control><Shift>j"),
+    ("body", "Text", "<Control><Shift>b"),
+    ("mono", "Monospace", "<Control><Shift>m"),
+    ("bullet", "• Aufzählung", "<Control><Shift>7"),
+    ("dash", "– Liste mit Strichen", "<Control><Shift>8"),
+    ("number", "1. Nummerierte Liste", "<Control><Shift>9"),
+    ("check", "Checkliste", "<Control><Shift>l"),
+    ("quote", "Zitat", "<Control>apostrophe"),
+]
+
+
+class LiNotesWindow(Adw.ApplicationWindow):
+
+    def __init__(self, app, sync):
+        super().__init__(application=app)
+        self.sync = sync
+        self.set_default_size(1180, 760)
+        self.set_title("LiNotes")
+        self.vault_key = None
+        self.vault_used = 0
+        self.current_key = "all"
+        self.current_note = None
+        self.editing_blocks = None
+
+        self.toasts = Adw.ToastOverlay()
+        self.set_content(self.toasts)
+        self.pages = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.toasts.set_child(self.pages)
+
+        self.login = LoginPage()
+        self.login.connect("signed-in", self.on_signed_in)
+        self.pages.add_named(self.login, "login")
+
+        self.build_main()
+        self.install_actions()
+
+        sync.connect(self.on_sync_changed)
+        sync.connect_status(self.on_status)
+        GLib.timeout_add_seconds(30, self.check_auto_lock)
+
+        if sync.restore():
+            self.enter_main()
+        else:
+            self.pages.set_visible_child_name("login")
+
+    # ========================================================
+    # LAYOUT
+    # ========================================================
+
+    def build_main(self):
+        self.split = Adw.OverlaySplitView(min_sidebar_width=210, max_sidebar_width=260)
+
+        sidebar_view = Adw.ToolbarView()
+        sidebar_header = Adw.HeaderBar(show_title=False, show_end_title_buttons=False)
+        sidebar_header.set_decoration_layout(DECORATION_LAYOUT)
+        sidebar_view.add_top_bar(sidebar_header)
+        self.sidebar = Sidebar(self)
+        self.sidebar.connect("selected", lambda _sidebar, key: self.select(key))
+        self.sidebar.connect("tags-changed", lambda _sidebar: self.show_notes())
+        sidebar_view.set_content(self.sidebar)
+        self.split.set_sidebar(sidebar_view)
+
+        content = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        header.set_decoration_layout(DECORATION_LAYOUT)
+        self.split.bind_property(
+            "show-sidebar", header, "show-start-title-buttons",
+            GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.INVERT_BOOLEAN,
+        )
+        header.set_title_widget(Gtk.Box())
+        toggle = icon_button("sidebar", "Seitenleiste", toggle=True)
+        self.split.bind_property("show-sidebar", toggle, "active",
+                                 GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL)
+        header.pack_start(toggle)
+
+        self.view_toggle = Gtk.Box()
+        self.view_toggle.add_css_class("linked")
+        self.list_mode = icon_button("list", "Liste (Strg+1)", toggle=True)
+        self.gallery_mode = icon_button("gallery", "Galerie (Strg+2)", toggle=True)
+        self.gallery_mode.set_group(self.list_mode)
+        self.list_mode.set_active(True)
+        self.list_mode.connect("toggled", lambda button: button.get_active() and self.set_note_mode("list"))
+        self.gallery_mode.connect("toggled", lambda button: button.get_active() and self.set_note_mode("gallery"))
+        self.view_toggle.append(self.list_mode)
+        self.view_toggle.append(self.gallery_mode)
+        header.pack_start(self.view_toggle)
+        self.delete_button = icon_button("trash", "Löschen")
+        self.delete_button.set_action_name("win.delete-note")
+        header.pack_start(self.delete_button)
+
+        self.note_tools = Gtk.Box(spacing=4)
+        compose = icon_button("compose", "Neue Notiz (Strg+N)")
+        compose.set_action_name("win.new-note")
+        self.note_tools.append(compose)
+        self.format_button = icon_menu_button("format", "Format", self.build_format_popover())
+        self.note_tools.append(self.format_button)
+        checklist = icon_button("checklist", "Checkliste (Strg+Shift+L)")
+        checklist.connect("clicked", lambda _button: self.paragraph("check"))
+        self.note_tools.append(checklist)
+        photo = icon_button("photo", "Foto einfügen")
+        photo.set_action_name("win.insert-photo")
+        self.note_tools.append(photo)
+        self.lock_button = icon_button("lock", "Notiz sperren")
+        self.lock_button.set_action_name("win.toggle-lock")
+        self.note_tools.append(self.lock_button)
+        self.share_button = icon_button("share", "Teilen: in einen gemeinsamen Ordner verschieben")
+        self.share_button.set_action_name("win.move-note")
+        self.note_tools.append(self.share_button)
+        header.pack_end(self.note_tools)
+        content.add_top_bar(header)
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, shrink_start_child=False)
+        self.note_list = NoteList(self.sync)
+        self.note_list.set_size_request(280, -1)
+        self.note_list.connect("note-selected", lambda _list, note_id: self.open_note(note_id))
+        self.note_list.connect("context", self.on_note_context)
+        self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
+        self.note_pane = NotePane(self.sync)
+        self.note_pane.editor.connect("edited", lambda _editor: self.save_current())
+        self.note_pane.connect("unlock-requested", lambda _pane: self.unlock_current())
+        self.note_pane.connect("restore-requested", lambda _pane: self.restore_current())
+        paned.set_start_child(self.note_list)
+        paned.set_end_child(self.note_pane)
+        paned.set_position(320)
+        self.stack.add_named(paned, "notes")
+        self.list_view = ShoppingListView(self)
+        self.stack.add_named(self.list_view, "list")
+        self.board_view = BoardView(self)
+        self.stack.add_named(self.board_view, "board")
+        content.set_content(self.stack)
+        self.split.set_content(content)
+        self.pages.add_named(self.split, "main")
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.add_controller(keys)
+        activity = Gtk.EventControllerKey()
+        activity.connect("key-pressed", lambda *_args: self.touch_vault() or False)
+        self.add_controller(activity)
+
+    def build_format_popover(self):
+        popover = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_margin_start(6)
+        box.set_margin_end(6)
+        box.set_margin_top(6)
+        box.set_margin_bottom(6)
+        inline = Gtk.Box(homogeneous=True)
+        inline.add_css_class("linked")
+        for key, label, css in (("b", "B", "text-bold"), ("i", "I", "text-italic"),
+                                ("u", "U", "text-underline"), ("s", "S", "text-strike"),
+                                ("h", "✎", "text-highlight")):
+            button = Gtk.Button(label=label)
+            button.add_css_class(css)
+            button.set_tooltip_text({"b": "Fett", "i": "Kursiv", "u": "Unterstrichen",
+                                     "s": "Durchgestrichen", "h": "Hervorheben"}[key])
+            button.connect("clicked", lambda _button, name=key: self.inline(name))
+            inline.append(button)
+        box.append(inline)
+        box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
+        for style, label, accel in PARAGRAPH_MENU:
+            row = Gtk.Button()
+            row.add_css_class("flat")
+            line = Gtk.Box(spacing=16)
+            text = Gtk.Label(label=label, xalign=0, hexpand=True)
+            if style in ("title", "heading", "subheading"):
+                text.add_css_class({"title": "title-3", "heading": "heading", "subheading": "heading"}[style])
+            if style == "mono":
+                text.add_css_class("monospace")
+            line.append(text)
+            hint = Gtk.Label(label=Gtk.accelerator_get_label(*Gtk.accelerator_parse(accel)[1:]))
+            hint.add_css_class("dim-label")
+            line.append(hint)
+            row.set_child(line)
+            row.connect("clicked", lambda _button, name=style: (popover.popdown(), self.paragraph(name)))
+            box.append(row)
+        box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
+        self.sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
+        self.sort_checked.connect("toggled", lambda button: setattr(self.note_pane.editor, "auto_sort_checked", button.get_active()))
+        box.append(self.sort_checked)
+        popover.set_child(box)
+        return popover
+
+    def toast(self, text):
+        toast = Adw.Toast(title=text)
+        toast.set_timeout(3)
+        self.toasts.add_toast(toast)
+
+    # ========================================================
+    # ACCOUNT
+    # ========================================================
+
+    def on_signed_in(self, login, server, response):
+        self.sync.sign_in(server, response)
+        self.enter_main()
+
+    def enter_main(self):
+        self.pages.set_visible_child_name("main")
+
+        def first_sync():
+            self.sync.sync_now()
+
+        def done(_result, error):
+            if error is not None:
+                self.toast("Offline – Änderungen werden später übertragen.")
+            model.ensure_defaults(self.sync)
+            self.purge_trash()
+            self.sync.start()
+            self.refresh_all()
+            self.on_status(self.sync.online)
+
+        self.refresh_all()
+        run_async(first_sync, done)
+
+    def on_status(self, online):
+        if online is None:
+            # The session was revoked (e.g. password changed elsewhere).
+            self.sync.sign_out()
+            self.pages.set_visible_child_name("login")
+            self.toast("Bitte melde dich erneut an.")
+            return
+        self.sidebar.set_status(bool(online))
+
+    def sign_out(self):
+        def really():
+            self.sync.sign_out()
+            self.vault_key = None
+            self.pages.set_visible_child_name("login")
+        confirm(self, "Abmelden?", "Nicht übertragene Änderungen auf diesem Gerät gehen verloren.", "Abmelden", really)
+
+    def invite(self):
+        def done(code, error):
+            if error is not None:
+                self.toast(error_text(error))
+                return
+            dialog = Adw.AlertDialog(
+                heading="Einladungscode",
+                body=f"Mit diesem Code kann einmalig ein neues Konto erstellt werden:\n\n{code}\n\n"
+                     "In der App „Konto erstellen“ wählen und den Code eingeben.",
+            )
+            dialog.add_response("copy", "Kopieren")
+            dialog.add_response("ok", "Fertig")
+            dialog.connect("response", lambda _d, r: r == "copy" and self.get_clipboard().set(code))
+            dialog.present(self)
+        run_async(self.sync.api.invite, done)
+
+    def change_password(self):
+        def got_old(old, _hint):
+            def got_new(new, _hint):
+                if len(new) < 8:
+                    self.toast("Das Passwort muss mindestens 8 Zeichen haben.")
+                    return
+                def done(result, error):
+                    if error is not None:
+                        self.toast(error_text(error))
+                        return
+                    from .sync import store_token
+                    store_token(self.sync.state["server"], self.sync.user["username"], result["token"])
+                    self.sync.api.token = result["token"]
+                    self.toast("Passwort geändert. Andere Geräte wurden abgemeldet.")
+                run_async(lambda: self.sync.api.change_password(old, new, device_name()), done)
+            ask_password(self, "Neues Kontopasswort", "Mindestens 8 Zeichen.", got_new, confirm=True)
+        ask_password(self, "Kontopasswort ändern", "Gib zuerst dein aktuelles Passwort ein.", got_old)
+
+    # ========================================================
+    # NAVIGATION
+    # ========================================================
+
+    def refresh_all(self):
+        self.sidebar.refresh()
+        self.select(self.current_key, keep_note=True)
+
+    def select(self, key, keep_note=False):
+        self.current_key = key
+        kind, _sep, object_id = key.partition(":")
+        if kind == "list" and self.sync.get(object_id):
+            self.note_pane.editor.flush()
+            self.list_view.show(object_id)
+            self.stack.set_visible_child_name("list")
+            self.show_note_tools(False)
+            return
+        if kind == "board" and self.sync.get(object_id):
+            self.note_pane.editor.flush()
+            self.board_view.show(object_id)
+            self.stack.set_visible_child_name("board")
+            self.show_note_tools(False)
+            return
+        self.stack.set_visible_child_name("notes")
+        self.show_note_tools(True)
+        self.show_notes(keep_note)
+
+    def show_note_tools(self, visible):
+        self.note_tools.set_visible(visible)
+        self.view_toggle.set_visible(visible)
+        self.delete_button.set_visible(visible)
+
+    def notes_for(self, key):
+        notes = self.sync.objects("note")
+        kind, _sep, object_id = key.partition(":")
+        if key == "trash":
+            return [n for n in notes if n["data"].get("trashed")], "Zuletzt gelöscht"
+        notes = [n for n in notes if not n["data"].get("trashed")]
+        if key == "locked":
+            return [n for n in notes if n["data"].get("enc")], "Gesperrt"
+        if kind == "folder":
+            folder = self.sync.get(object_id)
+            name = folder["data"].get("name", "Ordner") if folder else "Ordner"
+            return [n for n in notes if n["data"].get("folder") == object_id], name
+        return notes, "Alle Notizen"
+
+    def show_notes(self, keep_note=True):
+        notes, title = self.notes_for(self.current_key)
+        tags = self.sidebar.active_tags
+        if tags:
+            notes = [n for n in notes if tags <= model.note_tags(n)]
+            title += " · " + " ".join("#" + tag for tag in sorted(tags))
+        query = self.note_list.search.get_text().strip().lower()
+        if query:
+            notes = [n for n in notes if query in model.note_text(n).lower()
+                     or query in model.note_title(n).lower()]
+            title = f"Suche: {query}"
+        selected = self.current_note if keep_note else None
+        if selected and selected not in {n["id"] for n in notes}:
+            selected = None
+        self.note_list.show(title, notes, selected, "Keine Treffer" if query else "Keine Notizen")
+        if selected is None:
+            if notes and not keep_note:
+                first = sorted(notes, key=lambda n: (not n["data"].get("pinned"), -model.modified(n)))[0]
+                self.open_note(first["id"])
+                self.note_list.show(title, notes, first["id"])
+            elif not notes:
+                self.current_note = None
+                self.note_pane.show_empty()
+        self.update_note_actions()
+
+    def set_note_mode(self, mode):
+        self.note_list.set_mode(mode)
+        self.show_notes()
+
+    # ========================================================
+    # NOTES
+    # ========================================================
+
+    def current_folder_for_new(self):
+        kind, _sep, object_id = self.current_key.partition(":")
+        if kind == "folder" and self.sync.get(object_id):
+            return self.sync.get(object_id)
+        return self.sync.get(model.default_private_folder(self.sync.user_id))
+
+    def new_note(self):
+        if self.stack.get_visible_child_name() != "notes" or self.current_key in ("trash", "locked"):
+            self.sidebar.select("all", emit=False)
+            self.current_key = "all"
+            self.stack.set_visible_child_name("notes")
+            self.show_note_tools(True)
+        self.note_pane.editor.flush()
+        folder = self.current_folder_for_new()
+        now = time.time()
+        note = self.sync.put("note", {
+            "folder": folder["id"] if folder else None,
+            "body": model.empty_note_body(),
+            "created": now, "modified": now,
+        }, folder["space"] if folder else "private", notify=False)
+        self.current_note = note["id"]
+        self.sidebar.refresh()
+        self.show_notes()
+        self.open_note(note["id"])
+        self.note_pane.editor.grab_focus()
+
+    def open_note(self, note_id):
+        if note_id != self.current_note:
+            self.note_pane.editor.flush()
+        note = self.sync.get(note_id)
+        self.current_note = note_id
+        if note is None:
+            self.note_pane.show_empty()
+            return
+        if note["data"].get("enc"):
+            if self.vault_key is None:
+                self.note_pane.show_locked(note_id)
+                self.update_note_actions()
+                return
+            try:
+                blocks = vault.open_box(self.vault_key, note["data"]["enc"])["body"]
+            except Exception:
+                self.toast("Diese Notiz konnte nicht entschlüsselt werden.")
+                self.note_pane.show_locked(note_id)
+                return
+            self.touch_vault()
+        else:
+            blocks = model.note_blocks(note)
+        self.editing_blocks = blocks
+        self.note_pane.show_note(note, blocks, editable=not note["data"].get("trashed"))
+        self.update_note_actions()
+
+    def save_current(self):
+        note = self.sync.get(self.current_note) if self.current_note else None
+        if note is None or note["data"].get("trashed"):
+            return
+        blocks = self.note_pane.editor.to_blocks()
+        if blocks == self.editing_blocks:
+            return
+        self.editing_blocks = blocks
+        data = dict(note["data"])
+        data["modified"] = time.time()
+        if data.get("enc"):
+            if self.vault_key is None:
+                return
+            data["enc"] = vault.seal(self.vault_key, {"body": blocks})
+            self.touch_vault()
+        else:
+            data["body"] = blocks
+        self.sync.put("note", data, note["space"], note["id"], notify=False)
+        self.note_pane.update_date(self.sync.get(note["id"]))
+        self.refresh_list_only()
+
+    def refresh_list_only(self):
+        self.sidebar.refresh()
+        self.show_notes()
+
+    def update_note_actions(self):
+        note = self.sync.get(self.current_note) if self.current_note else None
+        has = note is not None
+        for name in ("delete-note", "toggle-lock", "move-note", "pin-note", "duplicate-note", "insert-photo"):
+            self.lookup_action(name).set_enabled(has)
+        if has:
+            locked = bool(note["data"].get("enc"))
+            self.lock_button.get_child().name = "lock-open" if locked else "lock"
+            self.lock_button.set_tooltip_text("Sperre entfernen" if locked else "Notiz sperren")
+            self.lock_button.get_child().queue_draw()
+            self.lookup_action("insert-photo").set_enabled(not locked and not note["data"].get("trashed"))
+
+    def delete_note(self, note_id=None):
+        note_id = note_id or self.current_note
+        note = self.sync.get(note_id)
+        if note is None:
+            return
+        if note["data"].get("trashed"):
+            confirm(self, "Endgültig löschen?", "Die Notiz wird auf allen Geräten gelöscht.", "Löschen",
+                    lambda: (self.sync.delete(note_id), self.after_delete()))
+            return
+        self.sync.update(note_id, trashed=time.time())
+        self.after_delete()
+        self.toast("In „Zuletzt gelöscht“ verschoben")
+
+    def after_delete(self):
+        self.current_note = None
+        self.sidebar.refresh()
+        self.show_notes(keep_note=False)
+
+    def restore_current(self):
+        note = self.sync.get(self.current_note)
+        if note is None:
+            return
+        data = dict(note["data"])
+        data.pop("trashed", None)
+        if not self.sync.get(data.get("folder") or ""):
+            data["folder"] = model.default_private_folder(self.sync.user_id) if note["space"] == "private" else model.SHARED_FOLDER
+        self.sync.put("note", data, note["space"], note["id"])
+        self.toast("Notiz wiederhergestellt")
+        self.refresh_list_only()
+        self.open_note(note["id"])
+
+    def purge_trash(self):
+        limit = time.time() - TRASH_DAYS * 86400
+        for note in self.sync.objects("note"):
+            trashed = note["data"].get("trashed")
+            if trashed and trashed < limit and (note["owner"] == self.sync.user_id or note["space"] == "shared"):
+                self.sync.delete(note["id"], notify=False)
+
+    def toggle_pin(self, note_id=None):
+        note = self.sync.get(note_id or self.current_note)
+        if note:
+            self.sync.update(note["id"], pinned=not note["data"].get("pinned"))
+            self.refresh_list_only()
+
+    def duplicate(self, note_id=None):
+        note = self.sync.get(note_id or self.current_note)
+        if note is None or note["data"].get("enc"):
+            return
+        data = dict(note["data"])
+        data["modified"] = data["created"] = time.time()
+        data.pop("pinned", None)
+        copy = self.sync.put("note", data, note["space"])
+        self.current_note = copy["id"]
+        self.refresh_list_only()
+        self.open_note(copy["id"])
+
+    def move_note(self, note_id=None):
+        note = self.sync.get(note_id or self.current_note)
+        if note is None:
+            return
+        folders = sorted(self.sync.objects("folder"), key=lambda f: (f["space"], f["data"].get("name", "")))
+        choices = [(f["id"], ("Gemeinsam: " if f["space"] == "shared" else "Meine Notizen: ") + f["data"].get("name", ""))
+                   for f in folders if f["id"] != note["data"].get("folder")]
+        if not choices:
+            return
+        dialog = Adw.AlertDialog(heading="Verschieben nach", body="Notizen in gemeinsamen Ordnern sehen alle Konten.")
+        dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
+        shared_index = next((i for i, (fid, _l) in enumerate(choices) if self.sync.get(fid)["space"] == "shared"), 0)
+        dropdown.set_selected(shared_index)
+        dialog.set_extra_child(dropdown)
+        dialog.add_response("cancel", "Abbrechen")
+        dialog.add_response("ok", "Verschieben")
+        dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+
+        def on_response(_dialog, response):
+            if response != "ok":
+                return
+            folder = self.sync.get(choices[dropdown.get_selected()][0])
+            if folder["space"] == "shared" and note["data"].get("enc"):
+                self.toast("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre.")
+                return
+            if folder["space"] != note["space"] and note["owner"] != self.sync.user_id:
+                self.toast("Nur wer die Notiz erstellt hat, kann sie aus dem gemeinsamen Bereich nehmen.")
+                return
+            data = dict(note["data"])
+            data["folder"] = folder["id"]
+            self.sync.put("note", data, folder["space"], note["id"])
+            self.toast(f"Nach „{folder['data'].get('name')}“ verschoben")
+            self.refresh_list_only()
+
+        dialog.connect("response", on_response)
+        dialog.present(self)
+
+    def insert_photo(self):
+        note = self.sync.get(self.current_note)
+        if note is None or note["data"].get("enc"):
+            return
+        dialog = Gtk.FileDialog(title="Foto einfügen")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        images = Gtk.FileFilter(name="Bilder")
+        images.add_mime_type("image/*")
+        filters.append(images)
+        dialog.set_filters(filters)
+
+        def chosen(dialog, result):
+            try:
+                file = dialog.open_finish(result)
+            except GLib.Error:
+                return
+            path = Path(file.get_path())
+            mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+            content = path.read_bytes()
+
+            def done(file_id, error):
+                if error is not None:
+                    self.toast(error_text(error))
+                    return
+                self.note_pane.editor.insert_image(file_id)
+            run_async(lambda: self.sync.upload_file(content, mime, note["space"]), done)
+
+        dialog.open(self, None, chosen)
+
+    def paragraph(self, style):
+        if self.note_pane.get_visible_child_name() == "editor":
+            self.note_pane.editor.apply_paragraph(style)
+            self.note_pane.editor.grab_focus()
+
+    def inline(self, name):
+        if self.note_pane.get_visible_child_name() == "editor":
+            self.note_pane.editor.toggle_inline(name)
+
+    def on_note_context(self, _list, note_id, widget, x, y):
+        note = self.sync.get(note_id)
+        if note is None:
+            return
+        self.open_note(note_id)
+        menu = Gio.Menu()
+        if note["data"].get("trashed"):
+            menu.append("Wiederherstellen", "win.restore-note")
+            menu.append("Endgültig löschen", "win.delete-note")
+        else:
+            menu.append("Lösen" if note["data"].get("pinned") else "Anheften", "win.pin-note")
+            menu.append("Verschieben nach …", "win.move-note")
+            menu.append("Duplizieren", "win.duplicate-note")
+            menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
+            menu.append("Löschen", "win.delete-note")
+        self.popup_menu(menu, widget, x, y)
+
+    def popup_menu(self, menu, widget, x, y):
+        popover = Gtk.PopoverMenu.new_from_model(menu)
+        popover.set_parent(widget)
+        popover.set_has_arrow(False)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        popover.set_pointing_to(rect)
+        popover.connect("closed", lambda p: GLib.idle_add(lambda: (p.unparent(), False)[1]))
+        popover.popup()
+
+    # ========================================================
+    # LOCKED NOTES
+    # ========================================================
+
+    def vault_object(self):
+        return self.sync.get(f"vault-{self.sync.user_id}")
+
+    def touch_vault(self):
+        if self.vault_key is not None:
+            self.vault_used = time.time()
+
+    def check_auto_lock(self):
+        if self.vault_key is not None and time.time() - self.vault_used > AUTO_LOCK_SECONDS:
+            self.lock_all()
+        return True
+
+    def lock_all(self):
+        if self.vault_key is None:
+            return
+        self.note_pane.editor.flush()
+        self.vault_key = None
+        note = self.sync.get(self.current_note) if self.current_note else None
+        if note is not None and note["data"].get("enc"):
+            self.note_pane.show_locked(note["id"])
+
+    def with_vault(self, then, reason="Gib dein Notizen-Passwort ein."):
+        """Make sure the vault is unlocked (creating it first if needed)."""
+        if self.vault_key is not None:
+            self.touch_vault()
+            then()
+            return
+        existing = self.vault_object()
+        if existing is None:
+            def create(password, hint):
+                data, key = vault.create_vault(password, hint or "")
+                self.sync.put("vault", data, "private", f"vault-{self.sync.user_id}")
+                self.vault_key = key
+                self.touch_vault()
+                then()
+            ask_password(
+                self, "Notizen-Passwort festlegen",
+                "Gesperrte Notizen werden auf deinem Gerät mit diesem Passwort verschlüsselt – "
+                "nicht einmal der Server kann sie lesen. Wenn du das Passwort vergisst, "
+                "lassen sich gesperrte Notizen nicht wiederherstellen.",
+                create, confirm=True, action="Festlegen",
+            )
+            return
+
+        def unlock(password, _hint):
+            def derive():
+                return vault.unlock(existing["data"], password)
+
+            def done(key, error):
+                if error is not None:
+                    self.toast("Falsches Passwort.")
+                    return
+                self.vault_key = key
+                self.touch_vault()
+                then()
+            run_async(derive, done)
+        ask_password(self, "Gesperrte Notizen", reason, unlock, hint=existing["data"].get("hint"), action="Entsperren")
+
+    def unlock_current(self):
+        note_id = self.current_note
+        self.with_vault(lambda: self.open_note(note_id))
+
+    def toggle_lock(self):
+        note = self.sync.get(self.current_note)
+        if note is None:
+            return
+        if note["data"].get("enc"):
+            def remove():
+                current = self.sync.get(note["id"])
+                body = vault.open_box(self.vault_key, current["data"]["enc"])["body"]
+                data = dict(current["data"])
+                data.pop("enc")
+                data["body"] = body
+                self.sync.put("note", data, current["space"], current["id"])
+                self.toast("Sperre entfernt")
+                self.refresh_list_only()
+                self.open_note(current["id"])
+            self.with_vault(remove, "Gib dein Notizen-Passwort ein, um die Sperre zu entfernen.")
+            return
+        if note["space"] == "shared":
+            self.toast("Geteilte Notizen können nicht gesperrt werden – wie in Apples Notizen.")
+            return
+
+        def lock():
+            self.note_pane.editor.flush()
+            current = self.sync.get(note["id"])
+            data = dict(current["data"])
+            body = data.pop("body", [])
+            data["enc"] = vault.seal(self.vault_key, {"body": body})
+            data["modified"] = time.time()
+            self.sync.put("note", data, current["space"], current["id"])
+            self.toast("Notiz gesperrt")
+            self.refresh_list_only()
+            self.open_note(current["id"])
+        self.with_vault(lock)
+
+    def change_vault_password(self):
+        existing = self.vault_object()
+        if existing is None:
+            self.toast("Du hast noch kein Notizen-Passwort festgelegt.")
+            return
+
+        def got_old(old, _hint):
+            try:
+                old_key = vault.unlock(existing["data"], old)
+            except vault.WrongPassword:
+                self.toast("Falsches Passwort.")
+                return
+
+            def got_new(new, hint):
+                data, new_key = vault.create_vault(new, hint or "")
+                count = 0
+                for note in self.sync.objects("note"):
+                    if note["data"].get("enc") and note["owner"] == self.sync.user_id:
+                        content = vault.open_box(old_key, note["data"]["enc"])
+                        updated = dict(note["data"])
+                        updated["enc"] = vault.seal(new_key, content)
+                        self.sync.put("note", updated, note["space"], note["id"], notify=False)
+                        count += 1
+                self.sync.put("vault", data, "private", existing["id"])
+                self.vault_key = new_key
+                self.touch_vault()
+                self.toast(f"Notizen-Passwort geändert, {count} Notizen neu verschlüsselt.")
+            ask_password(self, "Neues Notizen-Passwort", "", got_new, confirm=True, action="Ändern")
+        ask_password(self, "Notizen-Passwort ändern", "Gib dein aktuelles Notizen-Passwort ein.", got_old,
+                     hint=existing["data"].get("hint"))
+
+    # ========================================================
+    # FOLDERS, LISTS, BOARDS
+    # ========================================================
+
+    SPACE_CHOICES = [("private", "Nur für mich"), ("shared", "Gemeinsam mit allen")]
+
+    def new_folder(self):
+        def create(name, space):
+            folder = self.sync.put("folder", {"name": name, "order": time.time()}, space)
+            self.sidebar.refresh()
+            self.sidebar.select("folder:" + folder["id"])
+        ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen", choices=self.SPACE_CHOICES)
+
+    def new_list(self):
+        def create(name, space):
+            shopping = self.sync.put("list", {"name": name, "grocery": True, "order": time.time()}, space)
+            self.sidebar.refresh()
+            self.sidebar.select("list:" + shopping["id"])
+        ask_text(self, "Neue Einkaufsliste", create, placeholder="z. B. Drogerie", action="Erstellen",
+                 choices=list(reversed(self.SPACE_CHOICES)))
+
+    def new_board(self):
+        def create(name, space):
+            board = self.sync.put("board", {"name": name, "order": time.time()}, space)
+            for order, (_key, column) in enumerate(model.DEFAULT_COLUMNS):
+                self.sync.put("column", {"board": board["id"], "name": column, "order": order}, space, notify=False)
+            self.sidebar.refresh()
+            self.sidebar.select("board:" + board["id"])
+        ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen",
+                 choices=list(reversed(self.SPACE_CHOICES)))
+
+    def object_menu(self, kind, object_id, widget, x, y):
+        obj = self.sync.get(object_id)
+        if obj is None:
+            return
+        self.menu_target = object_id
+        menu = Gio.Menu()
+        menu.append("Umbenennen …", "win.rename-object")
+        protected = object_id in (model.default_private_folder(self.sync.user_id), model.SHARED_FOLDER)
+        if not protected:
+            menu.append("Löschen …", "win.delete-object")
+        self.popup_menu(menu, widget, x, y)
+
+    def rename_object(self):
+        obj = self.sync.get(getattr(self, "menu_target", ""))
+        if obj is None:
+            return
+        ask_text(self, "Umbenennen", lambda name, _c: (self.sync.update(obj["id"], name=name), self.refresh_all()),
+                 text=obj["data"].get("name", ""))
+
+    def delete_object(self):
+        obj = self.sync.get(getattr(self, "menu_target", ""))
+        if obj is None:
+            return
+        kind = obj["kind"]
+        name = obj["data"].get("name", "")
+        if obj["space"] == "shared" and obj["owner"] != self.sync.user_id:
+            body = f"„{name}“ gehört allen – es wird auch für die anderen gelöscht."
+        else:
+            body = f"„{name}“ und alles darin wird gelöscht."
+
+        def remove():
+            if kind == "folder":
+                for note in self.sync.objects("note"):
+                    if note["data"].get("folder") == obj["id"]:
+                        self.sync.update(note["id"], notify=False, trashed=time.time())
+            elif kind == "list":
+                for item in self.sync.objects("item"):
+                    if item["data"].get("list") == obj["id"]:
+                        self.sync.delete(item["id"], notify=False)
+            elif kind == "board":
+                for child in self.sync.objects("card") + self.sync.objects("column"):
+                    if child["data"].get("board") == obj["id"]:
+                        self.sync.delete(child["id"], notify=False)
+            self.sync.delete(obj["id"])
+            self.current_key = "all"
+            self.refresh_all()
+        confirm(self, "Löschen?", body, "Löschen", remove)
+
+    # ========================================================
+    # SYNC EVENTS
+    # ========================================================
+
+    def on_sync_changed(self, ids):
+        if self.pages.get_visible_child_name() != "main":
+            return
+        self.sidebar.refresh()
+        visible = self.stack.get_visible_child_name()
+        if visible == "list":
+            self.list_view.refresh()
+        elif visible == "board":
+            self.board_view.refresh()
+        else:
+            self.show_notes()
+            # A note open here was changed on another device: reload it
+            # unless there are local edits that have not been saved yet.
+            if self.current_note in ids and self.note_pane.editor.edit_source is None:
+                note = self.sync.get(self.current_note)
+                if note is None:
+                    self.note_pane.show_empty()
+                elif not note["data"].get("enc") and model.note_blocks(note) != self.editing_blocks:
+                    self.editing_blocks = model.note_blocks(note)
+                    self.note_pane.editor.load_blocks(self.editing_blocks, keep_cursor=True)
+                    self.note_pane.update_date(note)
+        self.update_note_actions()
+
+    # ========================================================
+    # ACTIONS AND KEYS
+    # ========================================================
+
+    def install_actions(self):
+        actions = {
+            "new-note": self.new_note,
+            "delete-note": self.delete_note,
+            "restore-note": self.restore_current,
+            "pin-note": self.toggle_pin,
+            "duplicate-note": self.duplicate,
+            "move-note": self.move_note,
+            "toggle-lock": self.toggle_lock,
+            "lock-all": self.lock_all,
+            "insert-photo": self.insert_photo,
+            "new-folder": self.new_folder,
+            "new-list": self.new_list,
+            "new-board": self.new_board,
+            "rename-object": self.rename_object,
+            "delete-object": self.delete_object,
+            "invite": self.invite,
+            "change-password": self.change_password,
+            "change-vault": self.change_vault_password,
+            "sign-out": self.sign_out,
+            "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),
+            "list-view": lambda: self.list_mode.set_active(True),
+            "gallery-view": lambda: self.gallery_mode.set_active(True),
+        }
+        for name, callback in actions.items():
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", lambda _a, _p, function=callback: function())
+            self.add_action(action)
+
+    def on_key(self, controller, keyval, keycode, state):
+        control = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if not control:
+            return False
+        shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
+        alt = bool(state & Gdk.ModifierType.ALT_MASK)
+        key = Gdk.keyval_to_lower(keyval)
+        if key == Gdk.KEY_n and shift:
+            self.new_folder()
+            return True
+        if key == Gdk.KEY_n:
+            self.new_note()
+            return True
+        if key == Gdk.KEY_d and not shift:
+            self.duplicate()
+            return True
+        if key == Gdk.KEY_f and (alt or not self.note_pane.editor.has_focus()):
+            self.activate_action("win.search")
+            return True
+        if key == Gdk.KEY_1:
+            self.list_mode.set_active(True)
+            return True
+        if key == Gdk.KEY_2:
+            self.gallery_mode.set_active(True)
+            return True
+        if key == Gdk.KEY_l and not shift and alt:
+            self.lock_all()
+            return True
+        return False
