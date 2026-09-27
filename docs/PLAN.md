@@ -43,3 +43,6 @@ Konzept: docs/SECURITY.md
 - [ ] Handy-Test (Nutzer per ntfy bitten, Handy anzuschließen)
 - [x] Fix: geänderte Objekte rücken in der Warteschlange ans Ende (sonst kam ein Objekt vor seiner neuen Freigabe beim Server an → „forbidden“, Objekt verschwand). Linux + Android.
 - [x] .gitignore-Regel `data/` war zu weit (Android-Datenschicht war nicht eingecheckt) → `/data/`, `server/data/`
+- [x] Ohne Server (Nutzerwunsch 27.09.): „Ohne Server nutzen“ bei der Einrichtung; Konto-Id -1, Standard-Ids `notes--1` usw., Bilder verschlüsselt lokal (`local:<name>`). Später „Mit Server verbinden …“: neues Konto (mit denselben Schlüsseln), Gerät verbinden oder Schlüsseldatei; `connect_local`/`connectLocal` benennt Ids um, lädt Bilder hoch, bestehende Standard-Ordner/Liste/Board des Kontos bleiben. Konflikt, wenn beide ein Notizen-Passwort haben → Hinweis, vorher Sperren entfernen. Tests: android LocalModeTest, linux/tests/test_local.py
+- [x] Handy-Test auf moto g84 (live-Server, Testkonten): Registrierung, Schlüsseldatei, Verifizieren, Teilen, Live-Abgleich, Gerät verbinden, Auslagern + Nachladen, ohne Server → verbinden
+- [ ] Noch vom Nutzer zu testen: Fingerabdruck/PIN/Muster, QR-Scanner mit der Kamera

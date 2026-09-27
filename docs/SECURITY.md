@@ -89,3 +89,22 @@ Muster des Geräts erfolgen (Android-Keystore mit Benutzer-Authentifizierung).
 - Nur mit Einladungscode kann ein Konto entstehen; keine Standard-Serveradresse
   in den Apps.
 - HTTPS, Anmeldeversuche begrenzt, keine Zugriffsprotokolle.
+
+
+## Ohne Server
+
+LiNotes kann ohne Server benutzt werden. Dann erzeugt das Gerät Kontogeheimnis R
+und Identität genauso wie bei einer Registrierung, speichert sie aber nur lokal
+(Android-Keystore bzw. Schlüsselbund). Alle Objekte liegen – verschlüsselt mit
+dem privaten Schlüssel – in der lokalen Warteschlange, Bilder verschlüsselt im
+App-Verzeichnis. Die Konto-Id ist -1.
+
+Wird später ein Server eingetragen, gibt es drei Wege:
+* **Neues Konto:** Registrierung mit genau diesen Schlüsseln (kein Umschlüsseln nötig).
+* **Bestehendes Konto** (Gerät verbinden oder Schlüsseldatei): Die lokalen Objekte
+  werden entschlüsselt und mit dem Schlüssel des Kontos neu verschlüsselt.
+
+In beiden Fällen werden die Standard-Ids (`notes--1` → `notes-<id>` usw.) und
+Verweise darauf umbenannt und die Bilder hochgeladen. Haben Gerät und Konto
+schon je ein Notizen-Passwort, wird vorher abgebrochen (sonst wären gesperrte
+Notizen nicht mehr zu öffnen).

@@ -167,7 +167,7 @@
     <img class="icon" src="linotes.svg" alt="LiNotes-Symbol">
     <h1>LiNotes</h1>
     <p class="lead">Notizen, Einkaufslisten und Aufgaben für die Familie – so einfach wie Apples Notizen, aber auf dem eigenen Server.</p>
-    <span class="badge">Version 2.0 · Android und Ubuntu · Ende-zu-Ende verschlüsselt</span>
+    <span class="badge">Version 2.0.1 · Android und Ubuntu · Ende-zu-Ende verschlüsselt</span>
     <div class="actions">
       <a class="button primary" href="#android">Für Android laden</a>
       <a class="button secondary" href="#ubuntu">Für Ubuntu laden</a>
@@ -187,7 +187,7 @@
       <div class="card"><h3>Teilen, was du willst</h3><p>Einzelne Notizen, ganze Ordner, Listen oder Boards – mit genau den Personen, die du auswählst. Alles andere bleibt nur für dich.</p></div>
       <div class="card"><h3>Einkaufslisten</h3><p>Einträge landen automatisch in der richtigen Warengruppe. Was einer abhakt, sieht der andere sofort.</p></div>
       <div class="card"><h3>Aufgaben-Board</h3><p>Kanban mit Spalten „Offen“, „In Arbeit“, „Erledigt“, mit Fälligkeit, Zuständigkeit und Farben.</p></div>
-      <div class="card"><h3>Auch offline</h3><p>Ohne Netz arbeitest du einfach weiter. Änderungen werden übertragen, sobald wieder Verbindung besteht.</p></div>
+      <div class="card"><h3>Auch ganz ohne Server</h3><p>Ohne Netz arbeitest du einfach weiter – oder du nutzt LiNotes ganz ohne Server als Notizen-App auf dem Gerät. Einen Server kannst du später eintragen.</p></div>
       <div class="card"><h3>Geräte verbinden wie bei Signal</h3><p>Neues Gerät? 6-stelligen Code eintippen oder QR-Code scannen – fertig. Kein Passwort, das jemand erraten könnte.</p></div>
     </div>
   </div>
@@ -233,7 +233,7 @@
     <p class="intro">Für Android 8 und neuer.</p>
     <h3>Direkt laden</h3>
     <ol class="steps">
-      <li><a href="download/LiNotes-2.0.apk"><b>LiNotes-2.0.apk</b> herunterladen</a> (10 MB).</li>
+      <li><a href="download/LiNotes-2.0.1.apk"><b>LiNotes-2.0.1.apk</b> herunterladen</a> (10 MB).</li>
       <li>Die Datei öffnen. Android fragt einmalig, ob der Browser Apps installieren darf – erlauben.</li>
       <li>LiNotes öffnen und die Adresse deines Servers eingeben – wie es weitergeht, steht in der <a href="#anleitung">Anleitung</a>.</li>
     </ol>
@@ -250,8 +250,8 @@
     <h2>Ubuntu</h2>
     <p class="intro">Für Ubuntu 26.04 und andere Systeme mit GTK 4 und libadwaita.</p>
     <pre><code>sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 python3-cryptography
-wget https://linotes.goip.de/download/linotes-ubuntu-2.0.tar.gz
-tar xzf linotes-ubuntu-2.0.tar.gz -C ~/.local/share
+wget https://linotes.goip.de/download/linotes-ubuntu-2.0.1.tar.gz
+tar xzf linotes-ubuntu-2.0.1.tar.gz -C ~/.local/share
 ~/.local/share/linotes/install.sh</code></pre>
     <p>Danach steht LiNotes im Anwendungsmenü. Dein Kontoschlüssel wird im Schlüsselbund von Ubuntu gespeichert.</p>
     <p class="small">Prüfsummen: <a href="download/SHA256SUMS">SHA256SUMS</a></p>
@@ -262,6 +262,8 @@ tar xzf linotes-ubuntu-2.0.tar.gz -C ~/.local/share
   <div class="wrap prose">
     <h2>Anleitung</h2>
     <p class="intro">So richtest du LiNotes ein – Schritt für Schritt.</p>
+    <h3>Ohne Server</h3>
+    <p>Du hast keinen Server? Wähle beim ersten Start „Ohne Server nutzen“ – dann ist LiNotes einfach eine Notizen-App, und alles liegt verschlüsselt nur auf deinem Gerät. Einen Server kannst du jederzeit später eintragen (Einstellungen → „Mit Server verbinden …“); deine Notizen werden dann hochgeladen.</p>
     <h3>1. Konto anlegen</h3>
     <ol class="steps">
       <li>Du brauchst die <b>Serveradresse</b> und einen <b>Einladungscode</b> von der Person, die den Server betreibt.</li>
@@ -292,8 +294,8 @@ tar xzf linotes-ubuntu-2.0.tar.gz -C ~/.local/share
     <h2>Eigener Server</h2>
     <p class="intro">LiNotes läuft auf jedem kleinen Linux-Rechner – z. B. einem Raspberry Pi.</p>
     <p>Voraussetzungen: Debian, Ubuntu oder Raspberry Pi OS, eine (DynDNS-)Domain, die auf den Rechner zeigt, und offene Ports 80 und 443.</p>
-    <pre><code>wget https://linotes.goip.de/download/linotes-server-2.0.tar.gz
-tar xzf linotes-server-2.0.tar.gz
+    <pre><code>wget https://linotes.goip.de/download/linotes-server-2.0.1.tar.gz
+tar xzf linotes-server-2.0.1.tar.gz
 sudo linotes-server/install.sh notizen.example.org</code></pre>
     <p>Das Skript richtet alles ein – Dienst, nginx, HTTPS-Zertifikat und eine nächtliche Sicherung – und zeigt am Ende den ersten Einladungscode. Die Serveradresse (hier <code>notizen.example.org</code>) gibst du dann in der App ein. Weitere Einladungscodes erzeugst du direkt in der App unter „Personen“.</p>
     <p class="small">Der Server kann keine Inhalte lesen: Er speichert nur verschlüsselte Daten, keine Passwörter und keine Zugriffsprotokolle.</p>

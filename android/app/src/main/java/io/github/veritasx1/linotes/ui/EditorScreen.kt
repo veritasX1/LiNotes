@@ -242,7 +242,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 add(SheetAction("Verschieben …") { moving = true })
                 if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
                 add(SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = !locked })
-                add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
+                if (!sync.isLocal) add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
                 add(SheetAction(if (sortChecked) "Abgehakte nicht mehr sortieren" else "Abgehakte nach unten sortieren") { sortChecked = !sortChecked })
                 add(SheetAction("Löschen", destructive = true) { trashNote(state, note); state.pop() })
             }

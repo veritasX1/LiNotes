@@ -139,7 +139,8 @@ private fun InsetGroup(content: @Composable () -> Unit) {
 // ================================================================
 
 @Composable
-fun OnboardingScreen(state: AppState) {
+fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
+    // connecting: LiNotes was used without a server so far; its notes move into the account.
     val colors = palette
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf("server") }
@@ -155,7 +156,25 @@ fun OnboardingScreen(state: AppState) {
     var link by remember { mutableStateOf<Pairing.NewDeviceLink?>(null) }
     var cancelled by remember { mutableStateOf(false) }
 
-    suspend fun finish(url: String, response: JSONObject, account: E2E.Account) {
+    // This screen disappears at the end, which cancels its coroutines:
+    // everything after that must already be done or run in the app's scope.
+    suspend fun finish(url: String, response: JSONObject, account: E2E.Account, created: Boolean = false) {
+        if (connecting) {
+            try {
+                withContext(Dispatchers.IO) { state.sync.connectLocal(url, response, account) }
+            } catch (conflict: SyncEngine.VaultConflict) {
+                throw Pairing.PairingError("Dieses Konto hat schon ein Notizen-Passwort. Entferne auf diesem Gerät zuerst die Sperre " +
+                    "deiner gesperrten Notizen, dann verbinde erneut.")
+            }
+            state.lockAll()
+            state.ensureDefaults()
+            state.sync.start()
+            state.askKeyfile = created
+            state.toastLater("Mit dem Server verbunden – deine Notizen werden hochgeladen.")
+            while (state.stack.size > 1) state.pop()
+            return
+        }
+        state.askKeyfile = created
         state.sync.signIn(url, response, account)
         try { withContext(Dispatchers.IO) { state.sync.syncNow() } } catch (error: Exception) { }
         state.ensureDefaults()
@@ -172,22 +191,23 @@ fun OnboardingScreen(state: AppState) {
     }
 
     fun back() {
+        if (step == "server") { state.pop(); return }
         cancelled = true
         link?.let { old -> state.sync.launch { old.close() } }
         link = null
         error = null
-        step = if (step == "choice") "server" else "choice"
+        step = if (step == "choice" || step == "local") "server" else "choice"
     }
 
     DisposableEffect(Unit) { onDispose { cancelled = true; link?.let { old -> state.sync.launch { old.close() } } } }
-    if (step != "server") androidx.activity.compose.BackHandler { back() }
+    if (step != "server" || connecting) androidx.activity.compose.BackHandler { back() }
 
     Column(
         Modifier.fillMaxSize().background(colors.background).statusBarsPadding().imePadding().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.fillMaxWidth().height(44.dp)) {
-            if (step != "server") Box(Modifier.align(Alignment.CenterStart)) { TextButton("Zurück") { back() } }
+            if (step != "server" || connecting) Box(Modifier.align(Alignment.CenterStart)) { TextButton("Zurück") { back() } }
         }
         Spacer(Modifier.height(16.dp))
         Box(Modifier.size(84.dp).clip(RoundedCornerShape(20.dp))) {
@@ -197,8 +217,9 @@ fun OnboardingScreen(state: AppState) {
         Spacer(Modifier.height(12.dp))
         when (step) {
             "server" -> {
-                Text("Willkommen bei LiNotes", style = Type.title1, color = colors.label)
-                Explanation("Gib die Adresse deines LiNotes-Servers ein. Du bekommst sie von der Person, die den Server betreibt.")
+                Text(if (connecting) "Mit Server verbinden" else "Willkommen bei LiNotes", style = Type.title1, color = colors.label)
+                Explanation(if (connecting) "Deine Notizen werden danach verschlüsselt auf den Server übertragen und lassen sich mit anderen Geräten und Personen teilen."
+                    else "Gib die Adresse deines LiNotes-Servers ein. Du bekommst sie von der Person, die den Server betreibt.")
                 Spacer(Modifier.height(12.dp))
                 InsetGroup {
                     InputRow(serverInput, { serverInput = it }, "z. B. notizen.example.org", divider = false,
@@ -218,6 +239,28 @@ fun OnboardingScreen(state: AppState) {
                             else -> { server = url; step = "choice" }
                         }
                     }
+                }
+                if (!connecting) {
+                    Spacer(Modifier.height(28.dp))
+                    TextButton("Ohne Server nutzen") { error = null; step = "local" }
+                    Text("Einfach als Notizen-App auf diesem Gerät. Einen Server kannst du später eintragen.",
+                        style = Type.footnote, color = colors.secondary, textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 40.dp))
+                }
+            }
+            "local" -> {
+                Text("Ohne Server", style = Type.title1, color = colors.label)
+                Explanation("Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Gerät. Geht es verloren, sind sie weg – " +
+                    "verbinde LiNotes später mit einem Server (Einstellungen), um sie zu sichern und zu teilen.")
+                Spacer(Modifier.height(12.dp))
+                InsetGroup {
+                    InputRow(name, { name = it }, "Dein Name (optional)", divider = false, imeAction = ImeAction.Done)
+                }
+                Spacer(Modifier.height(16.dp))
+                PrimaryButton("Los geht’s", modifier = Modifier.padding(horizontal = 16.dp)) {
+                    state.sync.startLocal(name.trim())
+                    state.ensureDefaults()
+                    state.signedIn = true
                 }
             }
             "choice" -> {
@@ -246,13 +289,13 @@ fun OnboardingScreen(state: AppState) {
                     run {
                         val url = server
                         val (account, response) = withContext(Dispatchers.IO) {
-                            val account = E2E.Account.create()
-                            val identity = E2E.Identity.create()
+                            // Without a server so far: register the keys this device already has.
+                            val account = if (connecting) state.sync.account!! else E2E.Account.create()
+                            val identity = if (connecting) state.sync.identity!! else E2E.Identity.create()
                             account to Api(url).register(invite.trim(), username.trim().lowercase(), name.trim(), account.auth,
                                 identity.exportSealed(account), state.sync.deviceName)
                         }
-                        state.askKeyfile = true
-                        finish(url, response, account)
+                        finish(url, response, account, created = true)
                     }
                 }
             }
@@ -603,6 +646,14 @@ fun ShareScreen(state: AppState, objectId: String, revision: Long) {
         LaunchedEffect(Unit) { state.pop() }
         return
     }
+    if (sync.isLocal) {
+        LargeTitleScreen(title = "Teilen", backLabel = "Zurück", onBack = { state.pop() }) {
+            section("local", footer = "Zum Teilen brauchst du einen LiNotes-Server. Deine Notizen werden dabei Ende-zu-Ende verschlüsselt übertragen.") {
+                GroupRow("Mit Server verbinden …", Glyph.Cloud, divider = false) { state.pop(); state.push(Route.Connect) }
+            }
+        }
+        return
+    }
     val owner = obj.owner == sync.userId
     val initial = remember(objectId) { sync.shareMembers(obj.share).filter { it != sync.userId }.toSet() }
     val chosen = remember(objectId) { mutableStateListOf<Int>().apply { addAll(initial) } }
@@ -665,6 +716,9 @@ fun ShareScreen(state: AppState, objectId: String, revision: Long) {
 
 private val HELP = listOf(
     "Erste Schritte" to listOf(
+        "Ohne Server" to "Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach eine Notizen-App, alles liegt " +
+            "verschlüsselt nur auf diesem Gerät. Später unter Einstellungen → „Mit Server verbinden …“ einen Server eintragen – " +
+            "deine Notizen werden dann hochgeladen und lassen sich teilen und auf anderen Geräten nutzen.",
         "Konto anlegen" to "Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. " +
             "Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – " +
             "dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.",

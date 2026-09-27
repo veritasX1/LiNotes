@@ -116,6 +116,8 @@ class Onboarding(Gtk.Box):
 
     __gsignals__ = {
         "signed-in": (GObject.SignalFlags.RUN_FIRST, None, (str, object, object)),
+        "local": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "cancelled": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, window):
@@ -123,12 +125,14 @@ class Onboarding(Gtk.Box):
         self.window = window
         self.server = None
         self.cancelled = False
+        # True when LiNotes was used without a server and now gets one.
+        self.connecting = False
 
         view = Adw.ToolbarView()
         header = Adw.HeaderBar(show_title=False)
         header.set_decoration_layout("close,minimize,maximize:")
         self.back = Gtk.Button(icon_name="go-previous-symbolic", visible=False)
-        self.back.connect("clicked", lambda _b: self.show("server"))
+        self.back.connect("clicked", lambda _b: self.go_back())
         header.pack_start(self.back)
         help_button = Gtk.Button(icon_name="help-about-symbolic", tooltip_text="Hilfe")
         help_button.connect("clicked", lambda _b: show_help(self.window))
@@ -145,12 +149,25 @@ class Onboarding(Gtk.Box):
         self.build_register()
         self.build_link()
         self.build_keyfile()
+        self.build_local()
         self.show("server")
 
     def show(self, name):
         self.cancelled = True
-        self.back.set_visible(name != "server")
+        self.back.set_visible(name != "server" or self.connecting)
         self.stack.set_visible_child_name(name)
+
+    def go_back(self):
+        if self.stack.get_visible_child_name() == "server":
+            self.emit("cancelled")
+        else:
+            self.show("server")
+
+    def set_connecting(self, connecting):
+        self.connecting = connecting
+        self.local_button.set_visible(not connecting)
+        self.server_title.set_label("Mit Server verbinden" if connecting else "LiNotes")
+        self.show("server")
 
     def wrap(self, child, name):
         clamp = Adw.Clamp(maximum_size=420, child=child, valign=Gtk.Align.CENTER)
@@ -171,6 +188,7 @@ class Onboarding(Gtk.Box):
 
     def build_server(self):
         box = page("LiNotes", "Deine Notizen liegen auf deinem eigenen Server – Ende-zu-Ende verschlüsselt.")
+        self.server_title = box.get_first_child()
         icon = Gtk.Image.new_from_icon_name("io.github.veritasx1.LiNotes")
         icon.set_pixel_size(96)
         box.prepend(icon)
@@ -184,7 +202,26 @@ class Onboarding(Gtk.Box):
         button = pill("Weiter")
         button.connect("clicked", lambda _b: self.check_server())
         box.append(button)
+        self.local_button = Gtk.Button(label="Ohne Server nutzen", halign=Gtk.Align.CENTER,
+                                       tooltip_text="Einfach als Notizen-Programm auf diesem Computer. Einen Server kannst du später eintragen.")
+        self.local_button.add_css_class("flat")
+        self.local_button.connect("clicked", lambda _b: self.show("local"))
+        box.append(self.local_button)
         self.wrap(box, "server")
+
+    def build_local(self):
+        box = page("Ohne Server", "Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Computer. "
+                   "Geht er verloren, sind sie weg – verbinde LiNotes später mit einem Server (Kontomenü), "
+                   "um sie zu sichern und zu teilen.")
+        group = Adw.PreferencesGroup()
+        name_row = Adw.EntryRow(title="Dein Name (optional)")
+        group.add(name_row)
+        box.append(group)
+        button = pill("Los geht’s")
+        button.connect("clicked", lambda _b: self.emit("local", name_row.get_text().strip()))
+        name_row.connect("entry-activated", lambda _r: self.emit("local", name_row.get_text().strip()))
+        box.append(button)
+        self.wrap(box, "local")
 
     def check_server(self):
         text = self.server_row.get_text().strip().rstrip("/")
@@ -241,8 +278,12 @@ class Onboarding(Gtk.Box):
         self.wrap(box, "register")
 
     def register(self):
-        account = e2e.Account.create()
-        identity = e2e.Identity()
+        if self.connecting:
+            # Register the keys this computer already uses.
+            account, identity = self.window.sync.account, self.window.sync.identity
+        else:
+            account = e2e.Account.create()
+            identity = e2e.Identity()
         username = self.username_row.get_text().strip().lower()
         server = self.server
 
@@ -681,6 +722,9 @@ class ShareDialog(Adw.Dialog):
 
 HELP = [
     ("Erste Schritte", [
+        ("Ohne Server", "Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach ein Notizen-Programm, alles liegt "
+         "verschlüsselt nur auf diesem Computer. Später im Kontomenü „Mit Server verbinden …“ wählen – deine Notizen werden dann "
+         "hochgeladen und lassen sich teilen und auf anderen Geräten nutzen."),
         ("Konto anlegen", "Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. "
          "Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – "
          "dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."),

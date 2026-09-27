@@ -27,6 +27,7 @@ sealed class Route {
     data class Verify(val userId: Int) : Route()
     data class Share(val objectId: String) : Route()
     data object Help : Route()
+    data object Connect : Route()
 }
 
 /** Everything the screens share: sync, navigation per tab, the vault key, toasts. */
@@ -86,8 +87,12 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
 
     suspend fun showToast(text: String) {
         toast = text
-        delay(2600)
-        if (toast == text) toast = null
+        try {
+            delay(2600)
+        } finally {
+            // Also when the screen that showed it goes away meanwhile.
+            if (toast == text) toast = null
+        }
     }
 
     fun toastLater(text: String) {

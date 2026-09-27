@@ -92,6 +92,7 @@ class Sidebar(Gtk.Box):
         menu.append("Neue Einkaufsliste", "win.new-list")
         menu.append("Neues Board", "win.new-board")
         section = Gio.Menu()
+        section.append("Mit Server verbinden …", "win.connect")
         section.append("Personen und Verifizierung …", "win.people")
         section.append("Einladungscode erzeugen …", "win.invite")
         section.append("Schlüsseldatei sichern …", "win.keyfile")
@@ -99,7 +100,7 @@ class Sidebar(Gtk.Box):
         menu.append_section(None, section)
         section = Gio.Menu()
         section.append("Hilfe", "win.help")
-        section.append("Dieses Gerät abmelden", "win.sign-out")
+        section.append("Abmelden / Daten löschen …", "win.sign-out")
         menu.append_section(None, section)
         button = Gtk.MenuButton(menu_model=menu, icon_name="open-menu-symbolic")
         button.add_css_class("flat")
@@ -229,6 +230,12 @@ class Sidebar(Gtk.Box):
     def set_status(self, online):
         user = self.sync.user
         name = user["name"] if user else ""
+        if self.sync.is_local:
+            self.account_label.set_label(f"{name} · nur lokal")
+            self.status_icon.name = "cloud-off"
+            self.status_icon.queue_draw()
+            self.account_label.remove_css_class("status-offline")
+            return
         self.account_label.set_label(f"{name} · {'verbunden' if online else 'offline'}")
         self.status_icon.name = "cloud" if online else "cloud-off"
         self.status_icon.queue_draw()

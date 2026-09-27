@@ -27,20 +27,24 @@ fun SettingsScreen(state: AppState, revision: Long) {
     val online by sync.online.collectAsStateCompat()
 
     LargeTitleScreen(title = "Einstellungen", backLabel = "Ordner", onBack = { state.pop() }) {
-        section("account", header = "Konto") {
+        if (sync.isLocal) section("account", header = "Konto", footer = "Deine Notizen liegen verschlüsselt nur auf diesem Gerät. " +
+            "Mit einem Server werden sie gesichert, auf deinen anderen Geräten abgeglichen und lassen sich teilen.") {
+            GroupRow("Nur auf diesem Gerät", Glyph.CloudOff, tint = colors.secondary, chevron = false)
+            GroupRow("Mit Server verbinden …", Glyph.Cloud, divider = false) { state.push(Route.Connect) }
+        } else section("account", header = "Konto") {
             GroupRow(sync.user?.name ?: "", Glyph.Person, subtitle = "@${sync.user?.username}", chevron = false)
             GroupRow(if (online) "Verbunden mit ${sync.server.removePrefix("https://")}" else "Offline – Änderungen werden später übertragen",
                 if (online) Glyph.Cloud else Glyph.CloudOff, tint = if (online) colors.accent else colors.red, chevron = false)
             GroupRow("Schlüsseldatei sichern …", Glyph.Lock, divider = false) { keyfile = true }
         }
-        section("people", header = "Personen", footer = "Verifiziere Personen, bevor du etwas mit ihnen teilst.") {
+        if (!sync.isLocal) section("people", header = "Personen", footer = "Verifiziere Personen, bevor du etwas mit ihnen teilst.") {
             val others = otherUsers(sync)
             val open = others.count { Pairing.verifiedState(sync, it) != "verified" }
             GroupRow("Personen und Einladungen", Glyph.Person, detail = if (open > 0) "$open nicht verifiziert" else null, divider = false) {
                 state.push(Route.People)
             }
         }
-        section("keep", header = "Auf diesem Handy", footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
+        if (!sync.isLocal) section("keep", header = "Auf diesem Handy", footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
             "Danach liegt er nur noch verschlüsselt auf dem Server und wird beim Öffnen geladen. Angeheftete Notizen, Listen und Boards bleiben immer hier.") {
             GroupRow("Notizen behalten", Glyph.Notes, detail = Keep.label(sync.keepDefault()), divider = false) { keepChoice = true }
         }
@@ -64,9 +68,9 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 state.toastLater("Gesperrte Notizen sind wieder gesperrt.")
             }
         }
-        section("about", header = "Über", footer = "LiNotes 2.0 · Ende-zu-Ende verschlüsselt auf deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
+        section("about", header = "Über", footer = "LiNotes 2.0.1 · Ende-zu-Ende verschlüsselt – auf diesem Gerät oder deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
             GroupRow("Hilfe", Glyph.Notes) { state.push(Route.Help) }
-            GroupRow("Abmelden", divider = false, chevron = false, titleColor = colors.red) { signOut = true }
+            GroupRow(if (sync.isLocal) "Alle Daten löschen" else "Abmelden", divider = false, chevron = false, titleColor = colors.red) { signOut = true }
         }
     }
 
@@ -99,8 +103,11 @@ fun SettingsScreen(state: AppState, revision: Long) {
         }
     }
     if (signOut) {
-        AlertDialog("Abmelden?", "Auf diesem Gerät wird alles gelöscht. Nicht übertragene Änderungen gehen verloren. " +
-            "Hast du deine Schlüsseldatei gesichert oder ein anderes angemeldetes Gerät?", "Abmelden", destructive = true,
+        AlertDialog(if (sync.isLocal) "Alle Daten löschen?" else "Abmelden?",
+            if (sync.isLocal) "Alle Notizen, Listen und Aufgaben auf diesem Gerät werden endgültig gelöscht."
+            else "Auf diesem Gerät wird alles gelöscht. Nicht übertragene Änderungen gehen verloren. " +
+                "Hast du deine Schlüsseldatei gesichert oder ein anderes angemeldetes Gerät?",
+            if (sync.isLocal) "Löschen" else "Abmelden", destructive = true,
             onDismiss = { signOut = false }) {
             signOut = false
             sync.signOut()

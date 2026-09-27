@@ -55,6 +55,10 @@ object Keep {
  * are encrypted when queued. Shares carry the keys that let others read.
  */
 class SyncEngine(private val context: Context) {
+    companion object {
+        /** User id while LiNotes is used without a server. */
+        const val LOCAL_USER = -1
+    }
 
     private val file = File(context.filesDir, "state-v2.json")
     private val filesDir = File(context.cacheDir, "files").apply { mkdirs() }
@@ -155,7 +159,7 @@ class SyncEngine(private val context: Context) {
         val saved = credentials.load() ?: return false
         return try {
             val json = JSONObject(saved)
-            api = Api(server, json.getString("token"))
+            api = if (server.isEmpty()) null else Api(server, json.getString("token"))
             account = E2E.Account(E2E.unb64(json.getString("secret")))
             identitySealed?.let { identity = E2E.Identity.fromSealed(account!!, it) }
             rebuild()
@@ -187,6 +191,89 @@ class SyncEngine(private val context: Context) {
         bump()
     }
 
+    // ================================================================
+    // WITHOUT A SERVER (everything stays on this device)
+    // ================================================================
+
+    /** True while LiNotes is used without a server. */
+    val isLocal: Boolean get() = user != null && server.isEmpty()
+
+    private val localFiles = File(context.filesDir, "local-files")
+
+    fun startLocal(name: String) {
+        val newAccount = E2E.Account.create()
+        val newIdentity = E2E.Identity.create()
+        val me = User(LOCAL_USER, "", name.ifBlank { "Ich" }, newIdentity.public)
+        synchronized(lock) {
+            remote.clear(); pending.clear(); cursor = 0
+            server = ""
+            user = me
+            users = listOf(me)
+            identitySealed = newIdentity.exportSealed(newAccount)
+        }
+        credentials.save(JSONObject().put("token", "").put("secret", E2E.b64(newAccount.secret)).toString())
+        api = null
+        account = newAccount
+        identity = newIdentity
+        signedOut.value = false
+        rebuild()
+        save()
+        bump()
+    }
+
+    class VaultConflict : Exception("vault conflict")
+
+    /**
+     * Move everything made without a server into a server account (a new one,
+     * or an existing one reached by linking or with the key file). Blocking.
+     * Throws VaultConflict (before changing anything) if both have a notes password.
+     */
+    fun connectLocal(serverUrl: String, response: JSONObject, newAccount: E2E.Account) {
+        val oldAccount = account ?: throw IllegalStateException("not local")
+        val uid = response.getJSONObject("user").getInt("id")
+        val temp = Api(serverUrl.trimEnd('/'), response.getString("token"))
+        val local = synchronized(lock) { plain.values.filter { !it.deleted }.toList() }
+        val hasLocalVault = local.any { it.kind == "vault" } && local.any { it.kind == "note" && it.data.has("enc") }
+        val onServer = { id: String -> try { temp.getObject(id); true } catch (error: ApiException) { false } }
+        if (hasLocalVault && onServer("vault-$uid")) throw VaultConflict()
+        // Pictures: re-encrypt with the account key and upload.
+        val mapping = HashMap<String, String>()
+        localFiles.listFiles()?.forEach { file ->
+            val content = E2E.openBytes(oldAccount.privateKey, file.readBytes(), file.name)
+            val fileId = temp.upload(E2E.sealBytes(newAccount.privateKey, content, file.name), null)
+            mapping["local:${file.name}"] = "$fileId:${file.name}"
+        }
+        for (obj in local) mapping[obj.id] = remapId(obj.id, uid)
+        signIn(serverUrl, response, newAccount)
+        try { pullOnce() } catch (error: Exception) { }
+        val containers = setOf("folder", "list", "board", "column", "settings", "contacts", "vault")
+        for (obj in local) {
+            val newId = mapping.getValue(obj.id)
+            // An existing account keeps its own default folder, list and board.
+            if (newId != obj.id && obj.kind in containers && exists(newId)) continue
+            put(obj.kind, remapData(obj.data, mapping, uid) as JSONObject, null, newId)
+        }
+        localFiles.deleteRecursively()
+        save()
+    }
+
+    private fun remapId(id: String, uid: Int): String {
+        val match = Regex("^(notes|list|board|vault|settings|contacts)-${LOCAL_USER}(-.*)?$").matchEntire(id) ?: return id
+        return "${match.groupValues[1]}-$uid${match.groupValues[2]}"
+    }
+
+    private fun remapData(value: Any?, mapping: Map<String, String>, uid: Int): Any? = when (value) {
+        is JSONObject -> JSONObject().also { copy ->
+            value.keys().forEach { key ->
+                val item = value.get(key)
+                copy.put(key, if (key in setOf("by", "created_by", "assignee") && item == LOCAL_USER) uid else remapData(item, mapping, uid))
+            }
+        }
+        is JSONArray -> JSONArray().also { copy -> for (index in 0 until value.length()) copy.put(remapData(value.get(index), mapping, uid)) }
+        is String -> mapping[value] ?: value
+        else -> value
+    }
+
     fun signOut() {
         stop()
         val oldApi = api
@@ -197,6 +284,7 @@ class SyncEngine(private val context: Context) {
             identitySealed = null; plain.clear(); shareKeys.clear()
         }
         api = null; account = null; identity = null
+        localFiles.deleteRecursively()
         save()
         bump()
     }
@@ -444,6 +532,7 @@ class SyncEngine(private val context: Context) {
     }
 
     private fun shouldEvict(note: SyncObject, now: Double): Boolean {
+        if (server.isEmpty()) return false
         if (note.deleted || note.evicted || note.id == openNote) return false
         if (note.data.optBoolean("pinned")) return false
         val keep = keepOf(note)
@@ -666,7 +755,11 @@ class SyncEngine(private val context: Context) {
         val fileId = reference.substringBefore(":")
         val name = reference.substringAfter(":", fileId)
         val target = File(filesDir, name)
-        if (!target.exists()) {
+        filesDir.mkdirs()  // Android may clear the cache at any time.
+        if (!target.exists() && fileId == "local") {
+            val key = keyFor(null) ?: throw E2E.CryptoError("no key")
+            target.writeBytes(E2E.openBytes(key, File(localFiles, name).readBytes(), name))
+        } else if (!target.exists()) {
             val blob = api?.download(fileId) ?: throw OfflineException("no session")
             val key = keyFor(share) ?: throw E2E.CryptoError("no key")
             target.writeBytes(E2E.openBytes(key, blob, name))
@@ -677,7 +770,16 @@ class SyncEngine(private val context: Context) {
     fun uploadFile(content: ByteArray, share: String?): String {
         val name = UUID.randomUUID().toString().replace("-", "")
         val key = keyFor(share) ?: throw E2E.CryptoError("no key")
+        if (server.isEmpty()) {
+            // Without a server: keep it (encrypted) on the device.
+            localFiles.mkdirs()
+            File(localFiles, name).writeBytes(E2E.sealBytes(key, content, name))
+            filesDir.mkdirs()
+            File(filesDir, name).writeBytes(content)
+            return "local:$name"
+        }
         val id = api?.upload(E2E.sealBytes(key, content, name), share) ?: throw OfflineException("no session")
+        filesDir.mkdirs()
         File(filesDir, name).writeBytes(content)
         return "$id:$name"
     }
