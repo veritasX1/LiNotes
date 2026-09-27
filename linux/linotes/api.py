@@ -56,13 +56,16 @@ class Api:
 
     # --- accounts -----------------------------------------------
 
-    def login(self, username, password, device):
-        return self.request("POST", "/api/login", {"username": username, "password": password, "device": device})
+    def health(self):
+        return self.request("GET", "/api/health", timeout=10)
 
-    def register(self, invite, username, name, password, device):
+    def login(self, username, auth, device):
+        return self.request("POST", "/api/login", {"username": username, "auth": auth, "device": device})
+
+    def register(self, invite, username, name, auth, identity, device):
         return self.request("POST", "/api/register", {
             "invite": invite, "username": username, "name": name,
-            "password": password, "device": device,
+            "auth": auth, "identity": identity, "device": device,
         })
 
     def logout(self):
@@ -71,11 +74,31 @@ class Api:
     def me(self):
         return self.request("GET", "/api/me")
 
-    def change_password(self, old, new, device):
-        return self.request("POST", "/api/password", {"old": old, "new": new, "device": device})
+    def rename(self, name):
+        return self.request("POST", "/api/me/name", {"name": name})
 
     def invite(self):
         return self.request("POST", "/api/invites", {})["code"]
+
+    # --- pairing / verification ---------------------------------
+
+    def link_request(self, username, device):
+        return self.request("POST", "/api/link/request", {"username": username, "device": device})["channel"]
+
+    def verify_request(self, user_id):
+        return self.request("POST", "/api/verify/request", {"user": user_id})["channel"]
+
+    def channels(self):
+        return self.request("GET", "/api/channels")["channels"]
+
+    def relay_post(self, channel, role, body):
+        return self.request("POST", f"/api/relay/{channel}", {"role": role, "body": body})
+
+    def relay_get(self, channel, after=0, wait=0):
+        return self.request("GET", f"/api/relay/{channel}?after={after}&wait={wait}", timeout=wait + 20)["messages"]
+
+    def relay_close(self, channel):
+        return self.request("DELETE", f"/api/relay/{channel}")
 
     # --- sync ---------------------------------------------------
 
@@ -85,15 +108,19 @@ class Api:
     def push(self, changes):
         return self.request("POST", "/api/sync", {"changes": changes}, timeout=40)["results"]
 
+    def get_object(self, object_id):
+        return self.request("GET", f"/api/objects/{object_id}")
+
     # --- files --------------------------------------------------
 
-    def upload(self, content, mime, space, name="datei"):
+    def upload(self, content, share, name="datei"):
         boundary = "----linotes" + secrets.token_hex(12)
         parts = []
-        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"space\"\r\n\r\n{space}\r\n".encode())
+        if share:
+            parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"share\"\r\n\r\n{share}\r\n".encode())
         parts.append(
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n"
-            f"Content-Type: {mime}\r\n\r\n".encode()
+            "Content-Type: application/octet-stream\r\n\r\n".encode()
         )
         parts.append(content)
         parts.append(f"\r\n--{boundary}--\r\n".encode())

@@ -12,7 +12,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from . import model, vault
-from .dialogs import LoginPage, ask_password, ask_text, confirm, error_text, run_async
+from .dialogs import ask_password, ask_text, confirm, error_text, run_async
+from . import security_ui
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -57,7 +58,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.pages = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.toasts.set_child(self.pages)
 
-        self.login = LoginPage()
+        self.login = security_ui.Onboarding(self)
         self.login.connect("signed-in", self.on_signed_in)
         self.pages.add_named(self.login, "login")
 
@@ -66,6 +67,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
         sync.connect(self.on_sync_changed)
         sync.connect_status(self.on_status)
+        sync.connect_channels(self.on_channel)
         GLib.timeout_add_seconds(30, self.check_auto_lock)
 
         if sync.restore():
@@ -133,8 +135,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.lock_button = icon_button("lock", "Notiz sperren")
         self.lock_button.set_action_name("win.toggle-lock")
         self.note_tools.append(self.lock_button)
-        self.share_button = icon_button("share", "Teilen: in einen gemeinsamen Ordner verschieben")
-        self.share_button.set_action_name("win.move-note")
+        self.share_button = icon_button("share", "Notiz teilen …")
+        self.share_button.set_action_name("win.share-note")
         self.note_tools.append(self.share_button)
         header.pack_end(self.note_tools)
         content.add_top_bar(header)
@@ -221,8 +223,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ACCOUNT
     # ========================================================
 
-    def on_signed_in(self, login, server, response):
-        self.sync.sign_in(server, response)
+    def on_signed_in(self, login, server, response, account):
+        self.sync.sign_in(server, response, account)
         self.enter_main()
 
     def enter_main(self):
@@ -245,19 +247,29 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
     def on_status(self, online):
         if online is None:
-            # The session was revoked (e.g. password changed elsewhere).
+            # This device was signed out on the server.
             self.sync.sign_out()
             self.pages.set_visible_child_name("login")
-            self.toast("Bitte melde dich erneut an.")
+            self.toast("Dieses Gerät wurde abgemeldet.")
             return
         self.sidebar.set_status(bool(online))
+
+    def on_channel(self, channel):
+        """Another device wants to join, or someone wants to verify."""
+        print("LiNotes: Anfrage", channel.get("purpose"), flush=True)
+        if channel["purpose"] == "link":
+            security_ui.approve_device(self, channel)
+        elif channel["purpose"] == "verify":
+            security_ui.answer_verification(self, channel)
 
     def sign_out(self):
         def really():
             self.sync.sign_out()
             self.vault_key = None
             self.pages.set_visible_child_name("login")
-        confirm(self, "Abmelden?", "Nicht übertragene Änderungen auf diesem Gerät gehen verloren.", "Abmelden", really)
+        confirm(self, "Dieses Gerät abmelden?",
+                "Die Notizen bleiben auf dem Server. Zum erneuten Anmelden brauchst du ein anderes Gerät oder deine Schlüsseldatei.",
+                "Abmelden", really)
 
     def invite(self):
         def done(code, error):
@@ -267,7 +279,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             dialog = Adw.AlertDialog(
                 heading="Einladungscode",
                 body=f"Mit diesem Code kann einmalig ein neues Konto erstellt werden:\n\n{code}\n\n"
-                     "In der App „Konto erstellen“ wählen und den Code eingeben.",
+                     f"Server: {self.sync.server}\nIn der App „Neues Konto erstellen“ wählen.",
             )
             dialog.add_response("copy", "Kopieren")
             dialog.add_response("ok", "Fertig")
@@ -275,23 +287,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             dialog.present(self)
         run_async(self.sync.api.invite, done)
 
-    def change_password(self):
-        def got_old(old, _hint):
-            def got_new(new, _hint):
-                if len(new) < 8:
-                    self.toast("Das Passwort muss mindestens 8 Zeichen haben.")
-                    return
-                def done(result, error):
-                    if error is not None:
-                        self.toast(error_text(error))
-                        return
-                    from .sync import store_token
-                    store_token(self.sync.state["server"], self.sync.user["username"], result["token"])
-                    self.sync.api.token = result["token"]
-                    self.toast("Passwort geändert. Andere Geräte wurden abgemeldet.")
-                run_async(lambda: self.sync.api.change_password(old, new, device_name()), done)
-            ask_password(self, "Neues Kontopasswort", "Mindestens 8 Zeichen.", got_new, confirm=True)
-        ask_password(self, "Kontopasswort ändern", "Gib zuerst dein aktuelles Passwort ein.", got_old)
+    def share(self, object_id):
+        obj = self.sync.get(object_id)
+        if obj is not None:
+            security_ui.ShareDialog(self, obj).present(self)
 
     # ========================================================
     # NAVIGATION
@@ -333,6 +332,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         notes = [n for n in notes if not n["data"].get("trashed")]
         if key == "locked":
             return [n for n in notes if n["data"].get("enc")], "Gesperrt"
+        if key == "shared-notes":
+            return [n for n in notes if n.get("share") and not self.sync.get(n["data"].get("folder") or "")], "Mit mir geteilt"
         if kind == "folder":
             folder = self.sync.get(object_id)
             name = folder["data"].get("name", "Ordner") if folder else "Ordner"
@@ -391,7 +392,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "folder": folder["id"] if folder else None,
             "body": model.empty_note_body(),
             "created": now, "modified": now,
-        }, folder["space"] if folder else "private", notify=False)
+        }, folder.get("share") if folder else None, notify=False)
         self.current_note = note["id"]
         self.sidebar.refresh()
         self.show_notes()
@@ -441,7 +442,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.touch_vault()
         else:
             data["body"] = blocks
-        self.sync.put("note", data, note["space"], note["id"], notify=False)
+        self.sync.put("note", data, note.get("share"), note["id"], notify=False)
         self.note_pane.update_date(self.sync.get(note["id"]))
         self.refresh_list_only()
 
@@ -486,8 +487,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         data = dict(note["data"])
         data.pop("trashed", None)
         if not self.sync.get(data.get("folder") or ""):
-            data["folder"] = model.default_private_folder(self.sync.user_id) if note["space"] == "private" else model.SHARED_FOLDER
-        self.sync.put("note", data, note["space"], note["id"])
+            data["folder"] = model.default_private_folder(self.sync.user_id)
+            self.sync.put("note", data, None if note["owner"] == self.sync.user_id else note.get("share"), note["id"])
+        else:
+            self.sync.put("note", data, note.get("share"), note["id"])
         self.toast("Notiz wiederhergestellt")
         self.refresh_list_only()
         self.open_note(note["id"])
@@ -512,7 +515,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         data = dict(note["data"])
         data["modified"] = data["created"] = time.time()
         data.pop("pinned", None)
-        copy = self.sync.put("note", data, note["space"])
+        copy = self.sync.put("note", data, note.get("share"))
         self.current_note = copy["id"]
         self.refresh_list_only()
         self.open_note(copy["id"])
@@ -521,15 +524,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(note_id or self.current_note)
         if note is None:
             return
-        folders = sorted(self.sync.objects("folder"), key=lambda f: (f["space"], f["data"].get("name", "")))
-        choices = [(f["id"], ("Gemeinsam: " if f["space"] == "shared" else "Meine Notizen: ") + f["data"].get("name", ""))
+        folders = sorted(self.sync.objects("folder"), key=lambda f: (bool(f.get("share")), f["data"].get("name", "")))
+        choices = [(f["id"], f["data"].get("name", "") + (" (geteilt)" if f.get("share") else ""))
                    for f in folders if f["id"] != note["data"].get("folder")]
         if not choices:
             return
-        dialog = Adw.AlertDialog(heading="Verschieben nach", body="Notizen in gemeinsamen Ordnern sehen alle Konten.")
+        dialog = Adw.AlertDialog(heading="Verschieben nach",
+                                 body="Notizen in geteilten Ordnern sehen alle, mit denen der Ordner geteilt ist.")
         dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
-        shared_index = next((i for i, (fid, _l) in enumerate(choices) if self.sync.get(fid)["space"] == "shared"), 0)
-        dropdown.set_selected(shared_index)
         dialog.set_extra_child(dropdown)
         dialog.add_response("cancel", "Abbrechen")
         dialog.add_response("ok", "Verschieben")
@@ -539,17 +541,21 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if response != "ok":
                 return
             folder = self.sync.get(choices[dropdown.get_selected()][0])
-            if folder["space"] == "shared" and note["data"].get("enc"):
+            share = folder.get("share")
+            if share and note["data"].get("enc"):
                 self.toast("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre.")
                 return
-            if folder["space"] != note["space"] and note["owner"] != self.sync.user_id:
-                self.toast("Nur wer die Notiz erstellt hat, kann sie aus dem gemeinsamen Bereich nehmen.")
+            if share != note.get("share") and note["owner"] != self.sync.user_id:
+                self.toast("Nur wer die Notiz erstellt hat, kann sie in einen anderen Bereich verschieben.")
                 return
-            data = dict(note["data"])
-            data["folder"] = folder["id"]
-            self.sync.put("note", data, folder["space"], note["id"])
-            self.toast(f"Nach „{folder['data'].get('name')}“ verschoben")
-            self.refresh_list_only()
+            current = self.sync.get(note["id"])
+
+            def move():
+                data = self.sync.rekey_files(current, share) if share != current.get("share") else dict(current["data"])
+                data["folder"] = folder["id"]
+                self.sync.put("note", data, share, current["id"])
+
+            run_async(move, lambda *_a: (self.toast(f"Nach „{folder['data'].get('name')}“ verschoben"), self.refresh_list_only()))
 
         dialog.connect("response", on_response)
         dialog.present(self)
@@ -579,7 +585,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                     self.toast(error_text(error))
                     return
                 self.note_pane.editor.insert_image(file_id)
-            run_async(lambda: self.sync.upload_file(content, mime, note["space"]), done)
+            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
 
         dialog.open(self, None, chosen)
 
@@ -603,6 +609,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Endgültig löschen", "win.delete-note")
         else:
             menu.append("Lösen" if note["data"].get("pinned") else "Anheften", "win.pin-note")
+            menu.append("Teilen …", "win.share-note")
             menu.append("Verschieben nach …", "win.move-note")
             menu.append("Duplizieren", "win.duplicate-note")
             menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
@@ -654,7 +661,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if existing is None:
             def create(password, hint):
                 data, key = vault.create_vault(password, hint or "")
-                self.sync.put("vault", data, "private", f"vault-{self.sync.user_id}")
+                self.sync.put("vault", data, None, f"vault-{self.sync.user_id}")
                 self.vault_key = key
                 self.touch_vault()
                 then()
@@ -696,7 +703,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 data = dict(current["data"])
                 data.pop("enc")
                 data["body"] = body
-                self.sync.put("note", data, current["space"], current["id"])
+                self.sync.put("note", data, current.get("share"), current["id"])
                 self.toast("Sperre entfernt")
                 self.refresh_list_only()
                 self.open_note(current["id"])
@@ -713,7 +720,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             body = data.pop("body", [])
             data["enc"] = vault.seal(self.vault_key, {"body": body})
             data["modified"] = time.time()
-            self.sync.put("note", data, current["space"], current["id"])
+            self.sync.put("note", data, current.get("share"), current["id"])
             self.toast("Notiz gesperrt")
             self.refresh_list_only()
             self.open_note(current["id"])
@@ -740,9 +747,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
                         content = vault.open_box(old_key, note["data"]["enc"])
                         updated = dict(note["data"])
                         updated["enc"] = vault.seal(new_key, content)
-                        self.sync.put("note", updated, note["space"], note["id"], notify=False)
+                        self.sync.put("note", updated, note.get("share"), note["id"], notify=False)
                         count += 1
-                self.sync.put("vault", data, "private", existing["id"])
+                self.sync.put("vault", data, None, existing["id"])
                 self.vault_key = new_key
                 self.touch_vault()
                 self.toast(f"Notizen-Passwort geändert, {count} Notizen neu verschlüsselt.")
@@ -754,32 +761,29 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # FOLDERS, LISTS, BOARDS
     # ========================================================
 
-    SPACE_CHOICES = [("private", "Nur für mich"), ("shared", "Gemeinsam mit allen")]
-
     def new_folder(self):
-        def create(name, space):
-            folder = self.sync.put("folder", {"name": name, "order": time.time()}, space)
+        def create(name, _choice):
+            folder = self.sync.put("folder", {"name": name, "order": time.time()})
             self.sidebar.refresh()
             self.sidebar.select("folder:" + folder["id"])
-        ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen", choices=self.SPACE_CHOICES)
+        ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen",
+                 body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
 
     def new_list(self):
-        def create(name, space):
-            shopping = self.sync.put("list", {"name": name, "grocery": True, "order": time.time()}, space)
+        def create(name, _choice):
+            shopping = self.sync.put("list", {"name": name, "grocery": True, "order": time.time()})
             self.sidebar.refresh()
             self.sidebar.select("list:" + shopping["id"])
-        ask_text(self, "Neue Einkaufsliste", create, placeholder="z. B. Drogerie", action="Erstellen",
-                 choices=list(reversed(self.SPACE_CHOICES)))
+        ask_text(self, "Neue Einkaufsliste", create, placeholder="z. B. Drogerie", action="Erstellen")
 
     def new_board(self):
-        def create(name, space):
-            board = self.sync.put("board", {"name": name, "order": time.time()}, space)
+        def create(name, _choice):
+            board = self.sync.put("board", {"name": name, "order": time.time()})
             for order, (_key, column) in enumerate(model.DEFAULT_COLUMNS):
-                self.sync.put("column", {"board": board["id"], "name": column, "order": order}, space, notify=False)
+                self.sync.put("column", {"board": board["id"], "name": column, "order": order}, None, notify=False)
             self.sidebar.refresh()
             self.sidebar.select("board:" + board["id"])
-        ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen",
-                 choices=list(reversed(self.SPACE_CHOICES)))
+        ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen")
 
     def object_menu(self, kind, object_id, widget, x, y):
         obj = self.sync.get(object_id)
@@ -787,8 +791,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         self.menu_target = object_id
         menu = Gio.Menu()
+        menu.append("Teilen …", "win.share-object")
         menu.append("Umbenennen …", "win.rename-object")
-        protected = object_id in (model.default_private_folder(self.sync.user_id), model.SHARED_FOLDER)
+        protected = object_id == model.default_private_folder(self.sync.user_id)
         if not protected:
             menu.append("Löschen …", "win.delete-object")
         self.popup_menu(menu, widget, x, y)
@@ -877,7 +882,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "rename-object": self.rename_object,
             "delete-object": self.delete_object,
             "invite": self.invite,
-            "change-password": self.change_password,
+            "people": lambda: security_ui.PeopleDialog(self).present(self),
+            "keyfile": lambda: security_ui.KeyfileDialog(self).present(self),
+            "help": lambda: security_ui.show_help(self),
+            "share-note": lambda: self.current_note and self.share(self.current_note),
+            "share-object": lambda: self.share(getattr(self, "menu_target", "")),
             "change-vault": self.change_vault_password,
             "sign-out": self.sign_out,
             "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),

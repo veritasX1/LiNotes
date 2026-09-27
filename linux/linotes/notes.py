@@ -30,9 +30,9 @@ class NoteRow(Gtk.ListBoxRow):
         title = Gtk.Label(label=model.note_title(note), xalign=0, ellipsize=3, hexpand=True)
         title.add_css_class("note-row-title")
         title_row.append(title)
-        if note["space"] == "shared":
+        if note.get("share"):
             shared = Icon("person", 13)
-            shared.set_tooltip_text("Geteilte Notiz")
+            shared.set_tooltip_text("Geteilt")
             title_row.append(shared)
         text.append(title_row)
 
@@ -47,7 +47,7 @@ class NoteRow(Gtk.ListBoxRow):
         meta.append(preview)
         text.append(meta)
 
-        if note["space"] == "shared" and note.get("updated_by") and note.get("updated_by") != sync.user_id:
+        if note.get("share") and note.get("updated_by") and note.get("updated_by") != sync.user_id:
             who = Gtk.Label(label=f"Zuletzt bearbeitet von {sync.user_name(note['updated_by'])}", xalign=0, ellipsize=3)
             who.add_css_class("note-row-preview")
             who.add_css_class("caption")
@@ -60,14 +60,14 @@ class NoteRow(Gtk.ListBoxRow):
             thumb.set_size_request(44, 44)
             thumb.add_css_class("thumb")
             box.append(thumb)
-            load_thumbnail(sync, image, thumb)
+            load_thumbnail(sync, image, thumb, share=note.get("share"))
         self.set_child(box)
 
 
-def load_thumbnail(sync, file_id, picture, size=88):
+def load_thumbnail(sync, file_id, picture, size=88, share=None):
     def work():
         try:
-            path = sync.fetch_file(file_id)
+            path = sync.fetch_file(file_id, share)
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)
         except Exception:
             return
@@ -196,7 +196,7 @@ class NoteList(Gtk.Box):
         if image:
             picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.COVER)
             frame.set_child(picture)
-            load_thumbnail(self.sync, image, picture, 300)
+            load_thumbnail(self.sync, image, picture, 300, share=note.get("share"))
         else:
             text = Gtk.Label(label=model.note_preview(note)[:120], wrap=True, xalign=0, yalign=0)
             text.set_margin_start(10)
@@ -269,7 +269,8 @@ class NotePane(Gtk.Stack):
         self.banner = Adw.Banner(title="Diese Notiz liegt in „Zuletzt gelöscht“.", button_label="Wiederherstellen")
         self.banner.connect("button-clicked", lambda _banner: self.emit("restore-requested"))
         editing.append(self.banner)
-        self.editor = NoteEditor(image_loader=sync.fetch_file)
+        self.image_share = None
+        self.editor = NoteEditor(image_loader=lambda reference: sync.fetch_file(reference, self.image_share))
         column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.date = Gtk.Label()
         self.date.add_css_class("note-date")
@@ -294,6 +295,7 @@ class NotePane(Gtk.Stack):
 
     def show_note(self, note, blocks, editable=True):
         self.note_id = note["id"]
+        self.image_share = note.get("share")
         self.editor.load_blocks(blocks)
         self.editor.set_editable(editable)
         self.editor.set_cursor_visible(editable)

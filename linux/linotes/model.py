@@ -124,28 +124,31 @@ def default_private_folder(user_id):
     return f"notes-{user_id}"
 
 
-SHARED_FOLDER = "shared-notes"
-SHARED_LIST = "shared-list"
-SHARED_BOARD = "shared-board"
+def default_list(user_id):
+    return f"list-{user_id}"
+
+
+def default_board(user_id):
+    return f"board-{user_id}"
+
+
 DEFAULT_COLUMNS = [("offen", "Offen"), ("arbeit", "In Arbeit"), ("fertig", "Erledigt")]
 
 
 def ensure_defaults(sync):
-    """Create the standard folders, list and board once (stable ids)."""
+    """Create the standard folder, list and board once (stable ids).
+    Everything starts private; sharing is a deliberate step."""
     user_id = sync.user_id
-    private = default_private_folder(user_id)
-    if sync.state["objects"].get(private) is None:
-        sync.put("folder", {"name": "Notizen", "order": 0}, "private", private, notify=False)
-    if sync.state["objects"].get(SHARED_FOLDER) is None:
-        sync.put("folder", {"name": "Gemeinsam", "order": 0}, "shared", SHARED_FOLDER, notify=False)
-    if sync.state["objects"].get(SHARED_LIST) is None:
+    if sync.get(default_private_folder(user_id)) is None and default_private_folder(user_id) not in sync.state["remote"]:
+        sync.put("folder", {"name": "Notizen", "order": 0}, None, default_private_folder(user_id), notify=False)
+    if sync.get(default_list(user_id)) is None and default_list(user_id) not in sync.state["remote"]:
         sync.put("list", {"name": "Einkaufsliste", "color": "orange", "grocery": True, "order": 0},
-                 "shared", SHARED_LIST, notify=False)
-    if sync.state["objects"].get(SHARED_BOARD) is None:
-        sync.put("board", {"name": "Aufgaben", "order": 0}, "shared", SHARED_BOARD, notify=False)
+                 None, default_list(user_id), notify=False)
+    board = default_board(user_id)
+    if sync.get(board) is None and board not in sync.state["remote"]:
+        sync.put("board", {"name": "Aufgaben", "order": 0}, None, board, notify=False)
         for order, (key, name) in enumerate(DEFAULT_COLUMNS):
-            sync.put("column", {"board": SHARED_BOARD, "name": name, "order": order},
-                     "shared", f"{SHARED_BOARD}-{key}", notify=False)
+            sync.put("column", {"board": board, "name": name, "order": order}, None, f"{board}-{key}", notify=False)
 
 
 # --- groceries ----------------------------------------------------
