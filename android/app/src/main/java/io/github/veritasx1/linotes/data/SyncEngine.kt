@@ -64,6 +64,18 @@ class SyncEngine(private val context: Context) {
     private val filesDir = File(context.cacheDir, "files").apply { mkdirs() }
     private val credentials = TokenStore(context)
     private val openedPrefs = context.getSharedPreferences("opened", Context.MODE_PRIVATE)
+    private val uiPrefs = context.getSharedPreferences("ui", Context.MODE_PRIVATE)
+
+    /** When the shopping lists were last looked at (for the badge on the tab). */
+    var listsSeen: Double
+        get() = uiPrefs.getLong("lists-seen", 0) / 1000.0
+        set(value) = uiPrefs.edit().putLong("lists-seen", (value * 1000).toLong()).apply()
+
+    /** Open entries someone else added or changed since the lists were last looked at. */
+    fun newListItems(): Int {
+        val seen = listsSeen
+        return all("item").count { !it.data.optBoolean("done") && it.updatedBy != 0 && it.updatedBy != userId && it.updated > seen }
+    }
     private val lock = Any()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var jobs: List<Job> = emptyList()

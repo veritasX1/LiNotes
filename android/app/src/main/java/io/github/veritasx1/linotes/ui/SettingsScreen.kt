@@ -68,7 +68,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 state.toastLater("Gesperrte Notizen sind wieder gesperrt.")
             }
         }
-        section("about", header = "Über", footer = "LiNotes 2.0.1 · Ende-zu-Ende verschlüsselt – auf diesem Gerät oder deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
+        section("about", header = "Über", footer = "LiNotes 2.0.2 · Ende-zu-Ende verschlüsselt – auf diesem Gerät oder deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.") {
             GroupRow("Hilfe", Glyph.Notes) { state.push(Route.Help) }
             GroupRow(if (sync.isLocal) "Alle Daten löschen" else "Abmelden", divider = false, chevron = false, titleColor = colors.red) { signOut = true }
         }

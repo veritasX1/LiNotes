@@ -183,16 +183,19 @@ def icon_folder_shared(cr):
 
 
 def icon_cart(cr):
-    cr.move_to(1, 2.5)
-    cr.line_to(3, 2.5)
-    cr.line_to(4.8, 10.5)
-    cr.line_to(12.5, 10.5)
-    cr.line_to(14.2, 4.5)
-    cr.line_to(3.6, 4.5)
+    """A receipt (Kassenzettel) – a cart would suggest buying in the app."""
+    cr.move_to(3, 14.5)
+    cr.line_to(3, 1.5)
+    cr.line_to(13, 1.5)
+    cr.line_to(13, 14.5)
+    for index, x in enumerate((11.33, 9.67, 8, 6.33, 4.67, 3)):
+        cr.line_to(x, 13 if index % 2 == 0 else 14.5)
+    cr.close_path()
     _stroke(cr)
-    for x in (5.5, 11.5):
-        cr.arc(x, 13.2, 1.2, 0, 2 * math.pi)
-        cr.fill()
+    for y, end in ((4.5, 10.5), (7, 10.5), (9.5, 8.5)):
+        cr.move_to(5.5, y)
+        cr.line_to(end, y)
+    _stroke(cr, 1.0)
 
 
 def icon_board(cr):

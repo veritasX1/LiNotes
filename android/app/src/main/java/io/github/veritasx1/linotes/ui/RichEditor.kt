@@ -131,10 +131,7 @@ class ParaSpan(
     }
 }
 
-class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM) {
-    var picture: Drawable = drawable
-    override fun getDrawable(): Drawable = picture
-}
+class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
 data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
 
@@ -564,13 +561,14 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val targetWidth = minOf(available, bitmap.width)
             val targetHeight = (bitmap.height * targetWidth.toFloat() / bitmap.width).toInt()
             val drawable = BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, targetWidth, targetHeight) }
-            span.picture = drawable
             val text = text ?: return@post
             val start = text.getSpanStart(span)
             if (start >= 0) {
+                // ImageSpan caches the drawable it drew first (the placeholder),
+                // so the picture needs a span of its own.
                 busy = true
                 text.removeSpan(span)
-                text.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                text.setSpan(ImageBlockSpan(span.fileId, drawable), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 busy = false
             }
             requestLayout()

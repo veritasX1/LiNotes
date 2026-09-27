@@ -78,7 +78,9 @@ fun LiNotesApp(state: AppState) {
                         }
                     }
                     if (!onEditor) {
-                        val openItems = state.sync.all("item").count { !it.data.optBoolean("done") }
+                        // Only news from others, like a message badge – gone once the lists were looked at.
+                        if (state.tab == 1) LaunchedEffect(revision) { state.sync.listsSeen = io.github.veritasx1.linotes.data.Model.now() + 1 }
+                        val openItems = if (state.tab == 1) 0 else state.sync.newListItems()
                         TabBar(listOf(
                             TabItem(Glyph.Notes, "Notizen"),
                             TabItem(Glyph.Cart, "Listen", openItems),

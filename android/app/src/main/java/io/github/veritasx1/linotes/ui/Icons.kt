@@ -104,9 +104,10 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
             }
         }
         Glyph.Cart -> {
-            drawPath(path { m(1f, 2.5f); l(3f, 2.5f); l(4.8f, 10.5f); l(12.5f, 10.5f); l(14.2f, 4.5f); l(3.6f, 4.5f) }, color, style = line())
-            drawCircle(color, 1.2f * s, p(5.5f, 13.2f))
-            drawCircle(color, 1.2f * s, p(11.5f, 13.2f))
+            // A receipt (Kassenzettel) – a cart would suggest buying in the app.
+            drawPath(path { m(3f, 14.5f); l(3f, 1.5f); l(13f, 1.5f); l(13f, 14.5f); l(11.33f, 13f); l(9.67f, 14.5f); l(8f, 13f)
+                l(6.33f, 14.5f); l(4.67f, 13f); l(3f, 14.5f) }, color, style = line())
+            drawPath(path { m(5.5f, 4.5f); l(10.5f, 4.5f); m(5.5f, 7f); l(10.5f, 7f); m(5.5f, 9.5f); l(8.5f, 9.5f) }, color, style = line(1f))
         }
         Glyph.Board -> {
             rrect(1.5f, 2.5f, 3.6f, 11f, 1f, 1.2f)
