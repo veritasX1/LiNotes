@@ -1,0 +1,232 @@
+/* LiNotes – the calm, warm look of Apple's Notes on top of libadwaita. */
+
+:root {
+  --accent-bg-color: #e6a200;
+  --accent-fg-color: #ffffff;
+  --accent-color: #b87d00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-color: #ffc940;
+  }
+}
+
+.note-editor,
+.note-editor text {
+  background-color: var(--view-bg-color);
+  font-size: 15px;
+}
+
+.note-date {
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.note-pane {
+  background-color: var(--view-bg-color);
+}
+
+.note-image {
+  border-radius: 8px;
+}
+
+/* Note list rows like in Notes: bold title, date + preview below. */
+.note-list row {
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 1px 6px;
+}
+
+.note-list row:selected {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 32%, transparent);
+  color: inherit;
+}
+
+.note-row-title {
+  font-weight: 700;
+}
+
+.note-row-meta {
+  font-size: 13px;
+}
+
+.note-row-date {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.note-row-preview {
+  opacity: 0.6;
+}
+
+.list-section-header {
+  font-weight: 700;
+  font-size: 13px;
+  margin: 14px 16px 4px 16px;
+}
+
+.thumb {
+  border-radius: 6px;
+}
+
+.sidebar-count {
+  opacity: 0.5;
+  font-size: 13px;
+}
+
+.sidebar-heading {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.55;
+  margin: 12px 12px 2px 12px;
+}
+
+.tag-chip {
+  padding: 2px 10px;
+  border-radius: 99px;
+  min-height: 0;
+  font-size: 13px;
+  background-color: alpha(currentColor, 0.08);
+}
+
+.tag-chip:checked {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+}
+
+.large-title {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.list-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent-color);
+}
+
+.item-row {
+  padding: 6px 4px;
+}
+
+.item-done label {
+  opacity: 0.45;
+}
+
+.category-header {
+  font-weight: 700;
+  font-size: 15px;
+  margin: 16px 0 2px 0;
+}
+
+.add-entry {
+  font-size: 15px;
+}
+
+/* Kanban */
+.board-column {
+  background-color: alpha(currentColor, 0.045);
+  border-radius: 14px;
+  padding: 10px;
+  min-width: 270px;
+}
+
+.board-column.drop-target {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 18%, transparent);
+}
+
+.column-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.column-count {
+  opacity: 0.5;
+}
+
+.board-card {
+  background-color: var(--card-bg-color);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px alpha(black, 0.12), 0 0 0 1px alpha(black, 0.04);
+}
+
+.board-card:hover {
+  box-shadow: 0 2px 8px alpha(black, 0.16), 0 0 0 1px alpha(black, 0.05);
+}
+
+.card-title {
+  font-weight: 600;
+}
+
+.card-meta {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.card-overdue {
+  color: #e0463a;
+  opacity: 1;
+}
+
+.card-label {
+  min-height: 5px;
+  min-width: 36px;
+  border-radius: 99px;
+}
+
+.avatar-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background-color: color-mix(in srgb, var(--accent-bg-color) 25%, transparent);
+}
+
+.status-offline {
+  color: #e0463a;
+}
+
+.login-card {
+  min-width: 340px;
+}
+
+.locked-page {
+  background-color: var(--view-bg-color);
+}
+
+/* Neutral window controls on the leading edge, as in Prevux. */
+windowcontrols > button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin: 0 2px;
+}
+
+windowcontrols > button > image {
+  padding: 5px;
+  border-radius: 99px;
+  -gtk-icon-size: 14px;
+  background-color: alpha(currentColor, 0.12);
+  color: alpha(currentColor, 0.9);
+}
+
+windowcontrols > button:hover > image {
+  background-color: alpha(currentColor, 0.2);
+}
+
+windowcontrols > button,
+windowcontrols > button:hover,
+windowcontrols > button:active {
+  background: none;
+  box-shadow: none;
+}
+
+.accent-icon {
+  color: var(--accent-color);
+}
+
+button.text-highlight {
+  background-color: alpha(#ffd83d, 0.55);
+}
