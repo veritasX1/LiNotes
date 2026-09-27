@@ -102,7 +102,13 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         RichEditor(context, editorColors) { fileId, done ->
             scope.launch {
                 val bitmap: Bitmap? = withContext(Dispatchers.IO) {
-                    try { RichEditor.decodeImage(sync.fetchFile(fileId, sync.get(noteId)?.share).readBytes()) } catch (error: Exception) { null }
+                    try {
+                        val bytes = sync.fetchFile(fileId, sync.get(noteId)?.share).readBytes()
+                        RichEditor.decodeImage(bytes).also { if (it == null) android.util.Log.w("LiNotes", "Bild nicht lesbar: $fileId (${bytes.size} Bytes)") }
+                    } catch (error: Exception) {
+                        android.util.Log.w("LiNotes", "Bild nicht geladen: $fileId", error)
+                        null
+                    }
                 }
                 done(bitmap)
             }

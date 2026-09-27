@@ -92,5 +92,20 @@ class InteropTest {
         assertEquals("title", typed[0].getString("t"))
         assertEquals("body", typed[1].getString("t"))
         assertEquals("zweite Zeile", typed[1].getString("x"))
+
+        // A picture that finishes loading replaces the grey placeholder (ImageSpan
+        // caches its first drawable, so this needs a new span).
+        val picture = android.graphics.Bitmap.createBitmap(40, 20, android.graphics.Bitmap.Config.ARGB_8888)
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val withImage = RichEditor(activity, colors) { _, done -> done(picture) }
+        activity.setContentView(withImage)
+        withImage.load(listOf(JSONObject().put("t", "title").put("x", "Bild"), JSONObject().put("t", "image").put("f", "id:name")))
+        fun imageSpan() = withImage.text!!.getSpans(0, withImage.text!!.length, io.github.veritasx1.linotes.ui.ImageBlockSpan::class.java).single()
+        val placeholder = imageSpan()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val span = imageSpan()
+        assertTrue(span !== placeholder)
+        assertTrue(span.drawable is android.graphics.drawable.BitmapDrawable)
+        assertEquals("id:name", withImage.toBlocks()[1].getString("f"))
     }
 }
