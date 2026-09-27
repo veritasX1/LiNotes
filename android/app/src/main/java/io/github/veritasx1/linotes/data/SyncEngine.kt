@@ -224,6 +224,12 @@ class SyncEngine(private val context: Context) {
             val meta = JSONObject(data.toString())
             for (field in listOf("body", "enc")) if (meta.has(field)) { body.put(field, meta.get(field)); meta.remove(field) }
             meta.remove("evicted")
+            // Title and first line stay readable (for us) when only the metadata is kept on the phone.
+            meta.remove("title"); meta.remove("preview")
+            data.optJSONArray("body")?.let { blocks ->
+                val lines = (0 until blocks.length()).mapNotNull { blocks.optJSONObject(it)?.optString("x")?.trim() }.filter { it.isNotEmpty() }
+                meta.put("title", lines.firstOrNull()?.take(120) ?: "").put("preview", lines.drop(1).joinToString(" ").take(160))
+            }
             return JSONObject().put("v", 2).put("m", E2E.seal(key, meta, "$id|m")).put("b", E2E.seal(key, body, "$id|b"))
         }
         return JSONObject().put("v", 2).put("m", E2E.seal(key, data, "$id|m"))
@@ -640,7 +646,11 @@ class SyncEngine(private val context: Context) {
                 val list = api?.channels() ?: JSONArray()
                 for (index in 0 until list.length()) {
                     val channel = list.getJSONObject(index)
-                    if (seenChannels.add(channel.getString("channel"))) requests.emit(channel)
+                    if (!seenChannels.add(channel.getString("channel"))) continue
+                    // Someone new (e.g. just registered): refresh the list of people first.
+                    val from = channel.optInt("from")
+                    if (from != 0 && userById(from) == null) try { pullOnce() } catch (error: Exception) { }
+                    requests.emit(channel)
                 }
             } catch (error: Exception) {
             }

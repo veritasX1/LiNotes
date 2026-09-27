@@ -168,6 +168,33 @@ class Store:
             for row in self.connect().execute("SELECT * FROM users ORDER BY id")
         ]
 
+    def delete_user(self, username):
+        """Remove an account and everything it owns (admin only). Shares the
+        account owned disappear for their members as well."""
+        with self.write_lock, self.connect() as db:
+            row = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+            if row is None:
+                return False
+            user_id = row[0]
+            owned = [r[0] for r in db.execute("SELECT id FROM shares WHERE owner = ?", (user_id,))]
+            files = [r[0] for r in db.execute(
+                "SELECT id FROM files WHERE owner = ? OR share IN (SELECT id FROM shares WHERE owner = ?)", (user_id, user_id))]
+            for share in owned:
+                db.execute("DELETE FROM objects WHERE share = ?", (share,))
+                db.execute("DELETE FROM share_members WHERE share_id = ?", (share,))
+                db.execute("DELETE FROM shares WHERE id = ?", (share,))
+            db.execute("DELETE FROM objects WHERE owner = ? AND share IS NULL", (user_id,))
+            db.execute("DELETE FROM share_members WHERE user_id = ?", (user_id,))
+            db.executemany("DELETE FROM files WHERE id = ?", [(file_id,) for file_id in files])
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM channels WHERE from_user = ? OR to_user = ?", (user_id, user_id))
+            db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            # Everyone else must notice that the shares are gone.
+            db.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+        for file_id in files:
+            (self.files_dir / file_id[:2] / file_id).unlink(missing_ok=True)
+        return True
+
     def rename(self, user_id, name):
         with self.write_lock, self.connect() as db:
             db.execute("UPDATE users SET display_name = ? WHERE id = ?", (name, user_id))

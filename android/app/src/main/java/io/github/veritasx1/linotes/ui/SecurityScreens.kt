@@ -346,7 +346,6 @@ fun OnboardingScreen(state: AppState) {
 @Composable
 fun KeyfileDialog(state: AppState, firstTime: Boolean, onDone: () -> Unit) {
     val sync = state.sync
-    val scope = rememberCoroutineScope()
     AlertDialog(
         if (firstTime) "Schlüsseldatei sichern" else "Schlüsseldatei",
         (if (firstTime) "Dein Konto ist angelegt. " else "") +
@@ -361,12 +360,16 @@ fun KeyfileDialog(state: AppState, firstTime: Boolean, onDone: () -> Unit) {
             values[0] != values[1] -> state.toastLater("Die Passphrasen stimmen nicht überein.")
             else -> {
                 onDone()
-                scope.launch {
+                state.toastLater("Schlüsseldatei wird vorbereitet …")
+                // The dialog is gone now: run in the app's scope, not the dialog's.
+                sync.launch {
                     val account = sync.account ?: return@launch
                     val user = sync.user ?: return@launch
-                    val data = withContext(Dispatchers.Default) { E2E.exportKeyfile(sync.server, user.username, account, values[0]) }
-                    state.saveDocument("LiNotes-${user.username}.linotes-key", data.toString(2).toByteArray()) { saved ->
-                        state.toastLater(if (saved) "Schlüsseldatei gespeichert" else "Nicht gespeichert")
+                    val data = E2E.exportKeyfile(sync.server, user.username, account, values[0])
+                    withContext(Dispatchers.Main) {
+                        state.saveDocument("LiNotes-${user.username}.linotes-key", data.toString(2).toByteArray()) { saved ->
+                            state.toastLater(if (saved) "Schlüsseldatei gespeichert" else "Nicht gespeichert")
+                        }
                     }
                 }
             }
@@ -479,7 +482,6 @@ fun VerifyScreen(state: AppState, userId: Int) {
 fun IncomingRequests(state: AppState) {
     val request = state.incoming.firstOrNull() ?: return
     val sync = state.sync
-    val scope = rememberCoroutineScope()
     val channel = request.optString("channel")
     val purpose = request.optString("purpose")
     val other = sync.userById(request.optInt("from"))
@@ -487,21 +489,21 @@ fun IncomingRequests(state: AppState) {
 
     fun answer(code: String) {
         dismiss()
-        scope.launch {
-            try {
+        // The dialog leaves the composition now: work in the app's scope.
+        sync.launch {
+            val message = try {
                 if (purpose == "link") {
-                    withContext(Dispatchers.IO) { Pairing.approveLink(sync.api!!, channel, code, sync.account!!) }
-                    state.showToast("Neues Gerät verbunden")
+                    Pairing.approveLink(sync.api!!, channel, code, sync.account!!)
+                    "Neues Gerät verbunden"
                 } else if (other != null) {
-                    val fingerprint = withContext(Dispatchers.IO) {
-                        Pairing.verifyEnter(sync.api!!, channel, code, other.id, sync.identity!!.public, sync.users)
-                    }
-                    Pairing.markVerified(sync, other.id, fingerprint)
-                    state.showToast("${other.name} ist jetzt verifiziert ✓")
-                }
+                    val fingerprint = Pairing.verifyEnter(sync.api!!, channel, code, other.id, sync.identity!!.public, sync.users)
+                    withContext(Dispatchers.Main) { Pairing.markVerified(sync, other.id, fingerprint) }
+                    "${other.name} ist jetzt verifiziert ✓"
+                } else null
             } catch (failure: Exception) {
-                state.showToast(errorText(failure))
+                errorText(failure)
             }
+            message?.let { state.toastLater(it) }
         }
     }
 
@@ -564,6 +566,10 @@ fun CodeDialog(title: String, message: String, confirm: String, cancel: String, 
                         textStyle = Type.body.copy(fontSize = 26.sp, fontFamily = FontFamily.Monospace, color = colors.label, textAlign = TextAlign.Center),
                         cursorBrush = SolidColor(colors.accent),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                            val entered = code.filter { it.isDigit() }
+                            if (entered.length == 6) onConfirm(entered)
+                        }),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
