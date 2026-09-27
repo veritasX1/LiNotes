@@ -405,6 +405,25 @@ fun AlertDialog(
     if (fields.isNotEmpty()) LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
+/** Full-screen dialogs are sized for the whole display but placed below the
+ *  status bar and camera cutout – their bottom would be cut off. Let them
+ *  cover the whole screen instead. */
+@Composable
+fun UseWholeScreen() {
+    val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+    androidx.compose.runtime.SideEffect {
+        if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                // Do not keep clear of the status bar either; the content pads itself.
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) fitInsetsTypes = 0
+            }
+        }
+    }
+}
+
 data class AlertField(val placeholder: String, val initial: String = "", val password: Boolean = false)
 
 data class SheetAction(val label: String, val destructive: Boolean = false, val onClick: () -> Unit)
@@ -413,7 +432,9 @@ data class SheetAction(val label: String, val destructive: Boolean = false, val 
 fun ActionSheet(title: String?, actions: List<SheetAction>, onDismiss: () -> Unit) {
     val colors = palette
     val sheet = if (colors.dark) Color(0xFF2C2C2E) else Color(0xFFF7F7F7)
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // Draw behind the system bars ourselves so navigationBarsPadding() gets real insets.
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        UseWholeScreen()
         Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)) {
             Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(8.dp)) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(sheet)) {

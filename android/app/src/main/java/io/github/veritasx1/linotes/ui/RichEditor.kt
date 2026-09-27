@@ -187,9 +187,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 if (busy) return
                 insertStart = start
                 insertCount = count
-                if (count == 1 && before == 0 && s[start] == '\n') {
-                    enterAt = start
-                    enterStyle = paraAt(s as Spanned, start)
+                // Enter – also when the keyboard commits the word being typed
+                // together with the line break in one edit.
+                val inserted = s.subSequence(start, start + count)
+                if (count > before && inserted.count { it == '\n' } == 1) {
+                    enterAt = start + inserted.indexOf('\n')
+                    enterStyle = paraAt(s as Spanned, enterAt)
                 }
             }
 
@@ -298,6 +301,14 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                         "title", "heading", "subheading" -> makeSpan("body")
                         else -> makeSpan(previous.type)
                     }
+                }
+                existing != null && text.getSpanStart(existing) == start -> makeSpan(existing.type, existing.level, existing.checked)
+                // Only covered by the span of the paragraph above (text typed into
+                // a new empty last line): follow the Enter rule of Notes.
+                existing != null && index > 0 -> when (existing.type) {
+                    in LIST_TYPES -> makeSpan(existing.type, existing.level)
+                    "title", "heading", "subheading" -> makeSpan("body")
+                    else -> makeSpan(existing.type)
                 }
                 existing != null -> makeSpan(existing.type, existing.level, existing.checked)
                 index == 0 -> makeSpan("title")

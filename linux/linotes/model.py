@@ -27,7 +27,7 @@ def note_title(note, locked_label="Gesperrte Notiz"):
         text = block.get("x", "").strip()
         if text:
             return text[:120]
-    return "Neue Notiz"
+    return data.get("title") or "Neue Notiz"
 
 
 def note_preview(note):

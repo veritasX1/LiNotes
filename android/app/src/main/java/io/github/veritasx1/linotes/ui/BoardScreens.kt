@@ -296,8 +296,9 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
         onDone()
     }
 
-    Dialog(onDismissRequest = { save() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
+    Dialog(onDismissRequest = { save() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        UseWholeScreen()
+        Column(Modifier.fillMaxSize().background(colors.background).navigationBarsPadding().imePadding()) {
             NavBar("Karte", null, null, actions = { TextButton("Fertig", bold = true) { save() } })
             Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 FormSection {

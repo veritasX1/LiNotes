@@ -3,6 +3,7 @@
     python -m linotes_server.admin invite      create a one-time invite code
     python -m linotes_server.admin users       list accounts
     python -m linotes_server.admin sessions    list signed-in devices
+    python -m linotes_server.admin delete NAME delete an account and all it owns
 
 There are no passwords: accounts are created in the app with an invite
 code and are protected by keys that never leave the devices.
@@ -28,6 +29,11 @@ def main(argv):
             for session in store.sessions(user["id"]):
                 seen = datetime.datetime.fromtimestamp(session["seen"]).strftime("%Y-%m-%d %H:%M")
                 print(user["username"], "|", session["device"], "| zuletzt", seen)
+    elif command == "delete" and len(argv) == 3:
+        if not store.delete_user(argv[2]):
+            print("Unbekanntes Konto:", argv[2])
+            return 1
+        print("Gelöscht:", argv[2])
     else:
         print(__doc__)
         return 1

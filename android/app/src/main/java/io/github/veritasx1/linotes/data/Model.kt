@@ -24,11 +24,12 @@ object Model {
             val text = body.optJSONObject(index)?.optString("x")?.trim().orEmpty()
             if (text.isNotEmpty()) return text.take(120)
         }
-        return "Neue Notiz"
+        return note.data.optString("title").ifEmpty { "Neue Notiz" }
     }
 
     fun preview(note: SyncObject): String {
         if (isLocked(note)) return ""
+        if (note.evicted) return note.data.optString("preview")
         val body = blocks(note)
         val lines = (0 until body.length()).mapNotNull { body.optJSONObject(it)?.optString("x")?.trim() }.filter { it.isNotEmpty() }
         return lines.drop(1).joinToString(" ").take(160)

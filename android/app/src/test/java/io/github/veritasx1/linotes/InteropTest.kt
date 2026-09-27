@@ -81,5 +81,16 @@ class InteropTest {
         editor.text!!.insert(titleEnd, "\n")
         editor.text!!.insert(titleEnd + 1, "Unter dem Titel")
         assertEquals("body", editor.toBlocks()[1].getString("t"))
+
+        // A new note: title, Enter at the very end, then typing letter by letter.
+        val fresh = RichEditor(context, colors) { _, done -> done(null) }
+        fresh.load(listOf(JSONObject().put("t", "title").put("x", "")))
+        "Einkauf".forEach { fresh.text!!.append(it.toString()) }
+        fresh.text!!.append("\n")
+        "zweite Zeile".forEach { fresh.text!!.append(it.toString()) }
+        val typed = fresh.toBlocks()
+        assertEquals("title", typed[0].getString("t"))
+        assertEquals("body", typed[1].getString("t"))
+        assertEquals("zweite Zeile", typed[1].getString("x"))
     }
 }

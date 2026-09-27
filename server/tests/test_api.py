@@ -144,6 +144,19 @@ def test_all():
     thread.join(15)
     assert [o["id"] for o in got["r"]["objects"]] == ["i9"]
 
+    # Deleting an account removes its shares for the others too.
+    temp_account, _k, temp, temp_id = register(client, app, "temp", "Temp")
+    client.post("/api/sync", json={"changes": [
+        {"id": "s-temp", "kind": "share", "share": "s-temp", "data": {"v": 2}, "members": [anna_id]},
+        {"id": "n-temp", "kind": "note", "share": "s-temp", "data": {"v": 2}},
+        {"id": "p-temp", "kind": "note", "share": None, "data": {"v": 2}},
+    ]}, headers=temp)
+    assert "n-temp" in [o["id"] for o in client.get("/api/sync?since=0", headers=anna).json["objects"]]
+    assert app.store.delete_user("temp")
+    after = client.get("/api/sync?since=0", headers=anna).json
+    assert "n-temp" not in [o["id"] for o in after["objects"]] and "s-temp" not in after["shares"]
+    assert client.get("/api/me", headers=temp).status_code == 401
+    assert "temp" not in [u["username"] for u in app.store.users()]
     # Brute force protection.
     for _ in range(10):
         client.post("/api/login", json={"username": "olaf", "auth": "falsch"})

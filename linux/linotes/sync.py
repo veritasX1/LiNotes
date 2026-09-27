@@ -224,6 +224,15 @@ class SyncEngine:
         if obj["kind"] == "note":
             body = {k: data[k] for k in ("body", "enc") if k in data}
             meta = {k: v for k, v in data.items() if k not in ("body", "enc")}
+            if "body" in data:
+                # Title and first line stay readable (for us) when a phone only
+                # keeps the note's metadata – see "Auf dem Gerät behalten".
+                lines = [b.get("x", "").strip() for b in data["body"] if b.get("x", "").strip()]
+                meta["title"] = lines[0][:120] if lines else ""
+                meta["preview"] = " ".join(lines[1:])[:160]
+            else:
+                meta.pop("title", None)
+                meta.pop("preview", None)
             return {"v": 2, "m": e2e.seal(key, meta, f"{object_id}|m"), "b": e2e.seal(key, body, f"{object_id}|b")}
         return {"v": 2, "m": e2e.seal(key, data, f"{object_id}|m")}
 
@@ -627,6 +636,12 @@ class SyncEngine:
                 for channel in self.api.channels():
                     if channel["channel"] not in self.seen_channels:
                         self.seen_channels.add(channel["channel"])
+                        # Someone new (e.g. just registered): refresh the list of people first.
+                        if channel.get("from") and self.user_by_id(channel["from"]) is None:
+                            try:
+                                self.pull_once()
+                            except Exception:
+                                pass
                         GLib.idle_add(lambda c=channel: ([cb(c) for cb in self.channel_listeners], False)[1])
             except Exception:
                 pass
