@@ -63,7 +63,7 @@ class LiNotesApplication(Adw.Application):
 
     def about(self):
         dialog = Adw.AboutDialog(
-            application_name="LiNotes", application_icon=APP_ID, version="1.0",
+            application_name="LiNotes", application_icon=APP_ID, version="2.0",
             developer_name="Olaf Winkler",
             comments="Notizen, Einkaufslisten und Aufgaben – auf deinem eigenen Server.",
         )

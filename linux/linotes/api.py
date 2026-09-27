@@ -28,7 +28,7 @@ class Api:
 
     def request(self, method, path, body=None, timeout=20, raw=False, content_type=None):
         url = self.server + path
-        headers = {"Accept": "application/json", "User-Agent": "LiNotes-Linux/1.0"}
+        headers = {"Accept": "application/json", "User-Agent": "LiNotes-Linux/2.0"}
         data = None
         if body is not None and content_type is None:
             data = json.dumps(body).encode()

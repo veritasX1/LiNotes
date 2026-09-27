@@ -157,6 +157,8 @@
     <a class="link" href="#datenschutz">Datenschutz</a>
     <a class="link" href="#android">Android</a>
     <a class="link optional" href="#ubuntu">Ubuntu</a>
+    <a class="link" href="#anleitung">Anleitung</a>
+    <a class="link optional" href="#server">Eigener Server</a>
   </div>
 </nav>
 
@@ -165,7 +167,7 @@
     <img class="icon" src="linotes.svg" alt="LiNotes-Symbol">
     <h1>LiNotes</h1>
     <p class="lead">Notizen, Einkaufslisten und Aufgaben für die Familie – so einfach wie Apples Notizen, aber auf dem eigenen Server.</p>
-    <span class="badge">Version 1.0 · Android und Ubuntu</span>
+    <span class="badge">Version 2.0 · Android und Ubuntu · Ende-zu-Ende verschlüsselt</span>
     <div class="actions">
       <a class="button primary" href="#android">Für Android laden</a>
       <a class="button secondary" href="#ubuntu">Für Ubuntu laden</a>
@@ -182,11 +184,11 @@
     <p class="intro">Auf dem Handy und am Rechner, allein oder gemeinsam – alles gleicht sich in Sekunden ab.</p>
     <div class="grid">
       <div class="card"><h3>Notizen wie bei Apple</h3><p>Titel, Überschriften, Checklisten mit Kreisen, Aufzählungen, Fotos, #Tags, angeheftete Notizen und „Zuletzt gelöscht“.</p></div>
-      <div class="card"><h3>Privat, gemeinsam, geheim</h3><p>Eigene Ordner nur für dich, gemeinsame Ordner für die Familie – und gesperrte Notizen mit eigenem Passwort.</p></div>
+      <div class="card"><h3>Teilen, was du willst</h3><p>Einzelne Notizen, ganze Ordner, Listen oder Boards – mit genau den Personen, die du auswählst. Alles andere bleibt nur für dich.</p></div>
       <div class="card"><h3>Einkaufslisten</h3><p>Einträge landen automatisch in der richtigen Warengruppe. Was einer abhakt, sieht der andere sofort.</p></div>
       <div class="card"><h3>Aufgaben-Board</h3><p>Kanban mit Spalten „Offen“, „In Arbeit“, „Erledigt“, mit Fälligkeit, Zuständigkeit und Farben.</p></div>
       <div class="card"><h3>Auch offline</h3><p>Ohne Netz arbeitest du einfach weiter. Änderungen werden übertragen, sobald wieder Verbindung besteht.</p></div>
-      <div class="card"><h3>Zwei Geräte, ein Stand</h3><p>Android-App und Ubuntu-Programm sprechen mit demselben Server und sehen gleich aus.</p></div>
+      <div class="card"><h3>Geräte verbinden wie bei Signal</h3><p>Neues Gerät? 6-stelligen Code eintippen oder QR-Code scannen – fertig. Kein Passwort, das jemand erraten könnte.</p></div>
     </div>
   </div>
 </section>
@@ -212,13 +214,14 @@
 <section id="datenschutz" class="privacy">
   <div class="wrap">
     <h2>Deine Notizen bleiben bei dir</h2>
-    <p class="intro">Kein Konzern liest mit. Die Daten liegen auf einem eigenen Server zu Hause.</p>
+    <p class="intro">Niemand liest mit – kein Konzern und auch nicht, wer den Server betreibt.</p>
     <div class="grid">
-      <div class="card"><h3>Eigener Server</h3><p>Alle Notizen, Listen und Bilder liegen auf dem eigenen Server – nicht bei Google, Apple oder Microsoft. Jede Nacht wird auf eine zweite Festplatte gesichert.</p></div>
-      <div class="card"><h3>Ende-zu-Ende verschlüsselt</h3><p>Gesperrte Notizen werden schon auf dem Gerät mit deinem Notizen-Passwort verschlüsselt (AES-256). Der Server sieht nur unlesbare Daten.</p></div>
-      <div class="card"><h3>Getrennte Konten</h3><p>Jede Person hat ein eigenes Konto. Private Notizen und Bilder sieht nur, wem sie gehören – das prüft der Server bei jedem Zugriff.</p></div>
+      <div class="card"><h3>Alles Ende-zu-Ende verschlüsselt</h3><p>Notizen, Listen, Boards, Ordnernamen und Bilder werden auf deinem Gerät verschlüsselt (AES-256), bevor sie den Server erreichen. Der Server speichert nur unlesbare Daten.</p></div>
+      <div class="card"><h3>Auch der Betreiber nicht</h3><p>Die Schlüssel liegen nur auf deinen Geräten. Wer den Server betreibt, kann weder deine Notizen noch die anderer Personen lesen.</p></div>
+      <div class="card"><h3>Verifizierte Personen</h3><p>Bevor ihr teilt, bestätigt ihr euch einmal gegenseitig per Code oder QR-Code. So kann niemand einen falschen Schlüssel unterschieben.</p></div>
       <div class="card"><h3>Keine Werbung, keine Tracker</h3><p>Die Apps enthalten keine Werbung, keine Statistik-Dienste und senden nichts an Dritte. Android-Sicherungen in die Google-Cloud sind abgeschaltet.</p></div>
-      <div class="card"><h3>Sichere Anmeldung</h3><p>Verbindungen laufen verschlüsselt über HTTPS, Passwörter werden nur als sicherer Hash gespeichert, zu viele Fehlversuche werden gesperrt.</p></div>
+      <div class="card"><h3>Gesperrte Notizen</h3><p>Geheimes zusätzlich mit Notizen-Passwort sperren – auf dem Handy mit Fingerabdruck, PIN oder Muster entsperren.</p></div>
+      <div class="card"><h3>Weniger auf dem Handy</h3><p>Pro Notiz einstellbar, wie lange der Inhalt auf dem Handy bleibt (immer, 90, 30, 7 Tage oder nur auf dem Server).</p></div>
       <div class="card"><h3>Auch diese Seite</h3><p>Keine Cookies, kein JavaScript, keine eingebundenen Dienste von Dritten, keine Zugriffsprotokolle.</p></div>
     </div>
   </div>
@@ -230,9 +233,9 @@
     <p class="intro">Für Android 8 und neuer.</p>
     <h3>Direkt laden</h3>
     <ol class="steps">
-      <li><a href="download/LiNotes-1.0.apk"><b>LiNotes-1.0.apk</b> herunterladen</a> (6,7 MB).</li>
+      <li><a href="download/LiNotes-2.0.apk"><b>LiNotes-2.0.apk</b> herunterladen</a> (10 MB).</li>
       <li>Die Datei öffnen. Android fragt einmalig, ob der Browser Apps installieren darf – erlauben.</li>
-      <li>LiNotes öffnen, „Neues Konto mit Einladungscode“ wählen, den Code eingeben und Benutzername und Passwort festlegen.</li>
+      <li>LiNotes öffnen und die Adresse deines Servers eingeben – wie es weitergeht, steht in der <a href="#anleitung">Anleitung</a>.</li>
     </ol>
     <h3>Oder über F-Droid (mit automatischen Updates)</h3>
     <p>In F-Droid unter <i>Einstellungen → Paketquellen</i> diese Quelle hinzufügen:</p>
@@ -247,11 +250,53 @@
     <h2>Ubuntu</h2>
     <p class="intro">Für Ubuntu 26.04 und andere Systeme mit GTK 4 und libadwaita.</p>
     <pre><code>sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 python3-cryptography
-wget https://linotes.goip.de/download/linotes-ubuntu-1.0.tar.gz
-tar xzf linotes-ubuntu-1.0.tar.gz -C ~/.local/share
+wget https://linotes.goip.de/download/linotes-ubuntu-2.0.tar.gz
+tar xzf linotes-ubuntu-2.0.tar.gz -C ~/.local/share
 ~/.local/share/linotes/install.sh</code></pre>
-    <p>Danach steht LiNotes im Anwendungsmenü. Die Anmeldung wird im Schlüsselbund von Ubuntu gespeichert.</p>
+    <p>Danach steht LiNotes im Anwendungsmenü. Dein Kontoschlüssel wird im Schlüsselbund von Ubuntu gespeichert.</p>
     <p class="small">Prüfsummen: <a href="download/SHA256SUMS">SHA256SUMS</a></p>
+  </div>
+</section>
+
+<section id="anleitung">
+  <div class="wrap prose">
+    <h2>Anleitung</h2>
+    <p class="intro">So richtest du LiNotes ein – Schritt für Schritt.</p>
+    <h3>1. Konto anlegen</h3>
+    <ol class="steps">
+      <li>Du brauchst die <b>Serveradresse</b> und einen <b>Einladungscode</b> von der Person, die den Server betreibt.</li>
+      <li>App öffnen, Serveradresse eingeben, „Neues Konto erstellen“ wählen.</li>
+      <li>Einladungscode, einen Benutzernamen (klein, ohne Leerzeichen) und deinen Namen eingeben. Ein Passwort gibt es nicht – dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.</li>
+    </ol>
+    <h3>2. Schlüsseldatei sichern</h3>
+    <p>Direkt nach dem Anlegen bietet die App an, eine <b>Schlüsseldatei</b> zu speichern. Wähle eine Passphrase und lege die Datei z. B. auf einen USB-Stick an einen sicheren Ort. Verlierst du alle Geräte, kommst du nur mit dieser Datei wieder an deine Notizen – niemand sonst kann sie wiederherstellen. Später: Einstellungen → „Schlüsseldatei sichern“ (Ubuntu: Kontomenü).</p>
+    <h3>3. Weiteres Gerät verbinden</h3>
+    <ol class="steps">
+      <li>Auf dem neuen Gerät Serveradresse eingeben und „Mit anderem Gerät verbinden“ wählen, dann deinen Benutzernamen.</li>
+      <li>Das neue Gerät zeigt einen 6-stelligen Code und einen QR-Code.</li>
+      <li>Auf einem Gerät, auf dem du schon angemeldet bist, erscheint „Neues Gerät verbinden?“. Dort den Code eintippen oder „QR-Code scannen“ wählen. Warst du es nicht selbst: „Ablehnen“.</li>
+    </ol>
+    <h3>4. Personen verifizieren</h3>
+    <p>Bevor ihr etwas teilt, verifiziert ihr euch einmal: Einstellungen → Personen → Person antippen (Ubuntu: Kontomenü → Personen → „Verifizieren“). Dein Gerät zeigt einen Code; auf dem Gerät der anderen Person erscheint eine Anfrage, dort den Code eintippen, vorlesen lassen oder den QR-Code scannen.</p>
+    <h3>5. Teilen</h3>
+    <p>Notiz, Ordner, Liste oder Board lange gedrückt halten (Ubuntu: Rechtsklick) → „Teilen …“ und die Personen auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird automatisch neu verschlüsselt.</p>
+    <h3>6. Geheime Notizen</h3>
+    <p>In einer Notiz „Mehr“ → „Notiz sperren“. Beim ersten Mal legst du ein Notizen-Passwort fest. Auf dem Handy kannst du in den Einstellungen das Entsperren mit Fingerabdruck, PIN oder Muster einschalten. Geteilte Notizen können nicht gesperrt werden.</p>
+    <h3>7. Platz auf dem Handy</h3>
+    <p>Einstellungen → „Notizen behalten“ legt fest, wie lange Notizen nach der letzten Benutzung auf dem Handy bleiben (Standard: 90 Tage). Pro Notiz geht das über „Mehr“ → „Auf dem Gerät behalten“. Danach wird die Notiz beim Öffnen verschlüsselt vom Server geladen. Angeheftete Notizen, Listen und Boards bleiben immer auf dem Handy.</p>
+  </div>
+</section>
+
+<section id="server">
+  <div class="wrap prose">
+    <h2>Eigener Server</h2>
+    <p class="intro">LiNotes läuft auf jedem kleinen Linux-Rechner – z. B. einem Raspberry Pi.</p>
+    <p>Voraussetzungen: Debian, Ubuntu oder Raspberry Pi OS, eine (DynDNS-)Domain, die auf den Rechner zeigt, und offene Ports 80 und 443.</p>
+    <pre><code>wget https://linotes.goip.de/download/linotes-server-2.0.tar.gz
+tar xzf linotes-server-2.0.tar.gz
+sudo linotes-server/install.sh notizen.example.org</code></pre>
+    <p>Das Skript richtet alles ein – Dienst, nginx, HTTPS-Zertifikat und eine nächtliche Sicherung – und zeigt am Ende den ersten Einladungscode. Die Serveradresse (hier <code>notizen.example.org</code>) gibst du dann in der App ein. Weitere Einladungscodes erzeugst du direkt in der App unter „Personen“.</p>
+    <p class="small">Der Server kann keine Inhalte lesen: Er speichert nur verschlüsselte Daten, keine Passwörter und keine Zugriffsprotokolle.</p>
   </div>
 </section>
 
