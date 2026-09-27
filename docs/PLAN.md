@@ -36,8 +36,10 @@ Konzept: docs/SECURITY.md
 - [x] Koppeln/Verifizieren (linux/linotes/pairing.py, linux/tests/test_pairing.py)
 - [x] Ubuntu-App v2: Einrichtung (Server/Neues Konto/Gerät verbinden/Schlüsseldatei), Teilen-Dialog, Personen/Verifizieren, Schlüsseldatei-Export, Hilfe. GUI-Ende-zu-Ende-Test mit 2. Konto bestanden.
 - [x] Ubuntu-Symbol: Installer baut Icon-Cache mit -t und legt PNGs ab
-- [ ] Android v2: E2E.kt (gleiche Testvektoren), Sync v2, Einrichtung, QR-Scanner (ZXing), Teilen, Verifizieren, Schlüsseldatei (SAF), Biometrie/PIN/Muster für gesperrte Notizen, Auslagerung (Immer/90/30/7/Nur Server, Standard 90, Angeheftete + Listen/Boards immer)
-- [ ] Server-Deployment v2: DB neu (alte v1-Daten leer), API auf linotesauth.goip.de (Nutzerwunsch), linotes.goip.de nur Homepage/Downloads
-- [ ] Installer für eigene Server (server/install.sh: venv, systemd, nginx+certbot, Einladungscode)
-- [ ] Hilfe/How-to auf Homepage; Homepage ohne Serveradresse
+- [x] Android v2: E2E.kt (gleiche Testvektoren), Sync v2, Einrichtung, QR-Scanner (ZXing), Teilen, Verifizieren, Schlüsseldatei (SAF), Biometrie/PIN/Muster für gesperrte Notizen, Auslagerung (Immer/90/30/7/Nur Server, Standard 90, Angeheftete + Listen/Boards immer). Robolectric-Screenshots gegen frischen Testserver: Scratchpad `android_srv.sh` (Port 8499, Konto anna + Einladung für olaf in android_invite.txt), dann `./gradlew testDebugUnitTest -Proborazzi.test.record=true`
+- [x] Server-Deployment v2 (27.09.): DB neu (v1 archiviert in /media/olaf/5TB1/linotes/v1-alt-20260927), API auf linotesauth.goip.de (Nutzerwunsch), linotes.goip.de nur Homepage/Downloads; DNS, nginx-vhost linotesauth, certbot, Watchdog-URLs angepasst; Einladungscodes in ~/LiNotes-Zugang.txt
+- [x] Installer für eigene Server (nur Syntax geprüft, noch nicht auf frischem System gelaufen) (server/install.sh: venv, systemd, nginx+certbot, Einladungscode)
+- [x] Hilfe/How-to auf Homepage (#anleitung, #server); Downloads 2.0 (APK, Ubuntu, Server) + F-Droid
 - [ ] Handy-Test (Nutzer per ntfy bitten, Handy anzuschließen)
+- [x] Fix: geänderte Objekte rücken in der Warteschlange ans Ende (sonst kam ein Objekt vor seiner neuen Freigabe beim Server an → „forbidden“, Objekt verschwand). Linux + Android.
+- [x] .gitignore-Regel `data/` war zu weit (Android-Datenschicht war nicht eingecheckt) → `/data/`, `server/data/`
