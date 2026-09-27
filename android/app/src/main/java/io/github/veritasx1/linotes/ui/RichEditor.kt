@@ -1,0 +1,611 @@
+package io.github.veritasx1.linotes.ui
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.text.Editable
+import android.text.InputType
+import android.text.Layout
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.TextWatcher
+import android.text.style.BackgroundColorSpan
+import android.text.style.ImageSpan
+import android.text.style.LeadingMarginSpan
+import android.text.style.MetricAffectingSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.MotionEvent
+import android.widget.EditText
+import org.json.JSONArray
+import org.json.JSONObject
+
+private const val OBJECT = '￼'
+val LIST_TYPES = setOf("bullet", "dash", "number", "check")
+const val MAX_INDENT = 4
+
+/** Paragraph style: size/weight of the text plus the list marker in the margin. */
+class ParaSpan(
+    val type: String,
+    val level: Int,
+    val checked: Boolean,
+    private val density: Float,
+    private val colors: EditorColors,
+) : MetricAffectingSpan(), LeadingMarginSpan {
+
+    var number = 1
+
+    private fun apply(paint: TextPaint) {
+        when (type) {
+            "title" -> { paint.textSize *= 1.75f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
+            "heading" -> { paint.textSize *= 1.35f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
+            "subheading" -> { paint.textSize *= 1.12f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
+            "mono" -> { paint.textSize *= 0.92f; paint.typeface = Typeface.MONOSPACE }
+            "quote" -> { paint.typeface = Typeface.create(paint.typeface, Typeface.ITALIC); paint.color = colors.secondary }
+        }
+        if (type == "check" && checked) paint.color = colors.secondary
+    }
+
+    override fun updateMeasureState(paint: TextPaint) = apply(paint)
+    override fun updateDrawState(paint: TextPaint) = apply(paint)
+
+    override fun getLeadingMargin(first: Boolean): Int = when {
+        type in LIST_TYPES -> ((30 + 24 * level) * density).toInt()
+        type == "quote" -> (16 * density).toInt()
+        else -> 0
+    }
+
+    override fun drawLeadingMargin(
+        canvas: Canvas, paint: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+        text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout,
+    ) {
+        if (!first || (text is Spanned && text.getSpanStart(this) != start)) {
+            if (type == "quote" && text is Spanned) drawQuoteBar(canvas, x, top, bottom)
+            return
+        }
+        val center = x + ((24 * level + 13) * density)
+        val saved = paint.color
+        val style = paint.style
+        val middle = (top + baseline) / 2f + density
+        when (type) {
+            "check" -> {
+                val radius = 9.5f * density
+                if (checked) {
+                    paint.color = colors.accent
+                    paint.style = Paint.Style.FILL
+                    canvas.drawCircle(center, middle, radius, paint)
+                    paint.color = 0xFFFFFFFF.toInt()
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 2f * density
+                    paint.strokeCap = Paint.Cap.ROUND
+                    val path = android.graphics.Path().apply {
+                        moveTo(center - 4.3f * density, middle + 0.2f * density)
+                        lineTo(center - 1.2f * density, middle + 3.3f * density)
+                        lineTo(center + 4.6f * density, middle - 3.4f * density)
+                    }
+                    canvas.drawPath(path, paint)
+                } else {
+                    paint.color = colors.tertiary
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 1.5f * density
+                    canvas.drawCircle(center, middle, radius, paint)
+                }
+            }
+            "bullet" -> {
+                paint.color = colors.label
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(center, middle, 3f * density, paint)
+            }
+            "dash" -> {
+                paint.color = colors.label
+                paint.style = Paint.Style.FILL
+                canvas.drawRect(center - 5 * density, middle - 0.8f * density, center + 4 * density, middle + 0.8f * density, paint)
+            }
+            "number" -> {
+                paint.color = colors.label
+                paint.style = Paint.Style.FILL
+                val label = "$number."
+                canvas.drawText(label, center + 6 * density - paint.measureText(label), baseline.toFloat(), paint)
+            }
+            "quote" -> drawQuoteBar(canvas, x, top, bottom)
+        }
+        paint.color = saved
+        paint.style = style
+    }
+
+    private fun drawQuoteBar(canvas: Canvas, x: Int, top: Int, bottom: Int) {
+        val paint = Paint().apply { color = colors.tertiary }
+        canvas.drawRect(x + 2 * density, top.toFloat(), x + 5 * density, bottom.toFloat(), paint)
+    }
+}
+
+class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM) {
+    var picture: Drawable = drawable
+    override fun getDrawable(): Drawable = picture
+}
+
+data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
+
+/**
+ * Note editor on top of EditText. Mirrors linux/linotes/editor.py: the text is
+ * plain, paragraph styles are [ParaSpan]s (one per paragraph), inline styles
+ * are standard spans, images are [ImageBlockSpan]s on an object character.
+ */
+@SuppressLint("ViewConstructor")
+class RichEditor(context: Context, private var colors: EditorColors, private val loadImage: (String, (Bitmap?) -> Unit) -> Unit) :
+    EditText(context) {
+
+    private val density = resources.displayMetrics.density
+    private var busy = false
+    private var enterAt = -1
+    private var enterStyle: ParaSpan? = null
+    private var deletedBreakAt = -1
+    private var deletedBreakStyle: ParaSpan? = null
+    var pendingInline: MutableSet<String>? = null
+    var onEdited: (() -> Unit)? = null
+    var onStyleChanged: (() -> Unit)? = null
+    var autoSortChecked = false
+
+    init {
+        background = ColorDrawable(0)
+        gravity = Gravity.TOP or Gravity.START
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+        setTextColor(colors.label)
+        setLineSpacing(3 * density, 1f)
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+            InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        isSingleLine = false
+        setHorizontallyScrolling(false)
+        setPadding((16 * density).toInt(), (4 * density).toInt(), (16 * density).toInt(), (160 * density).toInt())
+        addTextChangedListener(object : TextWatcher {
+            private var insertStart = 0
+            private var insertCount = 0
+            override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
+                if (busy) return
+                enterAt = -1
+                deletedBreakAt = -1
+                if (count == 1 && after == 0 && s[start] == '\n') {
+                    // A line break is about to be deleted (backspace at a paragraph start).
+                    deletedBreakAt = start
+                    deletedBreakStyle = paraAt(s as Spanned, start + 1)
+                }
+            }
+
+            override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {
+                if (busy) return
+                insertStart = start
+                insertCount = count
+                if (count == 1 && before == 0 && s[start] == '\n') {
+                    enterAt = start
+                    enterStyle = paraAt(s as Spanned, start)
+                }
+            }
+
+            override fun afterTextChanged(s: Editable) {
+                if (busy) return
+                busy = true
+                try {
+                    handleEdit(s, insertStart, insertCount)
+                } finally {
+                    busy = false
+                }
+                onEdited?.invoke()
+            }
+        })
+        setOnTouchListener { _, event -> handleTouch(event) }
+    }
+
+    fun setColors(newColors: EditorColors) {
+        colors = newColors
+        setTextColor(colors.label)
+        load(toBlocks())
+    }
+
+    // --- paragraphs ------------------------------------------------
+
+    private fun paragraphStarts(text: CharSequence): List<Int> {
+        val starts = mutableListOf(0)
+        text.forEachIndexed { index, char -> if (char == '\n') starts.add(index + 1) }
+        return starts
+    }
+
+    private fun paragraphEnd(text: CharSequence, start: Int): Int {
+        val next = text.indexOf('\n', start)
+        return if (next < 0) text.length else next
+    }
+
+    private fun paraAt(text: Spanned, offset: Int): ParaSpan? {
+        val start = if (offset <= 0) 0 else text.lastIndexOf('\n', offset - 1).let { if (it < 0) 0 else it + 1 }
+        return spanStartingAt(text, start)
+    }
+
+    /** The paragraph span of the paragraph beginning at [start]. Android also
+     *  reports spans that merely touch the position, so check the start. */
+    private fun spanStartingAt(text: Spanned, start: Int): ParaSpan? {
+        val candidates = text.getSpans(start, (start + 1).coerceAtMost(text.length), ParaSpan::class.java)
+        return candidates.firstOrNull { text.getSpanStart(it) == start }
+            ?: candidates.firstOrNull { text.getSpanStart(it) < start && text.getSpanEnd(it) > start }
+    }
+
+    private fun makeSpan(type: String, level: Int = 0, checked: Boolean = false) =
+        ParaSpan(type, if (type in LIST_TYPES) level.coerceIn(0, MAX_INDENT) else 0, checked && type == "check", density, colors)
+
+    /** One ParaSpan per paragraph; applies the Enter/Backspace rules of Notes. */
+    private fun handleEdit(text: Editable, insertStart: Int, insertCount: Int) {
+        // Enter on an empty list item ends the list instead of adding one.
+        if (enterAt >= 0) {
+            val style = enterStyle
+            val paragraphStart = text.lastIndexOf('\n', enterAt - 1).let { if (it < 0) 0 else it + 1 }
+            val content = text.substring(paragraphStart, enterAt).replace(OBJECT.toString(), "")
+            if (style != null && style.type in LIST_TYPES && content.isBlank()) {
+                text.delete(enterAt, enterAt + 1)
+                setPara(text, paragraphStart, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
+                normalize(text)
+                return
+            }
+        }
+        // Backspace at the start of a list item removes the marker first.
+        if (deletedBreakAt >= 0) {
+            val style = deletedBreakStyle
+            if (style != null && (style.type in LIST_TYPES || style.type == "quote")) {
+                text.insert(deletedBreakAt, "\n")
+                setSelection(deletedBreakAt + 1)
+                setPara(text, deletedBreakAt + 1, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
+                normalize(text)
+                return
+            }
+        }
+        // New text takes the style that was switched on for typing.
+        pendingInline?.let { styles ->
+            if (insertCount > 0) {
+                val end = (insertStart + insertCount).coerceAtMost(text.length)
+                for (name in INLINE) removeInline(text, name, insertStart, end)
+                for (name in styles) text.setSpan(inlineSpan(name), insertStart, end, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+            }
+        }
+        normalize(text)
+    }
+
+    private fun setPara(text: Editable, paragraphStart: Int, span: ParaSpan) {
+        spanStartingAt(text, paragraphStart)?.let { text.removeSpan(it) }
+        val end = paragraphEnd(text, paragraphStart)
+        text.setSpan(span, paragraphStart, (end + 1).coerceAtMost(text.length), Spanned.SPAN_PARAGRAPH)
+    }
+
+    private fun normalize(text: Editable) {
+        val starts = paragraphStarts(text)
+        val styles = starts.mapIndexed { index, start ->
+            val existing = spanStartingAt(text, start)
+            when {
+                enterAt >= 0 && start == enterAt + 1 -> {
+                    // The paragraph created by Enter.
+                    val previous = enterStyle
+                    when (previous?.type) {
+                        null -> makeSpan("body")
+                        in LIST_TYPES -> makeSpan(previous.type, previous.level)
+                        "title", "heading", "subheading" -> makeSpan("body")
+                        else -> makeSpan(previous.type)
+                    }
+                }
+                existing != null -> makeSpan(existing.type, existing.level, existing.checked)
+                index == 0 -> makeSpan("title")
+                else -> makeSpan("body")
+            }
+        }
+        for (old in text.getSpans(0, text.length, ParaSpan::class.java)) text.removeSpan(old)
+        var number = 0
+        var previousWasNumber = false
+        starts.forEachIndexed { index, start ->
+            val span = styles[index]
+            if (span.type == "number") {
+                number = if (previousWasNumber) number + 1 else 1
+                span.number = number
+            }
+            previousWasNumber = span.type == "number"
+            val end = if (index + 1 < starts.size) starts[index + 1] else text.length
+            text.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
+        }
+        enterAt = -1
+        deletedBreakAt = -1
+        invalidate()
+    }
+
+    // --- formatting API ----------------------------------------
+
+    private fun selectedParagraphs(): List<Int> {
+        val text = text ?: return emptyList()
+        val from = selectionStart.coerceAtLeast(0)
+        val to = selectionEnd.coerceAtLeast(from)
+        return paragraphStarts(text).filter { start -> paragraphEnd(text, start) >= from && start <= to }
+            .ifEmpty { listOf(0) }
+    }
+
+    fun currentStyle(): String = text?.let { paraAt(it, selectionStart.coerceAtLeast(0))?.type } ?: "body"
+
+    fun applyParagraph(type: String) {
+        val text = text ?: return
+        val paragraphs = selectedParagraphs()
+        val allSame = paragraphs.all { paraAt(text, it)?.type == type }
+        val target = if (type in LIST_TYPES && allSame) "body" else type
+        busy = true
+        for (start in paragraphs) {
+            val old = paraAt(text, start)
+            setPara(text, start, makeSpan(target, if (target in LIST_TYPES) old?.level ?: 0 else 0, false))
+        }
+        normalize(text)
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
+    fun indent(direction: Int) {
+        val text = text ?: return
+        busy = true
+        for (start in selectedParagraphs()) {
+            val old = paraAt(text, start) ?: continue
+            val type = if (old.type in LIST_TYPES) old.type else if (direction > 0) "bullet" else continue
+            setPara(text, start, makeSpan(type, old.level + direction, old.checked))
+        }
+        normalize(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
+    private fun toggleChecked(paragraphStart: Int) {
+        val text = text ?: return
+        val old = paraAt(text, paragraphStart) ?: return
+        if (old.type != "check") return
+        busy = true
+        setPara(text, paragraphStart, makeSpan("check", old.level, !old.checked))
+        normalize(text)
+        busy = false
+        if (!old.checked && autoSortChecked) {
+            val blocks = toBlocks()
+            val index = paragraphStarts(text).indexOf(paragraphStart)
+            var first = index
+            while (first > 0 && blocks[first - 1].optString("t") == "check") first--
+            var last = index
+            while (last + 1 < blocks.size && blocks[last + 1].optString("t") == "check") last++
+            val run = blocks.subList(first, last + 1).sortedBy { it.optBoolean("c") }
+            load(blocks.subList(0, first) + run + blocks.subList(last + 1, blocks.size))
+        }
+        onEdited?.invoke()
+    }
+
+    private fun handleTouch(event: MotionEvent): Boolean {
+        if (event.action != MotionEvent.ACTION_UP) return false
+        val layout = layout ?: return false
+        val text = text ?: return false
+        val y = event.y.toInt() - totalPaddingTop + scrollY
+        val line = layout.getLineForVertical(y)
+        val offset = layout.getLineStart(line)
+        val span = paraAt(text, offset) ?: return false
+        if (span.type != "check") return false
+        val paragraphStart = text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (offset == 0 || it < 0) 0 else it + 1 }
+        if (layout.getLineForOffset(paragraphStart) != line) return false
+        val markerEnd = totalPaddingLeft + ((24 * span.level + 26) * density)
+        if (event.x <= markerEnd) {
+            toggleChecked(paragraphStart)
+            return true
+        }
+        return false
+    }
+
+    fun toggleInline(name: String) {
+        val text = text ?: return
+        val start = selectionStart
+        val end = selectionEnd
+        if (start < 0) return
+        if (start == end) {
+            val current = pendingInline ?: activeInline().toMutableSet()
+            if (!current.add(name)) current.remove(name)
+            pendingInline = current
+            onStyleChanged?.invoke()
+            return
+        }
+        busy = true
+        val everything = (start until end).all { index ->
+            text[index] == '\n' || text[index] == OBJECT || hasInline(text, name, index)
+        }
+        removeInline(text, name, start, end)
+        if (!everything) text.setSpan(inlineSpan(name), start, end, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
+    fun activeInline(): Set<String> {
+        pendingInline?.let { return it }
+        val text = text ?: return emptySet()
+        val probe = (selectionStart - 1).coerceAtLeast(0)
+        if (text.isEmpty()) return emptySet()
+        return INLINE.filter { hasInline(text, it, probe) }.toSet()
+    }
+
+    override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+        super.onSelectionChanged(selStart, selEnd)
+        pendingInline = null
+        onStyleChanged?.invoke()
+    }
+
+    // --- loading and saving ------------------------------------
+
+    fun load(blocks: List<JSONObject>) {
+        busy = true
+        val builder = SpannableStringBuilder()
+        val list = blocks.ifEmpty { listOf(JSONObject().put("t", "title").put("x", "")) }
+        var number = 0
+        var previousNumber = false
+        val paragraphs = mutableListOf<Triple<ParaSpan, Int, Int>>()
+        list.forEachIndexed { index, block ->
+            val start = builder.length
+            val type = block.optString("t", "body")
+            if (type == "image") {
+                builder.append(OBJECT)
+                val fileId = block.optString("f")
+                val placeholder = ColorDrawable(colors.tertiary).apply { setBounds(0, 0, (240 * density).toInt(), (160 * density).toInt()) }
+                val span = ImageBlockSpan(fileId, placeholder)
+                builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                loadImage(fileId) { bitmap -> if (bitmap != null) showImage(span, bitmap) }
+            } else {
+                val text = block.optString("x")
+                builder.append(text)
+                val spans = block.optJSONArray("s") ?: JSONArray()
+                for (spanIndex in 0 until spans.length()) {
+                    val item = spans.optJSONArray(spanIndex) ?: continue
+                    val name = item.optString(2)
+                    if (name !in INLINE) continue
+                    val from = (start + item.optInt(0)).coerceIn(start, start + text.length)
+                    val to = (start + item.optInt(1)).coerceIn(from, start + text.length)
+                    if (to > from) builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+                }
+            }
+            if (index < list.size - 1) builder.append('\n')
+            val paraType = if (type == "image") "body" else type
+            val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
+            if (paraType == "number") {
+                number = if (previousNumber) number + 1 else 1
+                span.number = number
+            }
+            previousNumber = paraType == "number"
+            paragraphs.add(Triple(span, start, builder.length))
+        }
+        // Paragraph spans grow with text appended at their end, so they are
+        // set only once the whole text exists.
+        for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
+        setText(builder, BufferType.EDITABLE)
+        busy = false
+    }
+
+    fun toBlocks(): List<JSONObject> {
+        val text = text ?: return emptyList()
+        val result = mutableListOf<JSONObject>()
+        for (start in paragraphStarts(text)) {
+            val end = paragraphEnd(text, start)
+            val image = text.getSpans(start, end, ImageBlockSpan::class.java).firstOrNull()
+            if (image != null) {
+                result.add(JSONObject().put("t", "image").put("f", image.fileId))
+                continue
+            }
+            val span = paraAt(text, start)
+            val block = JSONObject().put("t", span?.type ?: "body").put("x", text.substring(start, end).replace(OBJECT.toString(), ""))
+            if (span != null && span.level > 0) block.put("l", span.level)
+            if (span?.type == "check") block.put("c", span.checked)
+            val spans = JSONArray()
+            for (name in INLINE) {
+                var index = start
+                while (index < end) {
+                    if (hasInline(text, name, index)) {
+                        val from = index
+                        while (index < end && hasInline(text, name, index)) index++
+                        spans.put(JSONArray().put(from - start).put(index - start).put(name))
+                    } else {
+                        index++
+                    }
+                }
+            }
+            if (spans.length() > 0) block.put("s", spans)
+            result.add(block)
+        }
+        while (result.size > 1 && result.last().optString("t") == "body" && result.last().optString("x").isEmpty()) {
+            result.removeAt(result.size - 1)
+        }
+        return result
+    }
+
+    // --- images ------------------------------------------------
+
+    fun insertImage(fileId: String) {
+        val text = text ?: return
+        var at = selectionStart.coerceAtLeast(0)
+        busy = true
+        if (at > 0 && text[at - 1] != '\n') {
+            at = paragraphEnd(text, at)
+            text.insert(at, "\n")
+            at += 1
+        }
+        text.insert(at, "$OBJECT\n")
+        val placeholder = ColorDrawable(colors.tertiary).apply { setBounds(0, 0, (240 * density).toInt(), (160 * density).toInt()) }
+        val span = ImageBlockSpan(fileId, placeholder)
+        text.setSpan(span, at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        normalize(text)
+        busy = false
+        loadImage(fileId) { bitmap -> if (bitmap != null) showImage(span, bitmap) }
+        setSelection((at + 2).coerceAtMost(text.length))
+        onEdited?.invoke()
+    }
+
+    private fun showImage(span: ImageBlockSpan, bitmap: Bitmap) {
+        post {
+            val available = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 } ?: (320 * density).toInt()
+            val targetWidth = minOf(available, bitmap.width)
+            val targetHeight = (bitmap.height * targetWidth.toFloat() / bitmap.width).toInt()
+            val drawable = BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, targetWidth, targetHeight) }
+            span.picture = drawable
+            val text = text ?: return@post
+            val start = text.getSpanStart(span)
+            if (start >= 0) {
+                busy = true
+                text.removeSpan(span)
+                text.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                busy = false
+            }
+            requestLayout()
+            invalidate()
+        }
+    }
+
+    companion object {
+        val INLINE = listOf("b", "i", "u", "s", "h")
+
+        fun decodeImage(bytes: ByteArray, maxSize: Int = 1600): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / sample > maxSize || bounds.outHeight / sample > maxSize) sample *= 2
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        }
+    }
+
+    private fun inlineSpan(name: String): Any = when (name) {
+        "b" -> StyleSpan(Typeface.BOLD)
+        "i" -> StyleSpan(Typeface.ITALIC)
+        "u" -> UnderlineSpan()
+        "s" -> StrikethroughSpan()
+        else -> BackgroundColorSpan(colors.highlight)
+    }
+
+    private fun matches(span: Any, name: String) = when (name) {
+        "b" -> span is StyleSpan && span.style == Typeface.BOLD
+        "i" -> span is StyleSpan && span.style == Typeface.ITALIC
+        "u" -> span is UnderlineSpan
+        "s" -> span is StrikethroughSpan
+        else -> span is BackgroundColorSpan
+    }
+
+    private fun hasInline(text: Spanned, name: String, index: Int): Boolean =
+        text.getSpans(index, index + 1, Any::class.java).any { matches(it, name) && text.getSpanStart(it) <= index && text.getSpanEnd(it) > index }
+
+    private fun removeInline(text: Spannable, name: String, start: Int, end: Int) {
+        for (span in text.getSpans(start, end, Any::class.java)) {
+            if (!matches(span, name)) continue
+            val spanStart = text.getSpanStart(span)
+            val spanEnd = text.getSpanEnd(span)
+            text.removeSpan(span)
+            if (spanStart < start) text.setSpan(inlineSpan(name), spanStart, start, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+            if (spanEnd > end) text.setSpan(inlineSpan(name), end, spanEnd, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+        }
+    }
+}
