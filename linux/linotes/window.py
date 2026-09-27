@@ -19,6 +19,7 @@ from .kanban import BoardView
 from .lists import ShoppingListView
 from .notes import NoteList, NotePane
 from .sidebar import Sidebar
+from . import sync as sync_module
 from .sync import device_name
 
 
@@ -60,6 +61,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
         self.login = security_ui.Onboarding(self)
         self.login.connect("signed-in", self.on_signed_in)
+        self.login.connect("local", self.on_local)
+        self.login.connect("cancelled", lambda _l: self.pages.set_visible_child_name("main"))
         self.pages.add_named(self.login, "login")
 
         self.build_main()
@@ -224,11 +227,48 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ========================================================
 
     def on_signed_in(self, login, server, response, account):
+        if login.connecting:
+            # Used without a server so far: move everything into the account.
+            def done(_result, error):
+                if isinstance(error, sync_module.VaultConflict):
+                    self.toast("Dieses Konto hat schon ein Notizen-Passwort. Entferne zuerst die Sperre deiner gesperrten Notizen.")
+                    return
+                if error is not None:
+                    self.toast(f"Verbinden fehlgeschlagen: {error_text(error)}")
+                    return
+                login.set_connecting(False)
+                self.vault_key = None
+                self.enter_main()
+                self.toast("Mit dem Server verbunden – deine Notizen werden hochgeladen.")
+            run_async(lambda: self.sync.connect_local(server, response, account), done)
+            return
         self.sync.sign_in(server, response, account)
         self.enter_main()
 
+    def on_local(self, _login, name):
+        self.sync.start_local(name)
+        self.enter_main()
+
+    def connect_server(self):
+        self.login.set_connecting(True)
+        self.pages.set_visible_child_name("login")
+
+    def needs_server(self, then):
+        """Sharing, people and key files only make sense with a server."""
+        if self.sync.is_local:
+            self.toast("Dafür brauchst du einen Server – Kontomenü → „Mit Server verbinden …“")
+        else:
+            then()
+
+    def update_account_actions(self):
+        local = self.sync.is_local
+        self.lookup_action("connect").set_enabled(local)
+        for name in ("people", "invite", "keyfile"):
+            self.lookup_action(name).set_enabled(not local)
+
     def enter_main(self):
         self.pages.set_visible_child_name("main")
+        self.update_account_actions()
 
         def first_sync():
             self.sync.sync_now()
@@ -265,7 +305,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         def really():
             self.sync.sign_out()
             self.vault_key = None
+            self.login.set_connecting(False)
             self.pages.set_visible_child_name("login")
+        if self.sync.is_local:
+            confirm(self, "Alle Daten löschen?",
+                    "Alle Notizen, Listen und Aufgaben auf diesem Computer werden endgültig gelöscht.", "Löschen", really)
+            return
         confirm(self, "Dieses Gerät abmelden?",
                 "Die Notizen bleiben auf dem Server. Zum erneuten Anmelden brauchst du ein anderes Gerät oder deine Schlüsseldatei.",
                 "Abmelden", really)
@@ -289,7 +334,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def share(self, object_id):
         obj = self.sync.get(object_id)
         if obj is not None:
-            security_ui.ShareDialog(self, obj).present(self)
+            self.needs_server(lambda: security_ui.ShareDialog(self, obj).present(self))
 
     # ========================================================
     # NAVIGATION
@@ -888,6 +933,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "share-object": lambda: self.share(getattr(self, "menu_target", "")),
             "change-vault": self.change_vault_password,
             "sign-out": self.sign_out,
+            "connect": self.connect_server,
             "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),
             "list-view": lambda: self.list_mode.set_active(True),
             "gallery-view": lambda: self.gallery_mode.set_active(True),

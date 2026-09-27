@@ -484,7 +484,7 @@ fun EmptyState(title: String, message: String? = null, glyph: Glyph = Glyph.Note
 fun Toast(text: String?) {
     val colors = palette
     AnimatedVisibility(text != null, enter = fadeIn(), exit = fadeOut()) {
-        Box(Modifier.fillMaxWidth().padding(bottom = 90.dp), contentAlignment = Alignment.BottomCenter) {
+        Box(Modifier.fillMaxSize().padding(bottom = 90.dp), contentAlignment = Alignment.BottomCenter) {
             Text(
                 text.orEmpty(), style = Type.subheadline, color = if (colors.dark) Color.Black else Color.White,
                 modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (colors.dark) Color.White else Color(0xE6222222))

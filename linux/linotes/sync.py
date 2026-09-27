@@ -32,6 +32,9 @@ from .api import Api, ApiError, OfflineError
 
 
 DATA_DIR = Path(GLib.get_user_data_dir()) / "linotes"
+LOCAL_FILES = DATA_DIR / "local-files"
+# User id while LiNotes is used without a server.
+LOCAL_USER = -1
 CACHE_DIR = Path(GLib.get_user_cache_dir()) / "linotes"
 
 SECRET_SCHEMA = Secret.Schema.new(
@@ -72,6 +75,30 @@ def clear_credentials(server, username):
     Secret.password_clear_sync(SECRET_SCHEMA, {"server": server, "username": username}, None)
 
 
+class VaultConflict(Exception):
+    """Both the device and the account have a notes password."""
+
+
+def remap_id(object_id, uid):
+    """notes--1 -> notes-7, board--1-offen -> board-7-offen (see LOCAL_USER)."""
+    for prefix in ("notes", "list", "board", "vault", "settings", "contacts"):
+        local = f"{prefix}-{LOCAL_USER}"
+        if object_id == local or object_id.startswith(local + "-"):
+            return f"{prefix}-{uid}" + object_id[len(local):]
+    return object_id
+
+
+def remap_data(value, mapping, uid):
+    if isinstance(value, dict):
+        return {k: (uid if k in ("by", "created_by", "assignee") and v == LOCAL_USER else remap_data(v, mapping, uid))
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [remap_data(v, mapping, uid) for v in value]
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    return value
+
+
 def empty_state(server=""):
     return {"server": server, "user": None, "users": [], "cursor": 0, "remote": {},
             "pending": [], "identity": None, "member_shares": []}
@@ -98,6 +125,7 @@ class SyncEngine:
         self.share_keys = {}
         self.plain = {}
         self.seen_channels = set()
+        self.save_timer = None
         self.state = self.load()
 
     # ========================================================
@@ -113,6 +141,14 @@ class SyncEngine:
         base = empty_state()
         base.update(state)
         return base
+
+    def save_soon(self):
+        """Write local changes to disk shortly (also offline and without a server)."""
+        with self.lock:
+            if self.save_timer is not None:
+                self.save_timer.cancel()
+            self.save_timer = threading.Timer(0.4, self.save)
+            self.save_timer.start()
 
     def save(self):
         with self.save_lock:
@@ -145,9 +181,9 @@ class SyncEngine:
         if not user:
             return False
         token, secret = load_credentials(self.server, user["username"])
-        if not token or not secret:
+        if not secret or (self.server and not token):
             return False
-        self.api = Api(self.server, token)
+        self.api = Api(self.server, token) if self.server else None
         self.account = e2e.Account(secret)
         self.unlock_identity()
         self.rebuild()
@@ -176,6 +212,72 @@ class SyncEngine:
         self.rebuild()
         self.save()
 
+    # ========================================================
+    # WITHOUT A SERVER (everything stays on this computer)
+    # ========================================================
+
+    @property
+    def is_local(self):
+        return bool(self.user) and not self.server
+
+    def start_local(self, name):
+        account = e2e.Account.create()
+        identity = e2e.Identity()
+        with self.lock:
+            self.state = empty_state("")
+            self.state["user"] = {"id": LOCAL_USER, "username": "", "name": name or "Ich", "identity": identity.public}
+            self.state["users"] = [self.state["user"]]
+            self.state["identity"] = identity.export_sealed(account)
+        store_credentials("", "", "", account.secret)
+        self.api = None
+        self.account = account
+        self.unlock_identity()
+        self.rebuild()
+        self.save()
+
+    def connect_local(self, server, response, account):
+        """Move everything made without a server into a server account (new,
+        or existing via linking / key file). Blocking. Raises VaultConflict
+        before changing anything if both have a notes password."""
+        old_account = self.account
+        uid = response["user"]["id"]
+        temp = Api(server.rstrip("/"), response["token"])
+        with self.lock:
+            local = [copy.deepcopy(obj) for obj in self.plain.values() if not obj["deleted"]]
+        has_vault = any(o["kind"] == "vault" for o in local) and any(o["kind"] == "note" and o["data"].get("enc") for o in local)
+        if has_vault:
+            try:
+                temp.get_object(f"vault-{uid}")
+                raise VaultConflict()
+            except ApiError:
+                pass
+        mapping = {}
+        if LOCAL_FILES.exists():
+            for path in LOCAL_FILES.iterdir():
+                content = e2e.open_bytes(old_account.private_key, path.read_bytes(), path.name)
+                file_id = temp.upload(e2e.seal_bytes(account.private_key, content, path.name), None)
+                mapping[f"local:{path.name}"] = f"{file_id}:{path.name}"
+        for obj in local:
+            mapping[obj["id"]] = remap_id(obj["id"], uid)
+        clear_credentials("", "")
+        self.sign_in(server, response, account)
+        try:
+            self.pull_once()
+        except (ApiError, OfflineError):
+            pass
+        containers = {"folder", "list", "board", "column", "settings", "contacts", "vault"}
+        for obj in local:
+            new = mapping[obj["id"]]
+            # An existing account keeps its own default folder, list and board.
+            if new != obj["id"] and obj["kind"] in containers and self.get(new):
+                continue
+            self.put(obj["kind"], remap_data(obj["data"], mapping, uid), None, new, notify=False)
+        if LOCAL_FILES.exists():
+            for path in LOCAL_FILES.iterdir():
+                path.unlink()
+        self.save()
+        self.emit_from_thread(set(self.plain))
+
     def sign_out(self):
         self.stop()
         try:
@@ -185,6 +287,9 @@ class SyncEngine:
             pass
         if self.user:
             clear_credentials(self.server, self.user["username"])
+        if LOCAL_FILES.exists():
+            for path in LOCAL_FILES.iterdir():
+                path.unlink()
         self.state = empty_state(self.server or "")
         self.api = self.account = self.identity = None
         self.plain = {}
@@ -369,6 +474,7 @@ class SyncEngine:
                 break
         pending.append(change)
         self.wake.set()
+        self.save_soon()
 
     # ========================================================
     # SHARES
@@ -472,7 +578,7 @@ class SyncEngine:
     # ========================================================
 
     def start(self):
-        if self.threads:
+        if self.threads or not self.api:
             return
         self.stopping.clear()
         for target in (self.push_loop, self.pull_loop, self.channel_loop):
@@ -626,6 +732,8 @@ class SyncEngine:
             self.pull_once()
 
     def sync_now(self):
+        if not self.api:
+            return
         self.push_once()
         self.pull_once()
 
@@ -663,7 +771,11 @@ class SyncEngine:
         file_id, _sep, name = reference.partition(":")
         name = name or file_id
         path = self.file_path(name)
-        if not path.exists():
+        if not path.exists() and file_id == "local":
+            content = e2e.open_bytes(self.key_for(None), (LOCAL_FILES / name).read_bytes(), name)
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_bytes(content)
+        elif not path.exists():
             blob = self.api.download(file_id)
             content = e2e.open_bytes(self.key_for(share), blob, name)
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -675,7 +787,13 @@ class SyncEngine:
         # separate random name kept inside the encrypted note.
         name = new_id()
         blob = e2e.seal_bytes(self.key_for(share), content, name)
-        file_id = self.api.upload(blob, share)
+        if not self.server:
+            # Without a server: keep it (encrypted) on this computer.
+            LOCAL_FILES.mkdir(parents=True, exist_ok=True, mode=0o700)
+            (LOCAL_FILES / name).write_bytes(blob)
+            file_id = "local"
+        else:
+            file_id = self.api.upload(blob, share)
         path = self.file_path(name)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_bytes(content)

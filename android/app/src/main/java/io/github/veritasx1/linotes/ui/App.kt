@@ -47,7 +47,7 @@ fun LiNotesApp(state: AppState) {
                 val route = state.route
                 val depth = state.stack.size
                 val onEditor = route is Route.Editor || route is Route.ListDetail || route is Route.Board || route is Route.Settings ||
-                    route is Route.People || route is Route.Verify || route is Route.Share || route is Route.Help
+                    route is Route.People || route is Route.Verify || route is Route.Share || route is Route.Help || route is Route.Connect
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
                         AnimatedContent(
@@ -73,6 +73,7 @@ fun LiNotesApp(state: AppState) {
                                 is Route.Verify -> VerifyScreen(state, current.userId)
                                 is Route.Share -> ShareScreen(state, current.objectId, revision)
                                 Route.Help -> HelpScreen(state)
+                                Route.Connect -> OnboardingScreen(state, connecting = true)
                             }
                         }
                     }
