@@ -26,5 +26,5 @@ und Android (Kotlin/Compose), Gestaltung nach Apples Notizen / HIG.
 - [x] Deployment Pi: ~/linotes (Code+venv), Daten /media/olaf/5TB1/linotes, linotes.service :8430, nginx+TLS, beide Watchdogs, Backup-Timer 03:40 nach /media/olaf/6TB/linotes-backup
 - [x] Ubuntu-App (linux/): Notizen+Editor, gesperrte Notizen (E2E), Papierkorb, Tags, Suche, Galerie, Einkaufslisten, Kanban, Live-Sync. Headless getestet gegen lokalen Testserver.
 - [x] Android-App (android/): Compose im iOS-Stil, RichEditor (EditText+Spans), Keystore-Token, E2E kompatibel, Listen, Kanban. Tests: Robolectric InteropTest + Roborazzi-Screenshots (./gradlew recordRoborazziDebug, Testserver 127.0.0.1:8499 nötig)
-- [ ] Homepage mit Downloads, F-Droid-Repo
+- [x] Homepage linotes.goip.de (homepage/, Downloads APK + Ubuntu-Tarball), F-Droid-Repo fdroid-apps (Watcher auf fdroid-apps korrigiert), Release-Key android/linotes-release.jks (Backup 6TB/linotes-backup/android-signing)
 - [x] Konto olaf + Einladungscode → ~/LiNotes-Zugang.txt (600) auf dem ThinkPad

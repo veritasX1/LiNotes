@@ -127,8 +127,17 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     LaunchedEffect(body?.toString(), colors.dark) {
         val text = body?.toString() ?: return@LaunchedEffect
         if (text != loadedBlocks.value) {
+            val firstLoad = loadedBlocks.value == null
             loadedBlocks.value = text
             editor.load((0 until body.length()).map { body.getJSONObject(it) })
+            // A new, empty note starts with the keyboard open, like in Notes.
+            if (firstLoad && body.length() <= 1 && body.optJSONObject(0)?.optString("x").isNullOrEmpty() && !trashed) {
+                editor.post {
+                    editor.requestFocus()
+                    val input = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                    input.showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
         }
     }
     DisposableEffect(editor) {

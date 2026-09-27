@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiNotes – Notizen, Einkaufslisten und Aufgaben</title>
+<meta name="description" content="LiNotes: Notizen, Einkaufslisten und Aufgaben im Stil von Apples Notizen – für Android und Ubuntu, gespeichert auf dem eigenen Server.">
+<link rel="icon" href="linotes.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --line: #d2d2d7;
+    --accent: #b87d00;
+    --accent-soft: #fdf3dc;
+    --code: #eef0f3;
+    --shadow: 0 18px 50px rgba(0, 0, 0, .14), 0 2px 8px rgba(0, 0, 0, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161618;
+      --surface: #1f1f22;
+      --text: #f2f2f4;
+      --muted: #a1a1a6;
+      --line: #38383c;
+      --accent: #ffc940;
+      --accent-soft: #3a2e10;
+      --code: #2a2a2e;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Ubuntu Sans", "Cantarell", "Noto Sans", sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+  nav {
+    position: sticky; top: 0; z-index: 2;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(16px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; gap: 22px; height: 52px; }
+  nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); margin-right: auto; }
+  nav .brand img { width: 26px; height: 26px; }
+  nav a.link { color: var(--text); font-size: 15px; opacity: .8; }
+  @media (max-width: 640px) {
+    nav a.link.optional { display: none; }
+    nav .wrap { gap: 16px; }
+  }
+
+  header.hero { text-align: center; padding: 72px 0 40px; }
+  .hero img.icon { width: 112px; height: 112px; }
+  .hero h1 { font-size: clamp(40px, 7vw, 64px); line-height: 1.05; margin: 18px 0 12px; letter-spacing: -.02em; }
+  .hero p.lead { font-size: clamp(19px, 2.6vw, 24px); color: var(--muted); max-width: 720px; margin: 0 auto; }
+  .badge {
+    display: inline-block; margin-top: 22px; padding: 5px 14px;
+    border-radius: 99px; background: var(--accent-soft); color: var(--accent);
+    font-size: 14px; font-weight: 600;
+  }
+  .actions { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .button {
+    display: inline-block; padding: 12px 24px; border-radius: 99px;
+    font-weight: 600; font-size: 16px;
+  }
+  .button.primary { background: #e6a200; color: #fff; }
+  .button.secondary { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+  .button:hover { text-decoration: none; filter: brightness(1.05); }
+
+  figure.shot { margin: 48px auto 0; max-width: 1000px; }
+  figure.shot img, .gallery img {
+    width: 100%; height: auto; display: block;
+    border-radius: 12px; box-shadow: var(--shadow);
+  }
+
+  section { padding: 72px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(30px, 4.5vw, 42px); line-height: 1.15; margin: 0 0 16px; letter-spacing: -.01em; text-align: center; }
+  .intro { color: var(--muted); font-size: 19px; max-width: 760px; margin: 0 auto 40px; text-align: center; }
+  .prose { max-width: 760px; margin: 0 auto; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 18px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 22px 22px 18px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 19px; }
+  .card p { margin: 0; color: var(--muted); font-size: 16px; }
+  .card .symbol {
+    width: 38px; height: 38px; border-radius: 10px; margin-bottom: 14px;
+    display: grid; place-items: center; background: var(--accent-soft); color: var(--accent);
+  }
+  .card .symbol svg { width: 22px; height: 22px; }
+
+  .privacy .card { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  .privacy .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 32px; }
+  .gallery figure { margin: 0; }
+  .gallery figcaption { text-align: center; color: var(--muted); font-size: 15px; margin-top: 12px; }
+
+  pre {
+    background: var(--code); border-radius: 12px; padding: 16px 18px;
+    overflow-x: auto; font-size: 14.5px; line-height: 1.5;
+  }
+  code { font-family: ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; }
+  p code, li code { background: var(--code); padding: 1px 6px; border-radius: 6px; font-size: .92em; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  td { padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:last-child { text-align: right; white-space: nowrap; }
+  kbd {
+    font-family: inherit; font-size: 13px; padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--surface);
+  }
+
+  .beta {
+    max-width: 760px; margin: 0 auto; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 16px; padding: 24px 26px;
+  }
+  .beta ul { margin: 10px 0 0; padding-left: 20px; }
+
+  footer { padding: 40px 0 60px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  footer .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px; }
+  footer h4 { color: var(--text); margin: 0 0 6px; font-size: 15px; }
+  footer p { margin: 0 0 8px; }
+  .phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 24px; max-width: 900px; margin: 0 auto; }
+  .phones img { width: 100%; height: auto; border-radius: 28px; box-shadow: var(--shadow); border: 6px solid #1d1d1f; }
+  .phones figure, .desk figure { margin: 0; }
+  .phones figcaption, .desk figcaption { text-align: center; color: var(--muted); font-size: 15px; margin-top: 10px; }
+  .desk { display: grid; gap: 28px; }
+  .desk img { width: 100%; height: auto; border-radius: 12px; box-shadow: var(--shadow); }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 44px; margin-bottom: 16px; }
+  .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 99px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; }
+  .small { font-size: 14px; color: var(--muted); word-break: break-all; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="linotes.svg" alt="">LiNotes</a>
+    <a class="link optional" href="#funktionen">Funktionen</a>
+    <a class="link" href="#datenschutz">Datenschutz</a>
+    <a class="link" href="#android">Android</a>
+    <a class="link optional" href="#ubuntu">Ubuntu</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="icon" src="linotes.svg" alt="LiNotes-Symbol">
+    <h1>LiNotes</h1>
+    <p class="lead">Notizen, Einkaufslisten und Aufgaben für die Familie – so einfach wie Apples Notizen, aber auf dem eigenen Server.</p>
+    <span class="badge">Version 1.0 · Android und Ubuntu</span>
+    <div class="actions">
+      <a class="button primary" href="#android">Für Android laden</a>
+      <a class="button secondary" href="#ubuntu">Für Ubuntu laden</a>
+    </div>
+    <figure class="shot">
+      <img src="ubuntu-notizen.webp" width="1280" height="800" alt="LiNotes unter Ubuntu: Seitenleiste mit Ordnern, Notizliste und eine Notiz mit Checkliste">
+    </figure>
+  </div>
+</header>
+
+<section id="funktionen">
+  <div class="wrap">
+    <h2>Alles an einem Ort</h2>
+    <p class="intro">Auf dem Handy und am Rechner, allein oder gemeinsam – alles gleicht sich in Sekunden ab.</p>
+    <div class="grid">
+      <div class="card"><h3>Notizen wie bei Apple</h3><p>Titel, Überschriften, Checklisten mit Kreisen, Aufzählungen, Fotos, #Tags, angeheftete Notizen und „Zuletzt gelöscht“.</p></div>
+      <div class="card"><h3>Privat, gemeinsam, geheim</h3><p>Eigene Ordner nur für dich, gemeinsame Ordner für die Familie – und gesperrte Notizen mit eigenem Passwort.</p></div>
+      <div class="card"><h3>Einkaufslisten</h3><p>Einträge landen automatisch in der richtigen Warengruppe. Was einer abhakt, sieht der andere sofort.</p></div>
+      <div class="card"><h3>Aufgaben-Board</h3><p>Kanban mit Spalten „Offen“, „In Arbeit“, „Erledigt“, mit Fälligkeit, Zuständigkeit und Farben.</p></div>
+      <div class="card"><h3>Auch offline</h3><p>Ohne Netz arbeitest du einfach weiter. Änderungen werden übertragen, sobald wieder Verbindung besteht.</p></div>
+      <div class="card"><h3>Zwei Geräte, ein Stand</h3><p>Android-App und Ubuntu-Programm sprechen mit demselben Server und sehen gleich aus.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="bilder">
+  <div class="wrap">
+    <h2>Auf dem Handy</h2>
+    <p class="intro">Gestaltet nach Apples Richtlinien für das iPhone: große Titel, klare Listen, Tab-Leiste unten.</p>
+    <div class="phones">
+      <figure><img src="android-ordner.webp" loading="lazy" alt="Ordnerübersicht auf Android"><figcaption>Ordner</figcaption></figure>
+      <figure><img src="android-notiz.webp" loading="lazy" alt="Notiz mit Checkliste auf Android"><figcaption>Notiz</figcaption></figure>
+      <figure><img src="android-einkauf.webp" loading="lazy" alt="Einkaufsliste nach Warengruppen auf Android"><figcaption>Einkaufsliste</figcaption></figure>
+      <figure><img src="android-aufgaben.webp" loading="lazy" alt="Aufgaben-Board auf Android"><figcaption>Aufgaben</figcaption></figure>
+    </div>
+    <h2 style="margin-top:72px">Am Rechner</h2>
+    <div class="desk">
+      <figure><img src="ubuntu-einkauf.webp" loading="lazy" alt="Einkaufsliste unter Ubuntu"><figcaption>Einkaufsliste unter Ubuntu</figcaption></figure>
+      <figure><img src="ubuntu-aufgaben.webp" loading="lazy" alt="Aufgaben-Board unter Ubuntu"><figcaption>Aufgaben-Board unter Ubuntu</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="datenschutz" class="privacy">
+  <div class="wrap">
+    <h2>Deine Notizen bleiben bei dir</h2>
+    <p class="intro">Kein Konzern liest mit. Die Daten liegen auf einem eigenen Server zu Hause.</p>
+    <div class="grid">
+      <div class="card"><h3>Eigener Server</h3><p>Alle Notizen, Listen und Bilder liegen auf dem eigenen Server – nicht bei Google, Apple oder Microsoft. Jede Nacht wird auf eine zweite Festplatte gesichert.</p></div>
+      <div class="card"><h3>Ende-zu-Ende verschlüsselt</h3><p>Gesperrte Notizen werden schon auf dem Gerät mit deinem Notizen-Passwort verschlüsselt (AES-256). Der Server sieht nur unlesbare Daten.</p></div>
+      <div class="card"><h3>Getrennte Konten</h3><p>Jede Person hat ein eigenes Konto. Private Notizen und Bilder sieht nur, wem sie gehören – das prüft der Server bei jedem Zugriff.</p></div>
+      <div class="card"><h3>Keine Werbung, keine Tracker</h3><p>Die Apps enthalten keine Werbung, keine Statistik-Dienste und senden nichts an Dritte. Android-Sicherungen in die Google-Cloud sind abgeschaltet.</p></div>
+      <div class="card"><h3>Sichere Anmeldung</h3><p>Verbindungen laufen verschlüsselt über HTTPS, Passwörter werden nur als sicherer Hash gespeichert, zu viele Fehlversuche werden gesperrt.</p></div>
+      <div class="card"><h3>Auch diese Seite</h3><p>Keine Cookies, kein JavaScript, keine eingebundenen Dienste von Dritten, keine Zugriffsprotokolle.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="android">
+  <div class="wrap prose">
+    <h2>Android</h2>
+    <p class="intro">Für Android 8 und neuer.</p>
+    <h3>Direkt laden</h3>
+    <ol class="steps">
+      <li><a href="download/LiNotes-1.0.apk"><b>LiNotes-1.0.apk</b> herunterladen</a> (6,7 MB).</li>
+      <li>Die Datei öffnen. Android fragt einmalig, ob der Browser Apps installieren darf – erlauben.</li>
+      <li>LiNotes öffnen, „Neues Konto mit Einladungscode“ wählen, den Code eingeben und Benutzername und Passwort festlegen.</li>
+    </ol>
+    <h3>Oder über F-Droid (mit automatischen Updates)</h3>
+    <p>In F-Droid unter <i>Einstellungen → Paketquellen</i> diese Quelle hinzufügen:</p>
+    <pre><code>https://volkskamera.goip.de/fdroid/repo</code></pre>
+    <p class="small">Fingerabdruck der Paketquelle: 8DA9DEF44C65856A1B098DB7BF876D48514997EF17C7256E23E91EAC6C486500<br>
+    Signatur der App (SHA-256): 4673c3322dbd4ebbde9746b3f3fe5ccbb06414147797089a394c417b1f0f0819</p>
+  </div>
+</section>
+
+<section id="ubuntu">
+  <div class="wrap prose">
+    <h2>Ubuntu</h2>
+    <p class="intro">Für Ubuntu 26.04 und andere Systeme mit GTK 4 und libadwaita.</p>
+    <pre><code>sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 python3-cryptography
+wget https://linotes.goip.de/download/linotes-ubuntu-1.0.tar.gz
+tar xzf linotes-ubuntu-1.0.tar.gz -C ~/.local/share
+~/.local/share/linotes/install.sh</code></pre>
+    <p>Danach steht LiNotes im Anwendungsmenü. Die Anmeldung wird im Schlüsselbund von Ubuntu gespeichert.</p>
+    <p class="small">Prüfsummen: <a href="download/SHA256SUMS">SHA256SUMS</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap cols">
+    <div>
+      <h4>LiNotes</h4>
+      <p>Ein privates, nichtkommerzielles Projekt von Olaf Winkler für die eigene Familie.</p>
+    </div>
+    <div>
+      <h4>Datenschutz dieser Seite</h4>
+      <p>Diese Seite setzt keine Cookies, lädt keine Inhalte von fremden Servern und verwendet kein JavaScript. Der Webserver speichert keine Zugriffsprotokolle.</p>
+    </div>
+    <div>
+      <h4>Hinweis</h4>
+      <p>LiNotes ist ein unabhängiges Projekt und steht in keiner Verbindung zu Apple Inc. „Notizen“ ist eine Bezeichnung von Apple Inc.</p>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
