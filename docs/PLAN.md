@@ -28,3 +28,16 @@ und Android (Kotlin/Compose), Gestaltung nach Apples Notizen / HIG.
 - [x] Android-App (android/): Compose im iOS-Stil, RichEditor (EditText+Spans), Keystore-Token, E2E kompatibel, Listen, Kanban. Tests: Robolectric InteropTest + Roborazzi-Screenshots (./gradlew recordRoborazziDebug, Testserver 127.0.0.1:8499 nötig)
 - [x] Homepage linotes.goip.de (homepage/, Downloads APK + Ubuntu-Tarball), F-Droid-Repo fdroid-apps (Watcher auf fdroid-apps korrigiert), Release-Key android/linotes-release.jks (Backup 6TB/linotes-backup/android-signing)
 - [x] Konto olaf + Einladungscode → ~/LiNotes-Zugang.txt (600) auf dem ThinkPad
+
+## Version 2 (Wunsch vom 27.09.): Ende-zu-Ende, Schlüssel statt Passwort
+Konzept: docs/SECURITY.md
+- [x] Krypto-Kern Linux (linux/linotes/e2e.py, RFC-9382-Testvektoren: linux/tests/test_e2e.py)
+- [x] Server v2 (Freigaben, Relais, Einzelabruf) – server/tests/test_api.py
+- [x] Koppeln/Verifizieren (linux/linotes/pairing.py, linux/tests/test_pairing.py)
+- [x] Ubuntu-App v2: Einrichtung (Server/Neues Konto/Gerät verbinden/Schlüsseldatei), Teilen-Dialog, Personen/Verifizieren, Schlüsseldatei-Export, Hilfe. GUI-Ende-zu-Ende-Test mit 2. Konto bestanden.
+- [x] Ubuntu-Symbol: Installer baut Icon-Cache mit -t und legt PNGs ab
+- [ ] Android v2: E2E.kt (gleiche Testvektoren), Sync v2, Einrichtung, QR-Scanner (ZXing), Teilen, Verifizieren, Schlüsseldatei (SAF), Biometrie/PIN/Muster für gesperrte Notizen, Auslagerung (Immer/90/30/7/Nur Server, Standard 90, Angeheftete + Listen/Boards immer)
+- [ ] Server-Deployment v2: DB neu (alte v1-Daten leer), API auf linotesauth.goip.de (Nutzerwunsch), linotes.goip.de nur Homepage/Downloads
+- [ ] Installer für eigene Server (server/install.sh: venv, systemd, nginx+certbot, Einladungscode)
+- [ ] Hilfe/How-to auf Homepage; Homepage ohne Serveradresse
+- [ ] Handy-Test (Nutzer per ntfy bitten, Handy anzuschließen)

@@ -92,10 +92,14 @@ class Sidebar(Gtk.Box):
         menu.append("Neue Einkaufsliste", "win.new-list")
         menu.append("Neues Board", "win.new-board")
         section = Gio.Menu()
-        section.append("Jemanden einladen …", "win.invite")
-        section.append("Kontopasswort ändern …", "win.change-password")
+        section.append("Personen und Verifizierung …", "win.people")
+        section.append("Einladungscode erzeugen …", "win.invite")
+        section.append("Schlüsseldatei sichern …", "win.keyfile")
         section.append("Notizen-Passwort ändern …", "win.change-vault")
-        section.append("Abmelden", "win.sign-out")
+        menu.append_section(None, section)
+        section = Gio.Menu()
+        section.append("Hilfe", "win.help")
+        section.append("Dieses Gerät abmelden", "win.sign-out")
         menu.append_section(None, section)
         button = Gtk.MenuButton(menu_model=menu, icon_name="open-menu-symbolic")
         button.add_css_class("flat")
@@ -122,7 +126,7 @@ class Sidebar(Gtk.Box):
 
         folders = sorted(sync.objects("folder"), key=lambda f: (f["data"].get("order", 0), f["data"].get("name", "").lower()))
         for folder in folders:
-            if folder["space"] != "private":
+            if folder.get("share"):
                 continue
             self.add(SidebarRow(
                 "folder:" + folder["id"], "folder", folder["data"].get("name", "Ordner"),
@@ -134,23 +138,28 @@ class Sidebar(Gtk.Box):
         self.add(SidebarRow("trash", "trash", "Zuletzt gelöscht", trashed), "Notizen")
 
         for folder in folders:
-            if folder["space"] != "shared":
+            if not folder.get("share"):
                 continue
+            owner_hint = None if folder["owner"] == self.sync.user_id else f"von {self.sync.user_name(folder['owner'])}"
             self.add(SidebarRow(
                 "folder:" + folder["id"], "folder-shared", folder["data"].get("name", "Ordner"),
-                count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid),
-            ), "Gemeinsam")
+                count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid), owner_hint,
+            ), "Geteilt")
+        # Single notes shared with me (outside a shared folder of mine).
+        loose = [note for note in live if note.get("share") and not self.sync.get(note["data"].get("folder") or "")]
+        if loose:
+            self.add(SidebarRow("shared-notes", "person", "Mit mir geteilt", len(loose)), "Geteilt")
 
         items = sync.objects("item")
         for shopping in sorted(sync.objects("list"), key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
             open_items = sum(1 for item in items if item["data"].get("list") == shopping["id"] and not item["data"].get("done"))
-            hint = None if shopping["space"] == "shared" else "privat"
+            hint = "geteilt" if shopping.get("share") else None
             self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items, hint), "Einkaufslisten")
 
         cards = sync.objects("card")
         for board in sorted(sync.objects("board"), key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
             open_cards = sum(1 for card in cards if card["data"].get("board") == board["id"] and not card["data"].get("archived"))
-            hint = None if board["space"] == "shared" else "privat"
+            hint = "geteilt" if board.get("share") else None
             self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards, hint), "Aufgaben")
 
         self.refresh_tags(live)

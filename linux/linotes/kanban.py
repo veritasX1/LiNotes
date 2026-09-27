@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from .dialogs import ask_text, confirm
+from .lists import share_label
 
 
 LABEL_COLORS = [
@@ -254,7 +255,7 @@ class BoardView(Gtk.Box):
             cards = self.cards(column["id"])
             total += len(cards)
             self.columns_box.append(ColumnWidget(self, column, cards))
-        where = "geteilt mit allen" if board["space"] == "shared" else "nur für dich"
+        where = share_label(self.sync, board)
         self.subtitle.set_label(f"{total} Karten · {where}")
 
     def focus_add(self, column_id):
@@ -273,7 +274,7 @@ class BoardView(Gtk.Box):
         self.sync.put("card", {
             "board": self.board_id, "column": column_id, "title": title,
             "order": order, "created_by": self.sync.user_id,
-        }, board["space"])
+        }, board.get("share"))
 
     def move_card(self, card_id, column_id, index):
         card = self.sync.get(card_id)
@@ -297,7 +298,7 @@ class BoardView(Gtk.Box):
         def create(name, _choice):
             columns = self.columns()
             order = (columns[-1]["data"].get("order", 0) + 1) if columns else 0
-            self.sync.put("column", {"board": self.board_id, "name": name, "order": order}, self.board()["space"])
+            self.sync.put("column", {"board": self.board_id, "name": name, "order": order}, self.board().get("share"))
         ask_text(self.window, "Neue Spalte", create, placeholder="Name der Spalte", action="Hinzufügen")
 
     def rename_column(self, column_id):

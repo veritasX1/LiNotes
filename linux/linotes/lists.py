@@ -16,6 +16,17 @@ from . import model
 ACCENT = (0.90, 0.64, 0.0)
 
 
+def share_label(sync, obj):
+    """"nur für dich" / "geteilt mit Anna" / "von Anna geteilt"."""
+    share = obj.get("share")
+    if not share:
+        return "nur für dich"
+    if obj.get("owner") != sync.user_id:
+        return f"von {sync.user_name(obj.get('owner'))} geteilt"
+    others = [sync.user_name(uid) for uid in sync.share_members(share) if uid != sync.user_id]
+    return "geteilt mit " + ", ".join(others) if others else "geteilt"
+
+
 class CheckCircle(Gtk.Widget):
     """The round check button of Reminders."""
 
@@ -187,12 +198,12 @@ class ShoppingListView(Gtk.Box):
             return
         self.updating = True
         data = shopping["data"]
-        self.shared = shopping["space"] == "shared"
+        self.shared = bool(shopping.get("share"))
         self.title.set_label(data.get("name", "Liste"))
         items = self.items()
         open_items = [item for item in items if not item["data"].get("done")]
         done_items = [item for item in items if item["data"].get("done")]
-        where = "geteilt mit allen" if self.shared else "nur für dich"
+        where = share_label(self.sync, shopping)
         self.subtitle.set_label(f"{len(open_items)} offen · {where}")
         grouped = bool(data.get("grocery"))
         self.group_switch.set_active(grouped)
@@ -255,7 +266,7 @@ class ShoppingListView(Gtk.Box):
                 self.sync.put("item", {
                     "list": self.list_id, "text": line, "done": False,
                     "order": base + index * 0.001, "by": self.sync.user_id,
-                }, shopping["space"])
+                }, shopping.get("share"))
 
     def set_done(self, item_id, done):
         self.sync.update(item_id, done=done, done_by=self.sync.user_id if done else None)

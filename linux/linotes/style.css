@@ -230,3 +230,10 @@ windowcontrols > button:active {
 button.text-highlight {
   background-color: alpha(#ffd83d, 0.55);
 }
+
+.pairing-code {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  font-feature-settings: "tnum";
+}
