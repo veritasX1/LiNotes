@@ -529,15 +529,17 @@ class SyncEngine:
             return
         field = "parent" if obj["kind"] == "folder" else "folder"
         share = self.share_after_move(obj, folder_id)
+        # Runs in a worker thread: the window is told on the main loop (GTK is not thread-safe).
         if share == obj.get("share"):
-            self.update(object_id, **{field: folder_id})
+            self.update(object_id, notify=False, **{field: folder_id})
+            self.emit_from_thread({object_id})
             return
         for item in self.container_members(obj):
             data = self.rekey_files(item, share)
             if item["id"] == object_id:
                 data[field] = folder_id
             self.put(item["kind"], data, share, item["id"], notify=False)
-        self.emit({object_id})
+        self.emit_from_thread({object_id})
 
     def share_members(self, share_id):
         share = self.get(share_id) if share_id else None
@@ -581,7 +583,8 @@ class SyncEngine:
             old = self.get(current)
             if old is not None and old["owner"] == self.user_id:
                 self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
-        self.emit({object_id})
+        # Called from a worker thread (run_async): tell the window on the main loop.
+        self.emit_from_thread({object_id})
         return new_share
 
     def rekey_files(self, item, new_share):

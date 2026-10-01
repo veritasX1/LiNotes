@@ -39,7 +39,12 @@ def main():
     members = {m["id"] for m in e.container_members(project)}
     assert members == {o["id"] for o in tree}, members
 
+    # Regression (01.10.2026): move_to_folder runs in a worker thread and called the window's
+    # listeners directly – GTK crashed. Listeners must not be called synchronously.
+    calls = []
+    e.connect(lambda ids: calls.append(ids))
     e.move_to_folder(project["id"], team["id"])
+    assert calls == [], "move_to_folder ruft die Oberfläche direkt aus dem Hintergrund-Thread auf"
     assert all(e.get(o["id"]).get("share") == "share-team" for o in tree), [e.get(o["id"]).get("share") for o in tree]
     assert e.get(project["id"])["data"]["parent"] == team["id"]
 
