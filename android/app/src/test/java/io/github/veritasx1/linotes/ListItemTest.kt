@@ -44,6 +44,18 @@ class ListItemTest {
     private fun types(editor: RichEditor) = editor.toBlocks().map { it.getString("t") + ":" + it.getString("x") }
 
     @Test
+    fun webAddressesBecomeLinksButAreNotSaved() {
+        val editor = editor(b("title", "Links"), b("body", "Siehe https://developer.apple.com/design/tips/, und www.linotes.goip.de."))
+        val text = editor.text!!
+        val links = text.getSpans(0, text.length, io.github.veritasx1.linotes.ui.LinkSpan::class.java)
+            .map { text.substring(text.getSpanStart(it), text.getSpanEnd(it)) }.sorted()
+        assertEquals(listOf("https://developer.apple.com/design/tips/", "www.linotes.goip.de"), links)
+        val saved = editor.toBlocks()[1]
+        assertEquals("Siehe https://developer.apple.com/design/tips/, und www.linotes.goip.de.", saved.getString("x"))
+        assertEquals(false, saved.has("s"))
+    }
+
+    @Test
     fun bulletOnEmptyLineEnterAndBackspace() {
         val editor = editor(b("title", "Einkauf"), b("body", ""))
         editor.setSelection(editor.text!!.length)
