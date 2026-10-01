@@ -11,6 +11,7 @@ from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from . import model
 from .dialogs import ask_text, confirm
+from .icons import icon_button
 from .lists import share_label
 
 
@@ -221,6 +222,10 @@ class BoardView(Gtk.Box):
         self.subtitle.add_css_class("dim-label")
         titles.append(self.subtitle)
         header.append(titles)
+        export = icon_button("share", "Bericht exportieren (PDF oder CSV) …")
+        export.set_valign(Gtk.Align.CENTER)
+        export.connect("clicked", lambda _button: self.window.export_board(self.board_id))
+        header.append(export)
         add_column = Gtk.Button(label="Spalte hinzufügen", valign=Gtk.Align.CENTER)
         add_column.connect("clicked", lambda _button: self.add_column())
         header.append(add_column)

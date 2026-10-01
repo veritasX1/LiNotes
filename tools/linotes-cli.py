@@ -15,6 +15,7 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py move <karte> <spalte>
     linotes-cli.py comment <karte> <text>    # hängt Text an die Notizen an
     linotes-cli.py priority <karte> <hoch|mittel|niedrig|keine>
+    linotes-cli.py export <board> <datei.pdf|datei.csv>
     linotes-cli.py trace-commits <board> [repo]   # Commits mit [karten-id] an die Karten hängen
     linotes-cli.py add <board> <spalte> <titel> [notizen]
 """
@@ -283,6 +284,16 @@ def cmd_trace_commits(board_ref, repo="."):
             print(f"[{card_id}] {card['data'].get('title', '')[:50]}: " + ", ".join(c["h"] for c in merged))
     flush(eng)
     print(f"{changed} Karten aktualisiert")
+
+
+def cmd_export(board_ref, path):
+    """Board report as PDF (or CSV when the file name ends in .csv)."""
+    from linotes import report
+    eng = engine()
+    board = find(eng, "board", board_ref)
+    data = report.build(eng, board["id"])
+    (report.write_csv if path.lower().endswith(".csv") else report.write_pdf)(data, path)
+    print(f"{len(data['rows'])} Karten → {path}")
 
 
 def cmd_comment(card_ref, text):

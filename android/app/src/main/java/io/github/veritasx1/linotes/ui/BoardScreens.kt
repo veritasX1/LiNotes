@@ -106,6 +106,7 @@ fun cardDates(card: SyncObject, dev: Boolean): String {
 @Composable
 fun BoardsScreen(state: AppState, revision: Long) {
     val sync = state.sync
+    val context = LocalContext.current
     val boards = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
     val cards = remember(revision) { sync.all("card") }
     var creating by remember { mutableStateOf<String?>(null) }
@@ -142,6 +143,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
         ActionSheet(board.data.optString("name"), listOf(
             SheetAction("Umbenennen") { renaming = board },
             SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
+            SheetAction("Bericht teilen (PDF) …") { Report.share(state, context, board.id) },
             SheetAction(if (isDevBoard(board)) "Entwicklungsprojekt ausschalten" else "Als Entwicklungsprojekt führen") {
                 val dev = !isDevBoard(board)
                 sync.update(board.id) { it.put("dev", dev) }

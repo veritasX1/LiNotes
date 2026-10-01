@@ -928,12 +928,44 @@ class LiNotesWindow(Adw.ApplicationWindow):
         menu.append("Teilen …", "win.share-object")
         menu.append("Umbenennen …", "win.rename-object")
         if kind == "board":
+            menu.append("Bericht exportieren …", "win.export-object")
             menu.append("Entwicklungsprojekt ausschalten" if obj["data"].get("dev") else "Als Entwicklungsprojekt führen",
                         "win.toggle-dev")
         protected = object_id == model.default_private_folder(self.sync.user_id)
         if not protected:
             menu.append("Löschen …", "win.delete-object")
         self.popup_menu(menu, widget, x, y)
+
+    def export_board(self, board_id):
+        """Report of a board as PDF (or CSV for spreadsheets) – a traceability
+        matrix for development projects."""
+        board = self.sync.get(board_id)
+        if board is None:
+            return
+        from . import report
+        name = board["data"].get("name", "Board")
+        dialog = Gtk.FileDialog(title="Bericht exportieren")
+        dialog.set_initial_name(f"{name} – Stand {time.strftime('%Y-%m-%d')}.pdf")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        for label, pattern in (("PDF-Bericht", "*.pdf"), ("Tabelle (CSV, z. B. für Excel)", "*.csv")):
+            file_filter = Gtk.FileFilter(name=label)
+            file_filter.add_pattern(pattern)
+            filters.append(file_filter)
+        dialog.set_filters(filters)
+
+        def chosen(dialog, result):
+            try:
+                path = dialog.save_finish(result).get_path()
+            except GLib.Error:
+                return
+            data = report.build(self.sync, board_id)
+            if path.lower().endswith(".csv"):
+                report.write_csv(data, path)
+            else:
+                path = path if path.lower().endswith(".pdf") else path + ".pdf"
+                report.write_pdf(data, path)
+            self.toast(f"Bericht gespeichert: {Path(path).name}")
+        dialog.save(self, None, chosen)
 
     def toggle_dev(self):
         """Development projects show card ids, the status history and the trace fields."""
@@ -1030,6 +1062,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "new-board": self.new_board,
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
+            "export-object": lambda: self.export_board(getattr(self, "menu_target", "")),
             "delete-object": self.delete_object,
             "invite": self.invite,
             "people": lambda: security_ui.PeopleDialog(self).present(self),

@@ -98,6 +98,12 @@ class MainActivity : FragmentActivity() {
             pendingOpen = done
             opener.launch(arrayOf("*/*"))
         }
+        state.shareFile = { file, mime, title ->
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, title).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(Intent.createChooser(send, title))
+        }
         state.requestCamera = { done ->
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) done(true)
             else {
