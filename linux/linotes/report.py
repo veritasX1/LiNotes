@@ -10,7 +10,7 @@ import gi
 gi.require_version("Pango", "1.0")
 gi.require_version("PangoCairo", "1.0")
 
-from gi.repository import Pango, PangoCairo
+from gi.repository import GLib, Pango, PangoCairo
 
 from . import model
 
@@ -19,6 +19,7 @@ MARGIN = 48.0
 ACCENT = (0.72, 0.49, 0.0)
 GREY = (0.42, 0.42, 0.45)
 LINE = (0.85, 0.85, 0.87)
+LIST_MARKS = {"bullet": "•", "dash": "–", "number": "", "check": "○"}
 
 
 def stamp(timestamp):
@@ -242,4 +243,108 @@ def write_pdf(report, path):
                           [[r["title"], r["priority"], r["assignee"], r["due"], r["done"]] for r in items])
             else:
                 pdf.text("Keine Karten", size=9, color=GREY, space=10)
+    pdf.close()
+
+
+# --- single note ------------------------------------------------------
+
+NOTE_STYLES = {  # size, bold, italic, space after
+    "title": (20, True, False, 8), "heading": (15, True, False, 5), "subheading": (12.5, True, False, 4),
+    "body": (10.5, False, False, 3), "mono": (9.5, False, False, 3), "quote": (10.5, False, True, 3),
+}
+NOTE_MARKUP = {"b": ("<b>", "</b>"), "i": ("<i>", "</i>"), "u": ("<u>", "</u>"), "s": ("<s>", "</s>"),
+               "h": ("<span background='#FFE680'>", "</span>")}
+
+
+def block_markup(block):
+    """Pango markup of one line with its bold/italic/… spans."""
+    text = block.get("x", "")
+    opening, closing = {}, {}
+    for span in block.get("s", []):
+        try:
+            start, end, name = span
+        except ValueError:
+            continue
+        if name in NOTE_MARKUP and int(start) < int(end):
+            opening.setdefault(int(start), []).append(NOTE_MARKUP[name][0])
+            closing.setdefault(min(int(end), len(text)), []).insert(0, NOTE_MARKUP[name][1])
+    out = []
+    for index in range(len(text) + 1):
+        out += closing.get(index, [])
+        out += opening.get(index, [])
+        if index < len(text):
+            out.append(GLib.markup_escape_text(text[index]))
+    # Pango needs properly nested tags; spans that overlap only partially lose their style.
+    markup = "".join(out)
+    try:
+        Pango.parse_markup(markup, -1, "\0")
+        return markup
+    except GLib.Error:
+        return GLib.markup_escape_text(text)
+
+
+def write_note_pdf(blocks, path, header, image_path=None):
+    """A note as PDF in the look of the editor: title, headings, lists, checklists, photos."""
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, GdkPixbuf
+    pdf = Pdf(path, header)
+    numbers = {}
+    for block in blocks:
+        kind = block.get("t", "body")
+        level = int(block.get("l", 0))
+        if kind == "image":
+            if not image_path or not block.get("f"):
+                continue
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(image_path(block["f"])))
+                pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
+            except Exception as error:  # missing download, unknown format
+                print("LiNotes: Bild nicht im PDF:", error)
+                continue
+            width = pdf.width - 2 * MARGIN
+            scale = min(width / pixbuf.get_width(), 360 / pixbuf.get_height(), 1.0)
+            height = pixbuf.get_height() * scale
+            pdf.need(height)
+            pdf.cr.save()
+            pdf.cr.translate(MARGIN, pdf.y)
+            pdf.cr.scale(scale, scale)
+            Gdk.cairo_set_source_pixbuf(pdf.cr, pixbuf, 0, 0)
+            pdf.cr.paint()
+            pdf.cr.restore()
+            pdf.y += height + 8
+            numbers = {}
+            continue
+        if kind == "number":
+            numbers[level] = numbers.get(level, 0) + 1
+            numbers = {key: value for key, value in numbers.items() if key <= level}
+        elif kind not in LIST_MARKS:
+            numbers = {}
+        size, bold, italic, space = NOTE_STYLES.get(kind if kind in NOTE_STYLES else "body")
+        indent = 18 * level + (18 if kind in LIST_MARKS else 0) + (14 if kind == "quote" else 0)
+        layout, color = pdf.layout("", size, bold, pdf.width - 2 * MARGIN - indent,
+                                   GREY if kind == "quote" or (kind == "check" and block.get("c")) else (0, 0, 0),
+                                   mono=kind == "mono")
+        if italic:
+            font = layout.get_font_description().copy()
+            font.set_style(Pango.Style.ITALIC)
+            layout.set_font_description(font)
+        markup = block_markup(block) or " "
+        if kind == "check" and block.get("c"):
+            markup = f"<s>{markup}</s>"
+        layout.set_markup(markup, -1)
+        height = layout.get_pixel_extents()[1].height
+        pdf.need(height)
+        x = MARGIN + indent
+        if kind in LIST_MARKS:
+            mark = f"{numbers.get(level, 1)}." if kind == "number" else LIST_MARKS[kind]
+            if kind == "check" and block.get("c"):
+                mark = "☑"
+            mark_layout = pdf.layout(mark, size, color=ACCENT if kind == "check" else (0, 0, 0))
+            pdf.draw(mark_layout, x - 16, pdf.y)
+        if kind == "quote":
+            pdf.cr.set_source_rgb(*LINE)
+            pdf.cr.rectangle(x - 10, pdf.y, 2.5, height)
+            pdf.cr.fill()
+        pdf.draw((layout, color), x, pdf.y)
+        pdf.y += height + space
     pdf.close()

@@ -284,6 +284,25 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
     }
 
+    /** Like Apple: the open note as PDF, to the share sheet or the print dialog. */
+    fun exportPdf(print: Boolean) {
+        val blocks = editor.toBlocks()
+        val title = blocks.firstOrNull { it.optString("x").isNotBlank() }?.optString("x")?.trim()?.take(120) ?: "Notiz"
+        val header = "$title · ${Model.longDate(Model.modified(note))}"
+        val share = note.share
+        scope.launch {
+            val file = withContext(Dispatchers.IO) {
+                val folder = java.io.File(context.cacheDir, "reports").apply { mkdirs() }
+                java.io.File(folder, NotePdf.fileName(title)).also { file ->
+                    NotePdf.write(blocks, header, file) { reference ->
+                        runCatching { RichEditor.decodeImage(sync.fetchFile(reference, share).readBytes()) }.getOrNull()
+                    }
+                }
+            }
+            if (print) NotePdf.print(context, file, title) else state.shareFile(file, "application/pdf", title)
+        }
+    }
+
     if (showMenu) {
         ActionSheet(null, buildList {
             if (trashed) {
@@ -293,6 +312,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 add(SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
                 add(SheetAction("Verschieben …") { moving = true })
                 if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
+                add(SheetAction("Als PDF senden …") { exportPdf(print = false) })
+                add(SheetAction("Drucken …") { exportPdf(print = true) })
                 add(SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = !locked })
                 if (!sync.isLocal) add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
                 add(SheetAction(if (sortChecked) "Abgehakte nicht mehr sortieren" else "Abgehakte nach unten sortieren") { sortChecked = !sortChecked })

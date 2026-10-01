@@ -74,7 +74,7 @@ object Report {
     }
 
     /** A tiny flowing layout: paragraphs and tables with page breaks (A4, points). */
-    private class Pdf(landscape: Boolean, private val header: String) {
+    class Pdf(landscape: Boolean, private val header: String) {
         val width = if (landscape) 842 else 595
         val height = if (landscape) 595 else 842
         val margin = 48f
@@ -96,7 +96,7 @@ object Report {
             typeface = when { mono -> Typeface.MONOSPACE; bold -> Typeface.DEFAULT_BOLD; else -> Typeface.DEFAULT }
         }
 
-        fun layout(text: String, paint: TextPaint, width: Float): StaticLayout =
+        fun layout(text: CharSequence, paint: TextPaint, width: Float): StaticLayout =
             StaticLayout.Builder.obtain(text, 0, text.length, paint, width.toInt().coerceAtLeast(10))
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
 
@@ -118,6 +118,29 @@ object Report {
             need(layout.height.toFloat())
             canvas.save(); canvas.translate(margin, y); layout.draw(canvas); canvas.restore()
             y += layout.height + space
+        }
+
+        /** A note line: styled text, optionally indented with a list mark in front. */
+        fun styled(text: CharSequence, size: Float, bold: Boolean, italic: Boolean, color: Int, mono: Boolean,
+                   indent: Float, space: Float, mark: String?, markColor: Int, bar: Boolean) {
+            val textPaint = paint(size, bold, color, mono)
+            if (italic) textPaint.typeface = Typeface.create(textPaint.typeface, if (bold) Typeface.BOLD_ITALIC else Typeface.ITALIC)
+            val layout = layout(if (text.isEmpty()) " " else text, textPaint, width - 2 * margin - indent)
+            need(layout.height.toFloat())
+            val x = margin + indent
+            if (mark != null) canvas.drawText(mark, x - 16, y - textPaint.ascent(), paint(size, color = markColor))
+            if (bar) canvas.drawRect(x - 10, y, x - 7.5f, y + layout.height, Paint().apply { this.color = line })
+            canvas.save(); canvas.translate(x, y); layout.draw(canvas); canvas.restore()
+            y += layout.height + space
+        }
+
+        fun image(bitmap: android.graphics.Bitmap) {
+            val scale = minOf((width - 2 * margin) / bitmap.width, 360f / bitmap.height, 1f)
+            val w = bitmap.width * scale
+            val h = bitmap.height * scale
+            need(h)
+            canvas.drawBitmap(bitmap, null, android.graphics.RectF(margin, y, margin + w, y + h), Paint().apply { isFilterBitmap = true })
+            y += h + 8
         }
 
         fun rule(space: Float = 8f) {
