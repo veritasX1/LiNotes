@@ -512,7 +512,12 @@ class CardDialog(Adw.Dialog):
             info.set_margin_top(8)
             notes_group.add(info)
 
+        self.dev = dev
         if dev:
+            self.impact = self.text_group(page, "Auswirkungsanalyse", card["data"].get("impact", ""),
+                                          "Was ist betroffen, welche Risiken, was muss mitgeprüft werden?")
+            self.verification = self.text_group(page, "Verifikation", card["data"].get("verification", ""),
+                                                "Tests, Prüfungen und Nachweise")
             page.add(self.build_history(card))
 
         actions = Adw.PreferencesGroup()
@@ -533,8 +538,23 @@ class CardDialog(Adw.Dialog):
         self.connect("closed", lambda _dialog: self.save())
         self.deleted = False
 
+    def text_group(self, page, title, text, hint):
+        group = Adw.PreferencesGroup(title=title, description=hint)
+        view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        view.get_buffer().set_text(text)
+        view.set_size_request(-1, 70)
+        view.add_css_class("card")
+        for margin in ("left", "right"):
+            getattr(view, f"set_{margin}_margin")(10)
+        view.set_top_margin(8)
+        view.set_bottom_margin(8)
+        group.add(view)
+        page.add(group)
+        return view
+
     def build_history(self, card):
-        """Development projects: card id and who moved the card where, when."""
+        """Development projects: card id, version, linked commits and who moved
+        the card where, when."""
         group = Adw.PreferencesGroup(title="Nachverfolgung")
         ident = Adw.ActionRow(title="Karten-ID", subtitle=card["id"])
         ident.set_subtitle_selectable(True)
@@ -543,6 +563,15 @@ class CardDialog(Adw.Dialog):
         copy.connect("clicked", lambda _b: self.get_clipboard().set(model.short_id(card["id"])))
         ident.add_suffix(copy)
         group.add(ident)
+        self.version_row = Adw.EntryRow(title="Umgesetzt in Version", text=card["data"].get("version", ""))
+        group.add(self.version_row)
+        commits = card["data"].get("commits") or []
+        for commit in commits:
+            row = Adw.ActionRow(title=commit.get("s", ""), subtitle="Commit " + commit.get("h", ""))
+            row.set_subtitle_selectable(True)
+            group.add(row)
+        if not commits:
+            group.add(Adw.ActionRow(title="Commits", subtitle="Noch keine – Commits mit der Karten-ID in der Nachricht werden verknüpft."))
         history = card["data"].get("history") or []
         if not history:
             group.add(Adw.ActionRow(title="Verlauf", subtitle="Noch kein Verlauf – er beginnt mit dem nächsten Verschieben."))
@@ -581,6 +610,11 @@ class CardDialog(Adw.Dialog):
             "color": self.color,
             "priority": model.PRIORITIES[self.priority_row.get_selected()][0],
         }
+        if self.dev:
+            for key, view in (("impact", self.impact), ("verification", self.verification)):
+                buffer = view.get_buffer()
+                fields[key] = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False).strip() or None
+            fields["version"] = self.version_row.get_text().strip() or None
         if column and column != card["data"].get("column"):
             fields.update(model.move_fields(self.sync, card, column))
             others = self.board.cards(column)

@@ -15,6 +15,7 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py move <karte> <spalte>
     linotes-cli.py comment <karte> <text>    # hängt Text an die Notizen an
     linotes-cli.py priority <karte> <hoch|mittel|niedrig|keine>
+    linotes-cli.py trace-commits <board> [repo]   # Commits mit [karten-id] an die Karten hängen
     linotes-cli.py add <board> <spalte> <titel> [notizen]
 """
 
@@ -249,6 +250,39 @@ def cmd_priority(card_ref, level):
     eng.update(card["id"], notify=False, priority=level)
     flush(eng)
     print(f"„{card['data'].get('title')}“ → Priorität {level or 'keine'}")
+
+
+def cmd_trace_commits(board_ref, repo="."):
+    """Bidirectional traceability: every commit whose message names a card id
+    ("[693b0b1f] …") is listed on that card (field "commits")."""
+    import re
+    import subprocess
+    log = subprocess.run(["git", "-C", repo, "log", "--reverse", "--format=%h%x1f%s%x1f%b%x1e"],
+                         capture_output=True, text=True, check=True).stdout
+    eng = engine()
+    board = find(eng, "board", board_ref)
+    cards_by_id = {c["id"][:8]: c for c in eng.objects("card") if c["data"].get("board") == board["id"]}
+    found = {}
+    for entry in log.split("\x1e"):
+        parts = entry.strip("\n").split("\x1f")
+        if len(parts) < 3:
+            continue
+        short, subject, body = parts
+        for card_id in dict.fromkeys(re.findall(r"\[([0-9a-f]{8})\]", subject + "\n" + body)):
+            if card_id in cards_by_id:
+                found.setdefault(card_id, []).append({"h": short, "s": subject})
+    changed = 0
+    for card_id, commits in found.items():
+        card = cards_by_id[card_id]
+        known = list(card["data"].get("commits") or [])
+        hashes = {c["h"] for c in known}
+        merged = known + [c for c in commits if c["h"] not in hashes]
+        if merged != known:
+            eng.update(card["id"], notify=False, commits=merged)
+            changed += 1
+            print(f"[{card_id}] {card['data'].get('title', '')[:50]}: " + ", ".join(c["h"] for c in merged))
+    flush(eng)
+    print(f"{changed} Karten aktualisiert")
 
 
 def cmd_comment(card_ref, text):
