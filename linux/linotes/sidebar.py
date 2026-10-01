@@ -249,6 +249,8 @@ class Sidebar(Gtk.Box):
     def on_context(self, gesture, n_press, x, y):
         row = self.list.get_row_at_y(int(y))
         if not isinstance(row, SidebarRow) or ":" not in row.key:
+            # Free space, section headers and smart folders: offer "new …".
+            self.window.popup_menu(self.window.new_menu, self.list, x, y)
             return
         kind, object_id = row.key.split(":", 1)
         self.window.object_menu(kind, object_id, self.list, x, y)

@@ -88,6 +88,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         sidebar_view = Adw.ToolbarView()
         sidebar_header = Adw.HeaderBar(show_title=False, show_end_title_buttons=False)
         sidebar_header.set_decoration_layout(DECORATION_LAYOUT)
+        new_menu = Gio.Menu()
+        new_menu.append("Neuer Ordner", "win.new-folder")
+        new_menu.append("Neue Liste", "win.new-list")
+        new_menu.append("Neues Board", "win.new-board")
+        self.new_menu = new_menu
+        new_button = icon_menu_button("plus", "Neu …")
+        new_button.set_menu_model(new_menu)
+        sidebar_header.pack_end(new_button)
         sidebar_view.add_top_bar(sidebar_header)
         self.sidebar = Sidebar(self)
         self.sidebar.connect("selected", lambda _sidebar, key: self.select(key))
@@ -107,6 +115,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.split.bind_property("show-sidebar", toggle, "active",
                                  GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL)
         header.pack_start(toggle)
+        # Narrow windows show list and note one after the other; this leads back to the list.
+        self.back_button = icon_button("back", "Zurück zur Liste")
+        self.back_button.set_visible(False)
+        self.back_button.connect("clicked", lambda _button: self.show_list_narrow())
+        header.pack_start(self.back_button)
 
         self.view_toggle = Gtk.Box()
         self.view_toggle.add_css_class("linked")
@@ -148,7 +161,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, shrink_start_child=False)
         self.note_list = NoteList(self.sync)
         self.note_list.set_size_request(280, -1)
-        self.note_list.connect("note-selected", lambda _list, note_id: self.open_note(note_id))
+        self.note_list.connect("note-selected", lambda _list, note_id: (self.open_note(note_id), self.show_note_narrow()))
         self.note_list.connect("context", self.on_note_context)
         self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
         self.note_pane = NotePane(self.sync)
@@ -166,6 +179,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         content.set_content(self.stack)
         self.split.set_content(content)
         self.pages.add_named(self.split, "main")
+        self.build_breakpoints()
 
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.on_key)
@@ -173,6 +187,42 @@ class LiNotesWindow(Adw.ApplicationWindow):
         activity = Gtk.EventControllerKey()
         activity.connect("key-pressed", lambda *_args: self.touch_vault() or False)
         self.add_controller(activity)
+
+    def build_breakpoints(self):
+        """Adapt to the window width like GNOME apps: the sidebar folds away below 900 px,
+        below 620 px the note list and the note are shown one after the other."""
+        self.narrow = False
+        self.narrow_note = False
+        self.set_size_request(360, 420)
+        sidebar = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 900sp"))
+        sidebar.add_setter(self.split, "collapsed", True)
+        sidebar.add_setter(self.split, "show-sidebar", False)
+        self.add_breakpoint(sidebar)
+        # Only one breakpoint applies at a time, so the narrow one folds the sidebar too.
+        single = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 620sp"))
+        single.add_setter(self.split, "collapsed", True)
+        single.add_setter(self.split, "show-sidebar", False)
+        single.connect("apply", lambda _bp: self.set_narrow(True))
+        single.connect("unapply", lambda _bp: self.set_narrow(False))
+        self.add_breakpoint(single)
+
+    def set_narrow(self, narrow):
+        self.narrow = narrow
+        self.update_narrow()
+
+    def show_note_narrow(self):
+        self.narrow_note = True
+        self.update_narrow()
+
+    def show_list_narrow(self):
+        self.narrow_note = False
+        self.update_narrow()
+
+    def update_narrow(self):
+        note = self.narrow and self.narrow_note and self.current_note is not None
+        self.note_list.set_visible(not self.narrow or not note)
+        self.note_pane.set_visible(not self.narrow or note)
+        self.back_button.set_visible(note and self.stack.get_visible_child_name() == "notes")
 
     def build_format_popover(self):
         popover = Gtk.Popover()
@@ -283,6 +333,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.on_status(self.sync.online)
 
         self.refresh_all()
+        # Start in the note list, not in the search field (Ctrl+F still goes there).
+        GLib.idle_add(lambda: self.note_list.list.grab_focus() and False)
         run_async(first_sync, done)
 
     def on_status(self, online):
@@ -345,6 +397,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.select(self.current_key, keep_note=True)
 
     def select(self, key, keep_note=False):
+        if key != self.current_key:
+            self.narrow_note = False
         self.current_key = key
         kind, _sep, object_id = key.partition(":")
         if kind == "list" and self.sync.get(object_id):
@@ -367,6 +421,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_tools.set_visible(visible)
         self.view_toggle.set_visible(visible)
         self.delete_button.set_visible(visible)
+        self.update_narrow()
 
     def notes_for(self, key):
         notes = self.sync.objects("note")
@@ -441,6 +496,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.sidebar.refresh()
         self.show_notes()
         self.open_note(note["id"])
+        self.show_note_narrow()
         self.note_pane.editor.grab_focus()
 
     def open_note(self, note_id):

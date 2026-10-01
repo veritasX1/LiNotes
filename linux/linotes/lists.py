@@ -8,9 +8,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GObject, Graphene, Gtk
+from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gtk
 
 from . import model
+from .icons import icon_menu_button
 
 
 ACCENT = (0.90, 0.64, 0.0)
@@ -106,6 +107,7 @@ class ItemRow(Gtk.ListBoxRow):
         remove = Gtk.Button(icon_name="edit-delete-symbolic", valign=Gtk.Align.CENTER)
         remove.add_css_class("flat")
         remove.add_css_class("circular")
+        remove.add_css_class("item-remove")
         remove.set_tooltip_text("Entfernen")
         remove.connect("clicked", lambda _button: view.remove(self.item_id))
         box.append(remove)
@@ -147,14 +149,29 @@ class ShoppingListView(Gtk.Box):
         titles.append(self.subtitle)
         header.append(titles)
 
-        self.group_switch = Gtk.ToggleButton(label="Warengruppen", valign=Gtk.Align.CENTER)
-        self.group_switch.set_tooltip_text("Einträge nach Warengruppen sortieren")
-        self.group_switch.connect("toggled", self.on_group_toggled)
-        header.append(self.group_switch)
-        self.done_switch = Gtk.ToggleButton(label="Erledigte", valign=Gtk.Align.CENTER, active=True)
-        self.done_switch.set_tooltip_text("Erledigte Einträge anzeigen")
-        self.done_switch.connect("toggled", self.on_done_toggled)
-        header.append(self.done_switch)
+        # Options in a ⋯ menu with check marks, like on Android.
+        actions = Gio.SimpleActionGroup()
+        self.group_action = Gio.SimpleAction.new_stateful("grocery", None, GLib.Variant.new_boolean(False))
+        self.group_action.connect("change-state", self.on_group_changed)
+        actions.add_action(self.group_action)
+        self.done_action = Gio.SimpleAction.new_stateful("show-done", None, GLib.Variant.new_boolean(True))
+        self.done_action.connect("change-state", self.on_done_changed)
+        actions.add_action(self.done_action)
+        self.clear_action = Gio.SimpleAction.new("clear-done", None)
+        self.clear_action.connect("activate", lambda *_args: self.clear_done())
+        actions.add_action(self.clear_action)
+        self.insert_action_group("list", actions)
+        menu = Gio.Menu()
+        menu.append("Nach Warengruppen sortieren", "list.grocery")
+        menu.append("Erledigte einblenden", "list.show-done")
+        section = Gio.Menu()
+        section.append("Erledigte löschen", "list.clear-done")
+        menu.append_section(None, section)
+        options = icon_menu_button("more", "Optionen")
+        options.set_menu_model(menu)
+        options.set_valign(Gtk.Align.CENTER)
+        options.add_css_class("circular")
+        header.append(options)
         column.append(header)
 
         self.entry = Gtk.Entry(placeholder_text="Neuer Eintrag – z. B. „2 × Milch“")
@@ -206,7 +223,8 @@ class ShoppingListView(Gtk.Box):
         where = share_label(self.sync, shopping)
         self.subtitle.set_label(f"{len(open_items)} offen · {where}")
         grouped = bool(data.get("grocery"))
-        self.group_switch.set_active(grouped)
+        self.group_action.set_state(GLib.Variant.new_boolean(grouped))
+        self.clear_action.set_enabled(bool(done_items))
 
         child = self.items_box.get_first_child()
         while child is not None:
@@ -285,11 +303,11 @@ class ShoppingListView(Gtk.Box):
                 self.sync.delete(item["id"], notify=False)
         self.sync.emit({self.list_id})
 
-    def on_group_toggled(self, button):
-        if self.updating:
-            return
-        self.sync.update(self.list_id, grocery=button.get_active())
+    def on_group_changed(self, action, value):
+        action.set_state(value)
+        self.sync.update(self.list_id, grocery=value.get_boolean())
 
-    def on_done_toggled(self, button):
-        self.show_done = button.get_active()
+    def on_done_changed(self, action, value):
+        action.set_state(value)
+        self.show_done = value.get_boolean()
         self.refresh()

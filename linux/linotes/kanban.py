@@ -405,13 +405,6 @@ class CardDialog(Adw.Dialog):
         self.title_row = Adw.EntryRow(title="Titel", text=data.get("title", ""))
         group.add(self.title_row)
 
-        users = [(None, "Niemand")] + [(user["id"], user["name"]) for user in self.sync.state["users"]]
-        self.users = users
-        self.assignee = Adw.ComboRow(title="Zuständig", model=Gtk.StringList.new([name for _id, name in users]))
-        ids = [user_id for user_id, _name in users]
-        self.assignee.set_selected(ids.index(data.get("assignee")) if data.get("assignee") in ids else 0)
-        group.add(self.assignee)
-
         columns = board.columns()
         self.columns = columns
         self.column_row = Adw.ComboRow(title="Spalte", model=Gtk.StringList.new([c["data"].get("name", "") for c in columns]))
@@ -419,6 +412,13 @@ class CardDialog(Adw.Dialog):
         if data.get("column") in column_ids:
             self.column_row.set_selected(column_ids.index(data.get("column")))
         group.add(self.column_row)
+
+        users = [(None, "Niemand")] + [(user["id"], user["name"]) for user in self.sync.state["users"]]
+        self.users = users
+        self.assignee = Adw.ComboRow(title="Zuständig", model=Gtk.StringList.new([name for _id, name in users]))
+        ids = [user_id for user_id, _name in users]
+        self.assignee.set_selected(ids.index(data.get("assignee")) if data.get("assignee") in ids else 0)
+        group.add(self.assignee)
 
         self.due_switch = Adw.SwitchRow(title="Fälligkeitsdatum")
         day = parse_due(data.get("due"))

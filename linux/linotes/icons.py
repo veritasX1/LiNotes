@@ -390,10 +390,16 @@ class Swatch(Gtk.Widget):
         cr.stroke()
 
 
+def accessible_label(widget, tooltip):
+    """Screen readers read the tooltip's text without the shortcut hint."""
+    widget.update_property([Gtk.AccessibleProperty.LABEL], [tooltip.split(" (")[0].rstrip(" …")])
+
+
 def icon_button(name, tooltip, toggle=False, size=16):
     button = Gtk.ToggleButton() if toggle else Gtk.Button()
     button.set_child(Icon(name, size))
     button.set_tooltip_text(tooltip)
+    accessible_label(button, tooltip)
     button.add_css_class("flat")
     return button
 
@@ -402,6 +408,7 @@ def icon_menu_button(name, tooltip, popover=None, size=16):
     button = Gtk.MenuButton()
     button.set_child(Icon(name, size))
     button.set_tooltip_text(tooltip)
+    accessible_label(button, tooltip)
     button.add_css_class("flat")
     if popover is not None:
         button.set_popover(popover)
