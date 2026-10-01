@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=LiNotes
-Comment=Notizen, Einkaufslisten und Aufgaben auf deinem eigenen Server
+Comment=Notizen, Listen und Aufgaben auf deinem eigenen Server
 Exec=@EXEC@
 Icon=io.github.veritasx1.LiNotes
 Terminal=false
@@ -9,3 +9,8 @@ Categories=Office;Utility;GTK;
 Keywords=Notizen;Notes;Einkaufsliste;Kanban;Aufgaben;
 StartupNotify=true
 StartupWMClass=io.github.veritasx1.LiNotes
+Actions=new-note;
+
+[Desktop Action new-note]
+Name=Neue Notiz
+Exec=@EXEC@ --neue-notiz
