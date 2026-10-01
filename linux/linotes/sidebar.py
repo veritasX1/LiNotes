@@ -8,7 +8,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 
 from . import model
-from .icons import Icon
+from .icons import Icon, drag_source, drop_target
 
 
 class SidebarRow(Gtk.ListBoxRow):
@@ -199,12 +199,24 @@ class Sidebar(Gtk.Box):
 
     def add(self, row, section):
         row.section = section
+        kind = row.key.partition(":")[0]
+        if kind in ("folder", "list", "board"):
+            drag_source(row, row.key)
+        if kind == "folder":
+            # Notes, folders, lists and boards can be dropped onto a folder (not board cards).
+            drop_target(row, lambda payload, key=row.key: payload.partition(":")[0] in ("note", "folder", "list", "board")
+                        and payload != key, lambda payload, key=row.key: self.window.drop_on(key, payload))
         self.list.append(row)
 
     def header_func(self, row, before):
         if before is None or before.section != row.section:
             label = Gtk.Label(label=row.section, xalign=0)
             label.add_css_class("sidebar-heading")
+            # Dropping onto the heading takes a folder to the top / a list or board out of its folder.
+            wanted = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board"}.get(row.section)
+            if wanted:
+                drop_target(label, lambda payload, w=wanted: payload.partition(":")[0] == w,
+                            lambda payload, section=row.section: self.window.drop_on(section, payload))
             row.set_header(label)
         else:
             row.set_header(None)

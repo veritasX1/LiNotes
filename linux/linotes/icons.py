@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Graphene", "1.0")
 
-from gi.repository import Graphene, Gtk
+from gi.repository import Gdk, GObject, Graphene, Gtk
 
 
 LINE = 1.35
@@ -413,3 +413,25 @@ def icon_menu_button(name, tooltip, popover=None, size=16):
     if popover is not None:
         button.set_popover(popover)
     return button
+
+
+def drag_source(widget, payload):
+    """Let `widget` be dragged (payload "<kind>:<id>"), e.g. onto a folder in the sidebar."""
+    source = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
+    source.connect("prepare", lambda *_args: Gdk.ContentProvider.new_for_value(GObject.Value(GObject.TYPE_STRING, payload)))
+    source.connect("drag-begin", lambda src, _drag: src.set_icon(Gtk.WidgetPaintable.new(widget), 20, 20))
+    widget.add_controller(source)
+
+
+def drop_target(widget, accept, on_drop):
+    """Highlight `widget` while something hovers over it; on_drop(payload) moves it if accept(payload)."""
+    target = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.MOVE)
+
+    def dropped(_target, value, _x, _y):
+        widget.remove_css_class("drop-hover")
+        return isinstance(value, str) and accept(value) and bool(on_drop(value))
+
+    target.connect("enter", lambda *_args: (widget.add_css_class("drop-hover"), Gdk.DragAction.MOVE)[1])
+    target.connect("leave", lambda *_args: widget.remove_css_class("drop-hover"))
+    target.connect("drop", dropped)
+    widget.add_controller(target)

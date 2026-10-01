@@ -11,7 +11,7 @@ from gi.repository import Adw, Gdk, GdkPixbuf, GLib, GObject, Gtk
 
 from . import model
 from .editor import NoteEditor
-from .icons import Icon
+from .icons import Icon, drag_source
 
 
 class NoteRow(Gtk.ListBoxRow):
@@ -21,6 +21,7 @@ class NoteRow(Gtk.ListBoxRow):
         self.note_id = note["id"]
         self.group = group
         data = note["data"]
+        drag_source(self, "note:" + note["id"])
 
         box = Gtk.Box(spacing=8)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
