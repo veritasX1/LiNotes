@@ -63,12 +63,22 @@ fun MoveToFolderSheet(state: AppState, obj: SyncObject, onDone: () -> Unit) {
     val isFolder = obj.kind == "folder"
     val blocked = if (isFolder) folderDescendants(sync, obj.id) + obj.id else emptySet()
     val current = if (isFolder) folderParent(sync, obj) else obj.data.optString("folder").takeIf { it.isNotEmpty() && it != "null" }
-    val targets = sync.all("folder").filter { it.id !in blocked && it.share == obj.share && it.id != current }
-        .sortedBy { folderPath(sync, it).lowercase() }
-    val field = if (isFolder) "parent" else "folder"
+    val targets = sync.all("folder").filter { it.id !in blocked && it.id != current }
+        .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
+    fun move(target: SyncObject?) {
+        if (sync.shareAfterMove(obj, target?.id) != obj.share && obj.owner != sync.userId) {
+            state.toastLater("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+            return
+        }
+        // Into or out of a shared folder everything inside is re-encrypted – runs in the background.
+        sync.launch {
+            sync.moveToFolder(obj.id, target?.id)
+            state.toastLater("Verschoben")
+        }
+    }
     ActionSheet("„${obj.data.optString("name")}“ verschieben nach", buildList {
-        if (current != null) add(SheetAction(if (isFolder) "Oberste Ebene" else "Kein Ordner") { sync.update(obj.id) { it.remove(field) } })
-        targets.forEach { target -> add(SheetAction(folderPath(sync, target)) { sync.update(obj.id) { it.put(field, target.id) } }) }
+        if (current != null) add(SheetAction(if (isFolder) "Oberste Ebene" else "Kein Ordner") { move(null) })
+        targets.forEach { target -> add(SheetAction(folderPath(sync, target) + if (target.share != null) " (geteilt)" else "") { move(target) }) }
     }, onDone)
 }
 

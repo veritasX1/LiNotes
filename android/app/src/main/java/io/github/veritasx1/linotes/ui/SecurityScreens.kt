@@ -662,7 +662,7 @@ fun ShareScreen(state: AppState, objectId: String, revision: Long) {
     val name = if (obj.kind == "note") io.github.veritasx1.linotes.data.Model.title(obj) else obj.data.optString("name")
     val users = otherUsers(sync)
     val footer = if (!owner) "Geteilt von ${sync.userName(obj.owner)}. Nur wer es erstellt hat, kann die Freigabe ändern."
-    else "Wähle, wer mitlesen und mitbearbeiten darf." + (if (obj.kind == "folder") " Alle Notizen in diesem Ordner werden mitgeteilt." else "") +
+    else "Wähle, wer mitlesen und mitbearbeiten darf." + (if (obj.kind == "folder") " Alles in diesem Ordner wird mitgeteilt – Unterordner, Notizen, Listen und Boards." else "") +
         " Alles bleibt Ende-zu-Ende verschlüsselt."
 
     LargeTitleScreen(title = "$kind teilen", subtitle = name, backLabel = "Zurück", onBack = { state.pop() }) {
