@@ -118,6 +118,49 @@ def empty_note_body():
     return [{"t": "title", "x": ""}]
 
 
+# --- board cards ------------------------------------------------
+
+# Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title.
+PRIORITIES = [(None, "Keine"), ("niedrig", "Niedrig"), ("mittel", "Mittel"), ("hoch", "Hoch")]
+PRIORITY_MARKS = {"niedrig": "!", "mittel": "!!", "hoch": "!!!"}
+
+
+def board_columns(sync, board_id):
+    return sorted((c for c in sync.objects("column") if c["data"].get("board") == board_id),
+                  key=lambda c: c["data"].get("order", 0))
+
+
+def done_fields(sync, board_id, column_id):
+    """A card counts as done while it is in the last column; remember since when."""
+    columns = board_columns(sync, board_id)
+    if columns and columns[-1]["id"] == column_id:
+        return {"done_at": time.time()}
+    return {"done_at": None}
+
+
+def moment_label(timestamp):
+    moment = datetime.datetime.fromtimestamp(timestamp)
+    delta = (datetime.date.today() - moment.date()).days
+    if delta == 0:
+        return f"heute, {moment:%H:%M}"
+    if delta == 1:
+        return f"gestern, {moment:%H:%M}"
+    return moment.strftime("%d.%m.%Y")
+
+
+def card_dates(card):
+    """Erstellt … · Bearbeitet … · Erledigt … (whatever is known)."""
+    data = card["data"]
+    parts = []
+    if data.get("created"):
+        parts.append("Erstellt " + moment_label(data["created"]))
+    if card.get("updated") and (not data.get("created") or card["updated"] - data["created"] > 60):
+        parts.append("Bearbeitet " + moment_label(card["updated"]))
+    if data.get("done_at"):
+        parts.append("Erledigt " + moment_label(data["done_at"]))
+    return " · ".join(parts)
+
+
 # --- default containers -----------------------------------------
 
 def default_private_folder(user_id):

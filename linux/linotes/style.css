@@ -260,3 +260,13 @@ button.text-highlight {
     padding: 0;
 }
 
+/* Board cards: priority marks and the quiet date line in the card dialog */
+.card-priority {
+  color: var(--accent-color);
+  font-weight: 800;
+}
+
+.card-dates {
+  font-size: 9pt;
+  opacity: 0.55;
+}

@@ -60,6 +60,36 @@ import java.time.LocalDate
 val CARD_COLORS = listOf("rot" to Color(0xFFE0463A), "orange" to Color(0xFFF08C00), "gelb" to Color(0xFFE6B800),
     "grün" to Color(0xFF2FA84F), "blau" to Color(0xFF2B7DE0), "lila" to Color(0xFF9B59D0))
 
+/** Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title. */
+val PRIORITIES = listOf("" to "Keine", "niedrig" to "Niedrig", "mittel" to "Mittel", "hoch" to "Hoch")
+val PRIORITY_MARKS = mapOf("niedrig" to "!", "mittel" to "!!", "hoch" to "!!!")
+
+/** A card counts as done while it is in the last column; remember since when. */
+fun markDone(data: JSONObject, columns: List<SyncObject>, columnId: String) {
+    if (columns.lastOrNull()?.id == columnId) data.put("done_at", Model.now()) else data.remove("done_at")
+}
+
+private fun momentLabel(seconds: Double): String {
+    val moment = java.time.Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
+    val time = "%02d:%02d".format(moment.hour, moment.minute)
+    return when (java.time.temporal.ChronoUnit.DAYS.between(moment.toLocalDate(), LocalDate.now())) {
+        0L -> "heute, $time"
+        1L -> "gestern, $time"
+        else -> "%02d.%02d.%d".format(moment.dayOfMonth, moment.monthValue, moment.year)
+    }
+}
+
+/** Erstellt … · Bearbeitet … · Erledigt … (whatever is known). */
+fun cardDates(card: SyncObject): String {
+    val created = card.data.optDouble("created", 0.0)
+    val done = card.data.optDouble("done_at", 0.0)
+    return buildList {
+        if (created > 0) add("Erstellt " + momentLabel(created))
+        if (card.updated > 0 && (created <= 0 || card.updated - created > 60)) add("Bearbeitet " + momentLabel(card.updated))
+        if (done > 0) add("Erledigt " + momentLabel(done))
+    }.joinToString(" · ")
+}
+
 @Composable
 fun BoardsScreen(state: AppState, revision: Long) {
     val sync = state.sync
@@ -159,7 +189,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
                     AddCardField(colors.accent) { title ->
                         val order = (columnCards.lastOrNull()?.data?.optDouble("order", 0.0) ?: 0.0) + 1
                         sync.put("card", JSONObject().put("board", boardId).put("column", column.id).put("title", title)
-                            .put("order", order).put("created_by", sync.userId), board.share)
+                            .put("order", order).put("created_by", sync.userId).put("created", Model.now()), board.share)
                     }
                 }
             }
@@ -171,7 +201,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
         ActionSheet("„${card.data.optString("title")}“ verschieben nach", columns.filter { it.id != card.data.optString("column") }.map { column ->
             SheetAction(column.data.optString("name")) {
                 val last = cards.filter { it.data.optString("column") == column.id }.maxOfOrNull { it.data.optDouble("order", 0.0) } ?: 0.0
-                sync.update(card.id) { it.put("column", column.id).put("order", last + 1) }
+                sync.update(card.id) { it.put("column", column.id).put("order", last + 1); markDone(it, columns, column.id) }
             }
         } + SheetAction("Karte löschen", destructive = true) { sync.delete(card.id) }) { moving = null }
     }
@@ -222,18 +252,29 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, onClick
             Box(Modifier.width(36.dp).height(5.dp).clip(CircleShape).background(color))
             Spacer(Modifier.height(6.dp))
         }
-        Text(data.optString("title"), style = Type.headline, color = colors.label)
+        val mark = PRIORITY_MARKS[data.optString("priority")]
+        Row {
+            if (mark != null) {
+                Text(mark, style = Type.headline.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = colors.accentText)
+                Spacer(Modifier.width(5.dp))
+            }
+            Text(data.optString("title"), style = Type.headline, color = colors.label)
+        }
         if (data.optString("notes").isNotEmpty()) {
             Text(data.optString("notes").take(140), style = Type.footnote, color = colors.secondary)
         }
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
+        val doneAt = data.optDouble("done_at", 0.0).takeIf { isLast && it > 0 }
         val assignee = data.optInt("assignee")
-        if (due != null || assignee != 0) {
+        if (due != null || doneAt != null || assignee != 0) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (due != null) {
                     val overdue = due.isBefore(LocalDate.now()) && !isLast
                     Text("Fällig: " + dueLabel(due), style = Type.footnote, color = if (overdue) colors.red else colors.secondary, modifier = Modifier.weight(1f))
+                } else if (doneAt != null) {
+                    val day = java.time.Instant.ofEpochMilli((doneAt * 1000).toLong()).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    Text("Erledigt: " + dueLabel(day), style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
                 } else Spacer(Modifier.weight(1f))
                 if (assignee != 0) {
                     Text(state.sync.userName(assignee), style = Type.caption, color = colors.label,
@@ -285,6 +326,7 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
     var assignee by remember { mutableStateOf(card.data.optInt("assignee")) }
     var color by remember { mutableStateOf(card.data.optString("color").takeIf { it.isNotEmpty() && it != "null" }) }
     var column by remember { mutableStateOf(card.data.optString("column")) }
+    var priority by remember { mutableStateOf(card.data.optString("priority").takeIf { it in PRIORITY_MARKS } ?: "") }
 
     fun save() {
         sync.update(cardId) { data ->
@@ -293,9 +335,11 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
             if (due != null) data.put("due", due) else data.remove("due")
             if (assignee != 0) data.put("assignee", assignee) else data.remove("assignee")
             if (color != null) data.put("color", color) else data.remove("color")
+            if (priority.isNotEmpty()) data.put("priority", priority) else data.remove("priority")
             if (column != data.optString("column")) {
                 data.put("column", column)
                 data.put("order", Model.now())
+                markDone(data, columns, column)
             }
         }
         onDone()
@@ -326,6 +370,7 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                 FormSection {
                     PickerRow("Spalte", columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
                     PickerRow("Zuständig", listOf(0 to "Niemand") + sync.users.map { it.id to it.name }, assignee, divider = true) { assignee = it }
+                    PickerRow("Priorität", PRIORITIES, priority, divider = true) { priority = it }
                     val label = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "%02d.%02d.%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "Kein Datum"
                     GroupRow("Fällig", detail = label, chevron = false, divider = due != null) {
                         val start = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
@@ -350,6 +395,10 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                 Spacer(Modifier.height(16.dp))
                 FormSection {
                     GroupRow("Karte löschen", chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
+                }
+                val dates = cardDates(card)
+                if (dates.isNotEmpty()) {
+                    Text(dates, style = Type.footnote, color = colors.secondary, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 12.dp))
                 }
             }
         }

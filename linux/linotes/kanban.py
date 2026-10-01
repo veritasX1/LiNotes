@@ -1,6 +1,7 @@
 """Kanban board for tasks: columns with cards, drag and drop between them."""
 
 import datetime
+import time
 
 import gi
 
@@ -9,6 +10,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
+from . import model
 from .dialogs import ask_text, confirm
 from .lists import share_label
 
@@ -57,9 +59,19 @@ class CardWidget(Gtk.Box):
             strip.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             self.append(strip)
 
-        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True)
+        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True)
         title.add_css_class("card-title")
-        self.append(title)
+        mark = model.PRIORITY_MARKS.get(data.get("priority"))
+        if mark:
+            line = Gtk.Box(spacing=5)
+            priority = Gtk.Label(label=mark, valign=Gtk.Align.START)
+            priority.add_css_class("card-priority")
+            priority.set_tooltip_text("Priorität: " + dict(model.PRIORITIES)[data["priority"]])
+            line.append(priority)
+            line.append(title)
+            self.append(line)
+        else:
+            self.append(title)
         if data.get("notes"):
             notes = Gtk.Label(label=data["notes"][:140], xalign=0, wrap=True)
             notes.add_css_class("card-meta")
@@ -73,6 +85,10 @@ class CardWidget(Gtk.Box):
             if day < datetime.date.today() and not board.is_last_column(data.get("column")):
                 due.add_css_class("card-overdue")
             meta.append(due)
+        elif data.get("done_at") and board.is_last_column(data.get("column")):
+            done = Gtk.Label(label="Erledigt: " + due_label(datetime.date.fromtimestamp(data["done_at"])), xalign=0)
+            done.add_css_class("card-meta")
+            meta.append(done)
         spacer = Gtk.Box(hexpand=True)
         meta.append(spacer)
         if data.get("assignee"):
@@ -322,7 +338,7 @@ class BoardView(Gtk.Box):
         order = (cards[-1]["data"].get("order", 0) + 1) if cards else 1
         self.sync.put("card", {
             "board": self.board_id, "column": column_id, "title": title,
-            "order": order, "created_by": self.sync.user_id,
+            "order": order, "created_by": self.sync.user_id, "created": time.time(),
         }, board.get("share"))
 
     def move_card(self, card_id, column_id, index):
@@ -341,7 +357,10 @@ class BoardView(Gtk.Box):
             order = before + 1
         else:
             order = (before + after) / 2
-        self.sync.update(card_id, column=column_id, order=order)
+        fields = {"column": column_id, "order": order}
+        if column_id != card["data"].get("column"):
+            fields.update(model.done_fields(self.sync, self.board_id, column_id))
+        self.sync.update(card_id, **fields)
 
     def add_column(self):
         def create(name, _choice):
@@ -420,6 +439,11 @@ class CardDialog(Adw.Dialog):
         self.assignee.set_selected(ids.index(data.get("assignee")) if data.get("assignee") in ids else 0)
         group.add(self.assignee)
 
+        priorities = [key for key, _label in model.PRIORITIES]
+        self.priority_row = Adw.ComboRow(title="Priorität", model=Gtk.StringList.new([label for _key, label in model.PRIORITIES]))
+        self.priority_row.set_selected(priorities.index(data.get("priority")) if data.get("priority") in priorities else 0)
+        group.add(self.priority_row)
+
         self.due_switch = Adw.SwitchRow(title="Fälligkeitsdatum")
         day = parse_due(data.get("due"))
         self.due_switch.set_active(day is not None)
@@ -476,6 +500,12 @@ class CardDialog(Adw.Dialog):
         self.notes.set_bottom_margin(8)
         notes_group.add(self.notes)
         page.add(notes_group)
+        dates = model.card_dates(card)
+        if dates:
+            info = Gtk.Label(label=dates, xalign=0, wrap=True)
+            info.add_css_class("card-dates")
+            info.set_margin_top(8)
+            notes_group.add(info)
 
         actions = Adw.PreferencesGroup()
         buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END)
@@ -521,9 +551,11 @@ class CardDialog(Adw.Dialog):
             "assignee": self.users[self.assignee.get_selected()][0],
             "due": due,
             "color": self.color,
+            "priority": model.PRIORITIES[self.priority_row.get_selected()][0],
         }
         if column and column != card["data"].get("column"):
             fields["column"] = column
+            fields.update(model.done_fields(self.sync, card["data"].get("board"), column))
             others = self.board.cards(column)
             fields["order"] = (others[-1]["data"].get("order", 0) + 1) if others else 1
         if any(card["data"].get(key) != value for key, value in fields.items()):
