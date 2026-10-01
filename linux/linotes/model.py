@@ -71,6 +71,30 @@ def modified(obj):
     return obj["data"].get("modified") or obj.get("updated") or 0
 
 
+def created(obj):
+    return obj["data"].get("created") or modified(obj)
+
+
+NOTE_SORTS = (("modified", "Bearbeitungsdatum"), ("created", "Erstellungsdatum"), ("title", "Titel"))
+
+
+def sort_notes(notes, order="modified"):
+    """Like Apple: pinned notes first, then by edit date, creation date (both
+    newest first, grouped by day) or title (A–Z, no date groups).
+    Returns [(note, group, timestamp shown in the row)]."""
+    stamp = created if order == "created" else modified
+    pinned = [note for note in notes if note["data"].get("pinned") and not note["data"].get("trashed")]
+    others = [note for note in notes if note not in pinned]
+    for part in (pinned, others):
+        if order == "title":
+            part.sort(key=lambda note: note_title(note).casefold())
+        else:
+            part.sort(key=stamp, reverse=True)
+    return [(note, "Angeheftet", stamp(note)) for note in pinned] + \
+        [(note, ("Notizen" if pinned else "") if order == "title" else date_group(stamp(note)), stamp(note))
+         for note in others]
+
+
 def date_group(timestamp, today=None):
     """Heute / Gestern / Vorherige 7 Tage / Vorherige 30 Tage / Monat Jahr."""
     today = today or datetime.date.today()

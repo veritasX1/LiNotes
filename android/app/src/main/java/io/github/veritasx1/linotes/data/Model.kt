@@ -73,6 +73,25 @@ object Model {
     private fun date(seconds: Double): LocalDate =
         Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(ZoneId.systemDefault()).toLocalDate()
 
+    fun created(obj: SyncObject): Double = obj.data.optDouble("created", Double.NaN).let { if (it.isNaN()) modified(obj) else it }
+
+    val NOTE_SORTS = listOf("modified" to "Bearbeitungsdatum", "created" to "Erstellungsdatum", "title" to "Titel")
+
+    class Sorted(val note: SyncObject, val group: String, val stamp: Double)
+
+    /** Like Apple (and linux/linotes/model.py sort_notes): pinned first, then edit date,
+     *  creation date (newest first, grouped by day) or title (A–Z, no date groups). */
+    fun sortNotes(notes: List<SyncObject>, order: String, pinnedFirst: Boolean = true): List<Sorted> {
+        val stamp: (SyncObject) -> Double = if (order == "created") ::created else ::modified
+        val pinned = if (pinnedFirst) notes.filter { it.data.optBoolean("pinned") && !it.data.has("trashed") } else emptyList()
+        val others = notes - pinned.toSet()
+        fun arrange(part: List<SyncObject>) =
+            if (order == "title") part.sortedBy { title(it).lowercase() } else part.sortedByDescending(stamp)
+        return arrange(pinned).map { Sorted(it, "Angeheftet", stamp(it)) } + arrange(others).map {
+            Sorted(it, if (order == "title") (if (pinned.isNotEmpty()) "Notizen" else "") else dateGroup(stamp(it)), stamp(it))
+        }
+    }
+
     fun dateGroup(seconds: Double): String {
         val today = LocalDate.now()
         val day = date(seconds)
