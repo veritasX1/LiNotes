@@ -2,6 +2,7 @@ package io.github.veritasx1.linotes.ui
 
 import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.data.SyncObject
+import org.json.JSONObject
 
 // Folder tree – same rules as linux/linotes/model.py (folder_parent, folder_tree, …).
 
@@ -65,17 +66,7 @@ fun MoveToFolderSheet(state: AppState, obj: SyncObject, onDone: () -> Unit) {
     val current = if (isFolder) folderParent(sync, obj) else obj.data.optString("folder").takeIf { it.isNotEmpty() && it != "null" }
     val targets = sync.all("folder").filter { it.id !in blocked && it.id != current }
         .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
-    fun move(target: SyncObject?) {
-        if (sync.shareAfterMove(obj, target?.id) != obj.share && obj.owner != sync.userId) {
-            state.toastLater("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
-            return
-        }
-        // Into or out of a shared folder everything inside is re-encrypted – runs in the background.
-        sync.launch {
-            sync.moveToFolder(obj.id, target?.id)
-            state.toastLater("Verschoben")
-        }
-    }
+    fun move(target: SyncObject?) = moveObjectTo(state, obj.id, target?.id)
     ActionSheet("„${obj.data.optString("name")}“ verschieben nach", buildList {
         if (current != null) add(SheetAction(if (isFolder) "Oberste Ebene" else "Kein Ordner") { move(null) })
         targets.forEach { target -> add(SheetAction(folderPath(sync, target) + if (target.share != null) " (geteilt)" else "") { move(target) }) }
@@ -88,3 +79,55 @@ fun groupByFolder(sync: SyncEngine, objects: List<SyncObject>): List<Pair<SyncOb
     return byFolder.entries.sortedWith(compareBy({ it.key != null }, { it.key?.let { folder -> folderPath(sync, folder).lowercase() } ?: "" }))
         .map { it.key to it.value }
 }
+
+/** Move a note into a folder – from "Verschieben nach …" or by drag and drop. */
+fun moveNoteTo(state: AppState, noteId: String, folderId: String) {
+    val sync = state.sync
+    val note = sync.get(noteId) ?: return
+    val folder = sync.get(folderId)?.takeIf { it.kind == "folder" } ?: return
+    if (note.data.optString("folder") == folderId) return
+    when {
+        folder.share != null && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")
+        folder.share != note.share && note.owner != sync.userId -> state.toastLater("Nur wer die Notiz erstellt hat, kann sie verschieben.")
+        else -> sync.launch {
+            val current = sync.get(noteId) ?: return@launch
+            val data = if (folder.share != current.share) sync.rekeyFiles(current, folder.share) else JSONObject(current.data.toString())
+            data.put("folder", folder.id)
+            sync.put("note", data, folder.share, current.id)
+            state.toastLater("Nach „${folder.data.optString("name")}“ verschoben")
+        }
+    }
+}
+
+/** Move a folder, list or board into a folder (null = top / no folder) – menu or drag and drop. */
+fun moveObjectTo(state: AppState, objectId: String, folderId: String?) {
+    val sync = state.sync
+    val obj = sync.get(objectId) ?: return
+    if (obj.kind == "folder" && folderId != null && folderId in folderDescendants(sync, objectId) + objectId) {
+        state.toastLater("Ein Ordner kann nicht in sich selbst liegen.")
+        return
+    }
+    val field = if (obj.kind == "folder") "parent" else "folder"
+    if (obj.data.optString(field).takeIf { it.isNotEmpty() && it != "null" } == folderId) return
+    if (sync.shareAfterMove(obj, folderId) != obj.share && obj.owner != sync.userId) {
+        state.toastLater("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+        return
+    }
+    // Into or out of a shared folder everything inside is re-encrypted – runs in the background.
+    sync.launch {
+        sync.moveToFolder(objectId, folderId)
+        state.toastLater("Verschoben")
+    }
+}
+
+/** Something dropped onto a folder (folderId) or onto "out of any folder" (null). */
+fun dropOnFolder(state: AppState, payload: String, folderId: String?) {
+    val (kind, id) = payload.split(":", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+    when {
+        kind == "note" && folderId != null -> moveNoteTo(state, id, folderId)
+        kind in setOf("folder", "list", "board") -> moveObjectTo(state, id, folderId)
+    }
+}
+
+fun acceptsOnFolder(payload: String, folderId: String) =
+    payload.substringBefore(":") in setOf("note", "folder", "list", "board") && payload != "folder:$folderId"

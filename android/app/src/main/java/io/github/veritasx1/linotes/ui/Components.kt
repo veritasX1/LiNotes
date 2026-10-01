@@ -210,6 +210,7 @@ fun LazyListScope.section(
     header: String? = null,
     footer: String? = null,
     compact: Boolean = false,
+    headerDrop: Pair<(String) -> Boolean, (String) -> Unit>? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     item(key = key) {
@@ -221,7 +222,9 @@ fun LazyListScope.section(
                     modifier = Modifier.padding(start = 16.dp, bottom = 6.dp).semantics { heading() })
             } else if (header != null) {
                 Text(header, style = Type.title3.copy(fontWeight = FontWeight.Bold), color = colors.label,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp).semantics { heading() })
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (headerDrop != null) Modifier.dropZone(headerDrop.first, headerDrop.second) else Modifier)
+                        .padding(start = 4.dp, bottom = 8.dp).semantics { heading() })
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(colors.surface), content = content)
             if (footer != null) {
@@ -243,16 +246,18 @@ fun GroupRow(
     divider: Boolean = true,
     titleColor: Color = palette.label,
     indent: Dp = 0.dp,
+    modifier: Modifier = Modifier,
+    dragPayload: String? = null,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val colors = palette
     Column(
-        Modifier.fillMaxWidth().combinedClickable(
+        Modifier.fillMaxWidth().then(modifier).combinedClickable(
             enabled = onClick != null || onLongClick != null,
-            onClick = { onClick?.invoke() }, onLongClick = onLongClick,
-        ),
+            onClick = { onClick?.invoke() }, onLongClick = if (dragPayload == null) onLongClick else null,
+        ).then(if (dragPayload != null) Modifier.holdToDrag(dragPayload, onLongClick) else Modifier),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = 16.dp + indent, end = 16.dp, top = 10.dp, bottom = 10.dp),

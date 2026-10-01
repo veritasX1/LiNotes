@@ -120,12 +120,14 @@ fun BoardsScreen(state: AppState, revision: Long) {
     ) {
         if (boards.isEmpty()) item { EmptyState("Keine Boards", glyph = Glyph.Board) }
         // Grouped by folder: unfiled boards first, then one section per folder.
-        for ((folder, group) in groupByFolder(sync, boards)) section("boards-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Boards") {
+        // Drag a board onto a section heading to move it into that folder (or out, on "Boards").
+        for ((folder, group) in groupByFolder(sync, boards)) section("boards-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Boards",
+            headerDrop = Pair({ it.startsWith("board:") }, { dropOnFolder(state, it, folder?.id) })) {
             group.forEachIndexed { index, board ->
                 GroupRow(board.data.optString("name", "Board"), Glyph.Board,
                     subtitle = shareLabel(sync, board),
                     detail = "${cards.count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
-                    divider = index < group.lastIndex, onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
+                    divider = index < group.lastIndex, dragPayload = "board:${board.id}", onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
             }
         }
     }

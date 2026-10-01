@@ -93,11 +93,14 @@ fun FoldersScreen(state: AppState, revision: Long) {
             }
             return@LargeTitleScreen
         }
-        section("mine", header = "Meine Notizen") {
+        // Drag a folder onto the heading to take it to the top level.
+        section("mine", header = "Meine Notizen", headerDrop = Pair({ it.startsWith("folder:") }, { dropOnFolder(state, it, null) })) {
             GroupRow("Alle Notizen", Glyph.Notes, detail = "${live.size}") { state.push(Route.NoteList("all")) }
             folderTree(sync, folders.filter { it.share == null }).forEach { (folder, depth) ->
                 GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder, detail = "${count { it.data.optString("folder") == folder.id }}",
-                    indent = (20 * depth).dp, onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
+                    indent = (20 * depth).dp, dragPayload = "folder:${folder.id}",
+                    modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
+                    onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
             GroupRow("Gesperrt", Glyph.Lock, detail = "${count { it.data.has("enc") }}") { state.push(Route.NoteList("locked")) }
             GroupRow("Zuletzt gelöscht", Glyph.Trash, detail = "${notes.count { it.data.has("trashed") }}", divider = false) {
@@ -114,6 +117,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
             sharedTree.forEachIndexed { index, (folder, depth) ->
                 GroupRow(folder.data.optString("name", "Ordner"), if (depth == 0) Glyph.FolderShared else Glyph.Folder,
                     detail = "${count { it.data.optString("folder") == folder.id }}", indent = (20 * depth).dp,
+                    dragPayload = "folder:${folder.id}",
+                    modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
                     divider = index < sharedTree.lastIndex, onLongClick = { folderMenu = folder }) {
                     state.push(Route.NoteList("folder:${folder.id}"))
                 }
@@ -279,6 +284,8 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
             subfolders.forEachIndexed { index, folder ->
                 GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder,
                     detail = "${sync.all("note").count { it.data.optString("folder") == folder.id && !it.data.has("trashed") }}",
+                    dragPayload = "folder:${folder.id}",
+                    modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
                     divider = index < subfolders.lastIndex) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
         }
@@ -286,14 +293,14 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
             folderLists.forEachIndexed { index, list ->
                 GroupRow(list.data.optString("name", "Liste"), Glyph.Cart, tint = listColor(list),
                     detail = "${sync.all("item").count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }}",
-                    divider = index < folderLists.lastIndex) { state.push(Route.ListDetail(list.id)) }
+                    dragPayload = "list:${list.id}", divider = index < folderLists.lastIndex) { state.push(Route.ListDetail(list.id)) }
             }
         }
         if (folderBoards.isNotEmpty() && query.isBlank()) section("folder-boards", header = "Boards") {
             folderBoards.forEachIndexed { index, board ->
                 GroupRow(board.data.optString("name", "Board"), Glyph.Board,
                     detail = "${sync.all("card").count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
-                    divider = index < folderBoards.lastIndex) { state.push(Route.Board(board.id)) }
+                    dragPayload = "board:${board.id}", divider = index < folderBoards.lastIndex) { state.push(Route.Board(board.id)) }
             }
         }
         val folderHasMore = subfolders.isNotEmpty() || folderLists.isNotEmpty() || folderBoards.isNotEmpty()
@@ -382,7 +389,8 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: ((
     val colors = palette
     val sync = state.sync
     val image = Model.image(note)
-    Column(Modifier.fillMaxWidth().background(colors.surface).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+    // Hold and move to drag the note onto a folder; hold and release for the menu.
+    Column(Modifier.fillMaxWidth().background(colors.surface).combinedClickable(onClick = onClick).holdToDrag("note:${note.id}", onLongClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,18 +448,6 @@ fun MoveSheet(state: AppState, note: SyncObject, onDone: () -> Unit) {
         .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
     ActionSheet("Verschieben nach", folders.map { folder ->
         val label = folderPath(sync, folder) + if (folder.share != null) " (geteilt)" else ""
-        SheetAction(label) {
-            when {
-                folder.share != null && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")
-                folder.share != note.share && note.owner != sync.userId -> state.toastLater("Nur wer die Notiz erstellt hat, kann sie verschieben.")
-                else -> sync.launch {
-                    val current = sync.get(note.id) ?: return@launch
-                    val data = if (folder.share != current.share) sync.rekeyFiles(current, folder.share) else JSONObject(current.data.toString())
-                    data.put("folder", folder.id)
-                    sync.put("note", data, folder.share, current.id)
-                    state.toastLater("Nach „${folder.data.optString("name")}“ verschoben")
-                }
-            }
-        }
+        SheetAction(label) { moveNoteTo(state, note.id, folder.id) }
     }, onDone)
 }
