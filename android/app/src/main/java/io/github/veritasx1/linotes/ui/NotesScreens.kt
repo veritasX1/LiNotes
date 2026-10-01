@@ -146,36 +146,9 @@ fun FoldersScreen(state: AppState, revision: Long) {
             newFolder = false
         }
     }
-    newSubfolder?.let { parent ->
-        AlertDialog("Neuer Unterordner", "Neuer Ordner in „${parent.data.optString("name")}“.", "Sichern",
-            fields = listOf(AlertField("Name")), onDismiss = { newSubfolder = null }) { values ->
-            // A subfolder lives where its parent lives (private or in the parent's share).
-            if (values[0].isNotBlank()) sync.put("folder", JSONObject().put("name", values[0].trim()).put("order", Model.now())
-                .put("parent", parent.id), parent.share)
-            newSubfolder = null
-        }
-    }
+    newSubfolder?.let { parent -> CreateInFolder(state, parent, "folder") { newSubfolder = null } }
     movingFolder?.let { folder -> MoveToFolderSheet(state, folder) { movingFolder = null } }
-    newHere?.let { (folder, kind) ->
-        AlertDialog(if (kind == "list") "Neue Liste" else "Neues Board", "In „${folder.data.optString("name")}“.", "Erstellen",
-            fields = listOf(AlertField(if (kind == "list") "z. B. Drogerie" else "z. B. Haushalt")), onDismiss = { newHere = null }) { values ->
-            if (values[0].isNotBlank()) {
-                // New lists and boards live where their folder lives (private or in its share).
-                val data = JSONObject().put("name", values[0].trim()).put("order", Model.now()).put("folder", folder.id)
-                if (kind == "list") {
-                    val list = sync.put("list", data.put("grocery", true), folder.share)
-                    state.push(Route.ListDetail(list.id))
-                } else {
-                    val board = sync.put("board", data, folder.share)
-                    Model.defaultColumns.forEachIndexed { order, (_, name) ->
-                        sync.put("column", JSONObject().put("board", board.id).put("name", name).put("order", order), folder.share)
-                    }
-                    state.push(Route.Board(board.id))
-                }
-            }
-            newHere = null
-        }
-    }
+    newHere?.let { (folder, kind) -> CreateInFolder(state, folder, kind) { newHere = null } }
     folderMenu?.let { folder ->
         val protected = folder.id == Model.privateFolder(sync.userId)
         ActionSheet(folder.data.optString("name"), buildList {
@@ -261,6 +234,8 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     }
     var query by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
+    var createMenu by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf<String?>(null) }
     var moving by remember { mutableStateOf<SyncObject?>(null) }
     var locking by remember { mutableStateOf<Pair<SyncObject, Boolean>?>(null) }
 
@@ -276,6 +251,8 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         subtitle = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
         actions = {
             if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
+            // Inside a folder: create a subfolder, list or board here – the folder as a project's filing place.
+            if (folderId != null) BarButton(Glyph.FolderPlus, "Neu in diesem Ordner") { createMenu = true }
             if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) }
         },
     ) {
@@ -330,6 +307,12 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         )) { menu = null }
     }
     moving?.let { note -> MoveSheet(state, note) { moving = null } }
+    if (createMenu) ActionSheet("Neu in diesem Ordner", listOf(
+        SheetAction("Neuer Unterordner") { creating = "folder" },
+        SheetAction("Neue Liste") { creating = "list" },
+        SheetAction("Neues Board") { creating = "board" },
+    )) { createMenu = false }
+    creating?.let { kind -> sync.get(folderId ?: "")?.let { folder -> CreateInFolder(state, folder, kind) { creating = null } } }
     locking?.let { (note, lock) -> LockFlow(state, note, lock) { locking = null } }
 }
 
