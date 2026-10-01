@@ -76,6 +76,10 @@ def create_app(data_dir=None):
             identity={"pub": user["identity_pub"], "priv": __import__("json").loads(user["identity_sealed"])},
         )
 
+    @app.teardown_request
+    def release_db(_error):
+        store.release()
+
     @app.after_request
     def headers(response):
         response.headers.setdefault("Cache-Control", "no-store")
