@@ -57,7 +57,6 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var shareFile: (file: java.io.File, mime: String, title: String) -> Unit = { _, _, _ -> }
 
     /** Offer to save the key file (right after creating an account). */
-    var askKeyfile by mutableStateOf(false)
 
     /** Incoming link and verification requests (shown as dialogs). */
     val incoming = mutableStateListOf<JSONObject>()

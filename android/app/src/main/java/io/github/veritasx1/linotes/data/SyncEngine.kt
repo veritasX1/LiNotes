@@ -584,6 +584,31 @@ class SyncEngine(private val context: Context) {
         put("settings", JSONObject(existing.toString()).put("keep", value), null, "settings-$userId")
     }
 
+    // --- key file: recommended, never forced (first start stays simple) ---
+
+    private fun settings(): JSONObject = get("settings-$userId")?.data ?: JSONObject()
+
+    private fun updateSettings(change: (JSONObject) -> Unit) {
+        val data = JSONObject(settings().toString())
+        change(data)
+        put("settings", data, null, "settings-$userId")
+    }
+
+    fun keyfileSaved(): Boolean = settings().optDouble("keyfile_saved", 0.0) > 0
+
+    fun markKeyfileSaved() = updateSettings { it.put("keyfile_saved", System.currentTimeMillis() / 1000.0) }
+
+    /** A gentle reminder once the account has been in use for a few days – never at the first start. */
+    fun keyfileHintDue(): Boolean {
+        if (isLocal || keyfileSaved()) return false
+        val now = System.currentTimeMillis() / 1000.0
+        val since = settings().optDouble("since", 0.0)
+        if (since <= 0) { updateSettings { it.put("since", now) }; return false }
+        return now - since > 3 * 86400 && now > settings().optDouble("keyfile_hint_until", 0.0)
+    }
+
+    fun snoozeKeyfileHint() = updateSettings { it.put("keyfile_hint_until", System.currentTimeMillis() / 1000.0 + 30 * 86400) }
+
     fun keepOf(note: SyncObject): String = note.data.optString("keep").ifEmpty { keepDefault() }
 
     fun markOpened(id: String) {

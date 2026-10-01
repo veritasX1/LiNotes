@@ -63,6 +63,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
     var rename by remember { mutableStateOf<SyncObject?>(null) }
     var newSubfolder by remember { mutableStateOf<SyncObject?>(null) }
     var movingFolder by remember { mutableStateOf<SyncObject?>(null) }
+    var keyfileHint by remember { mutableStateOf(sync.keyfileHintDue()) }
+    var keyfile by remember { mutableStateOf(false) }
     var newHere by remember { mutableStateOf<Pair<SyncObject, String>?>(null) }
 
     val notes = remember(revision) { sync.all("note") }
@@ -83,6 +85,18 @@ fun FoldersScreen(state: AppState, revision: Long) {
     ) {
         item(key = "search") {
             SearchField(query, { query = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        if (keyfileHint) item(key = "keyfile-hint") {
+            // A friendly reminder after a few days of use – not at the first start (Tante Erna).
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(16.dp)) {
+                Text("Sichere dein Konto", style = Type.headline, color = colors.label)
+                Text("Mit einer Schlüsseldatei kommst du an deine Notizen, auch wenn dein Handy einmal verloren geht.",
+                    style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+                Row {
+                    TextButton("Jetzt sichern", bold = true) { keyfile = true }
+                    TextButton("Später", color = colors.secondary) { sync.snoozeKeyfileHint(); keyfileHint = false }
+                }
+            }
         }
         if (query.isNotBlank()) {
             val hits = live.filter { Model.text(it).contains(query, true) || Model.title(it).contains(query, true) }
@@ -148,6 +162,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
     }
     newSubfolder?.let { parent -> CreateInFolder(state, parent, "folder") { newSubfolder = null } }
     movingFolder?.let { folder -> MoveToFolderSheet(state, folder) { movingFolder = null } }
+    if (keyfile) KeyfileDialog(state) { keyfile = false; keyfileHint = sync.keyfileHintDue() }
     newHere?.let { (folder, kind) -> CreateInFolder(state, folder, kind) { newHere = null } }
     folderMenu?.let { folder ->
         val protected = folder.id == Model.privateFolder(sync.userId)

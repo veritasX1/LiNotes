@@ -599,6 +599,38 @@ class SyncEngine:
         return data
 
     # ========================================================
+    # KEY FILE – recommended, never forced (first start stays simple)
+    # ========================================================
+
+    def settings(self):
+        obj = self.get(f"settings-{self.user_id}")
+        return dict(obj["data"]) if obj else {}
+
+    def update_settings(self, **fields):
+        data = self.settings()
+        data.update(fields)
+        self.put("settings", data, None, f"settings-{self.user_id}")
+
+    def keyfile_saved(self):
+        return bool(self.settings().get("keyfile_saved"))
+
+    def mark_keyfile_saved(self):
+        self.update_settings(keyfile_saved=time.time())
+
+    def keyfile_hint_due(self):
+        """A gentle reminder once the account has been in use for a few days."""
+        if not self.server or self.keyfile_saved():
+            return False
+        data = self.settings()
+        if not data.get("since"):
+            self.update_settings(since=time.time())
+            return False
+        return time.time() - data["since"] > 3 * 86400 and time.time() > data.get("keyfile_hint_until", 0)
+
+    def snooze_keyfile_hint(self):
+        self.update_settings(keyfile_hint_until=time.time() + 30 * 86400)
+
+    # ========================================================
     # NOTIFICATIONS
     # ========================================================
 

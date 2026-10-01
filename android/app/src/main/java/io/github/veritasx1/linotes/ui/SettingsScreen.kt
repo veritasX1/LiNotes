@@ -35,7 +35,8 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow(sync.user?.name ?: "", Glyph.Person, subtitle = "@${sync.user?.username}", chevron = false)
             GroupRow(if (online) "Verbunden mit ${sync.server.removePrefix("https://")}" else "Offline – Änderungen werden später übertragen",
                 if (online) Glyph.Cloud else Glyph.CloudOff, tint = if (online) colors.accent else colors.red, chevron = false)
-            GroupRow("Schlüsseldatei sichern …", Glyph.Key, divider = false) { keyfile = true }
+            // Recommended, never forced at the first start.
+            GroupRow("Schlüsseldatei sichern …", Glyph.Key, detail = if (sync.keyfileSaved()) null else "Empfohlen", divider = false) { keyfile = true }
         }
         if (!sync.isLocal) section("people", header = "Personen", compact = true, footer = "Verifiziere Personen, bevor du etwas mit ihnen teilst.") {
             val others = otherUsers(sync)
@@ -75,7 +76,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
         }
     }
 
-    if (keyfile) KeyfileDialog(state, firstTime = false) { keyfile = false }
+    if (keyfile) KeyfileDialog(state) { keyfile = false }
     if (keepChoice) {
         ActionSheet("Notizen auf dem Handy behalten", Keep.choices.map { (value, label) ->
             SheetAction(label + if (value == sync.keepDefault()) " ✓" else "") { sync.setKeepDefault(value); sync.evict() }

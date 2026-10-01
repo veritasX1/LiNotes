@@ -95,7 +95,6 @@ fun LiNotesApp(state: AppState) {
             }
             if (state.signedIn) {
                 IncomingRequests(state)
-                if (state.askKeyfile) KeyfileDialog(state, firstTime = true) { state.askKeyfile = false }
             }
             QrScannerOverlay(state)
             Toast(state.toast)
