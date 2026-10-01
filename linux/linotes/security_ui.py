@@ -757,7 +757,10 @@ HELP = [
         ("Listen", "Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen "
          "einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis."),
         ("Aufgaben-Board", "Karten per Ziehen zwischen Spalten verschieben. Ein Klick öffnet Fälligkeit, Zuständigkeit, "
-         "Farbe und Notizen."),
+         "Priorität, Farbe und Notizen."),
+        ("Entwicklungsprojekt", "Rechtsklick auf ein Board → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten "
+         "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche "
+         "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt."),
     ]),
     ("Datenschutz", [
         ("Was der Server weiß", "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, "

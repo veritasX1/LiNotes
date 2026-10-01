@@ -237,10 +237,7 @@ def cmd_move(card_ref, column_ref):
     col = find(eng, "column", column_ref, board=card["data"]["board"])
     others = cards(eng, col["id"])
     order = (others[-1]["data"].get("order", 0) + 1) if others else 1
-    fields = {"column": col["id"], "order": order}
-    if col["id"] != card["data"].get("column"):
-        fields.update(model.done_fields(eng, card["data"]["board"], col["id"]))
-    eng.update(card["id"], notify=False, **fields)
+    eng.update(card["id"], notify=False, order=order, **model.move_fields(eng, card, col["id"]))
     flush(eng)
     print(f"„{card['data'].get('title')}“ → {col['data'].get('name')}")
 
@@ -272,7 +269,7 @@ def cmd_add(board_ref, column_ref, title, notes=""):
     others = cards(eng, col["id"])
     order = (others[-1]["data"].get("order", 0) + 1) if others else 1
     eng.put("card", {"board": board["id"], "column": col["id"], "title": title,
-                     "notes": notes, "order": order, "created_by": eng.user_id, "created": time.time()},
+                     "notes": notes, "order": order, **model.new_card_fields(eng, col["id"])},
             board.get("share"), notify=False)
     flush(eng)
     print("ok")

@@ -1,7 +1,6 @@
 """Kanban board for tasks: columns with cards, drag and drop between them."""
 
 import datetime
-import time
 
 import gi
 
@@ -89,6 +88,11 @@ class CardWidget(Gtk.Box):
             done = Gtk.Label(label="Erledigt: " + due_label(datetime.date.fromtimestamp(data["done_at"])), xalign=0)
             done.add_css_class("card-meta")
             meta.append(done)
+        if board.is_dev():
+            ident = Gtk.Label(label=model.short_id(card["id"]), xalign=0)
+            ident.add_css_class("card-id")
+            ident.set_tooltip_text("Karten-ID – in Commits und Berichten zitieren")
+            meta.append(ident)
         spacer = Gtk.Box(hexpand=True)
         meta.append(spacer)
         if data.get("assignee"):
@@ -237,6 +241,9 @@ class BoardView(Gtk.Box):
     def board(self):
         return self.sync.get(self.board_id)
 
+    def is_dev(self):
+        return model.is_dev_board(self.sync, self.board_id)
+
     def columns(self):
         return sorted(
             (column for column in self.sync.objects("column") if column["data"].get("board") == self.board_id),
@@ -286,7 +293,7 @@ class BoardView(Gtk.Box):
             total += len(cards)
             self.columns_box.append(ColumnWidget(self, column, cards))
         where = share_label(self.sync, board)
-        self.subtitle.set_label(f"{total} Karten · {where}")
+        self.subtitle.set_label(f"{total} Karten · {where}" + (" · Entwicklungsprojekt" if self.is_dev() else ""))
         self.restore_scroll(scroll, typing[0] if typing and typing[3] else None)
         if typing:
             # Erst nach dem Layout lässt sich das neue Feld fokussieren.
@@ -338,7 +345,7 @@ class BoardView(Gtk.Box):
         order = (cards[-1]["data"].get("order", 0) + 1) if cards else 1
         self.sync.put("card", {
             "board": self.board_id, "column": column_id, "title": title,
-            "order": order, "created_by": self.sync.user_id, "created": time.time(),
+            "order": order, **model.new_card_fields(self.sync, column_id),
         }, board.get("share"))
 
     def move_card(self, card_id, column_id, index):
@@ -357,10 +364,7 @@ class BoardView(Gtk.Box):
             order = before + 1
         else:
             order = (before + after) / 2
-        fields = {"column": column_id, "order": order}
-        if column_id != card["data"].get("column"):
-            fields.update(model.done_fields(self.sync, self.board_id, column_id))
-        self.sync.update(card_id, **fields)
+        self.sync.update(card_id, order=order, **model.move_fields(self.sync, card, column_id))
 
     def add_column(self):
         def create(name, _choice):
@@ -500,12 +504,16 @@ class CardDialog(Adw.Dialog):
         self.notes.set_bottom_margin(8)
         notes_group.add(self.notes)
         page.add(notes_group)
-        dates = model.card_dates(card)
+        dev = board.is_dev()
+        dates = model.card_dates(card, dev)
         if dates:
             info = Gtk.Label(label=dates, xalign=0, wrap=True)
             info.add_css_class("card-dates")
             info.set_margin_top(8)
             notes_group.add(info)
+
+        if dev:
+            page.add(self.build_history(card))
 
         actions = Adw.PreferencesGroup()
         buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END)
@@ -524,6 +532,26 @@ class CardDialog(Adw.Dialog):
         self.set_child(view)
         self.connect("closed", lambda _dialog: self.save())
         self.deleted = False
+
+    def build_history(self, card):
+        """Development projects: card id and who moved the card where, when."""
+        group = Adw.PreferencesGroup(title="Nachverfolgung")
+        ident = Adw.ActionRow(title="Karten-ID", subtitle=card["id"])
+        ident.set_subtitle_selectable(True)
+        copy = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Kurz-ID kopieren")
+        copy.add_css_class("flat")
+        copy.connect("clicked", lambda _b: self.get_clipboard().set(model.short_id(card["id"])))
+        ident.add_suffix(copy)
+        group.add(ident)
+        history = card["data"].get("history") or []
+        if not history:
+            group.add(Adw.ActionRow(title="Verlauf", subtitle="Noch kein Verlauf – er beginnt mit dem nächsten Verschieben."))
+        for step in reversed(history):
+            moment = datetime.datetime.fromtimestamp(step.get("at", 0))
+            row = Adw.ActionRow(title=step.get("n") or "Spalte",
+                                subtitle=f"{moment:%d.%m.%Y %H:%M} · {self.sync.user_name(step.get('by'))}")
+            group.add(row)
+        return group
 
     def update_checks(self):
         for button in self.color_buttons.values():
@@ -554,8 +582,7 @@ class CardDialog(Adw.Dialog):
             "priority": model.PRIORITIES[self.priority_row.get_selected()][0],
         }
         if column and column != card["data"].get("column"):
-            fields["column"] = column
-            fields.update(model.done_fields(self.sync, card["data"].get("board"), column))
+            fields.update(model.move_fields(self.sync, card, column))
             others = self.board.cards(column)
             fields["order"] = (others[-1]["data"].get("order", 0) + 1) if others else 1
         if any(card["data"].get(key) != value for key, value in fields.items()):

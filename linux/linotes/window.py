@@ -893,10 +893,24 @@ class LiNotesWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("Teilen …", "win.share-object")
         menu.append("Umbenennen …", "win.rename-object")
+        if kind == "board":
+            menu.append("Entwicklungsprojekt ausschalten" if obj["data"].get("dev") else "Als Entwicklungsprojekt führen",
+                        "win.toggle-dev")
         protected = object_id == model.default_private_folder(self.sync.user_id)
         if not protected:
             menu.append("Löschen …", "win.delete-object")
         self.popup_menu(menu, widget, x, y)
+
+    def toggle_dev(self):
+        """Development projects show card ids, the status history and the trace fields."""
+        board = self.sync.get(getattr(self, "menu_target", ""))
+        if board is None or board["kind"] != "board":
+            return
+        dev = not board["data"].get("dev")
+        self.sync.update(board["id"], dev=dev)
+        self.toast(f"„{board['data'].get('name', 'Board')}“ ist jetzt ein Entwicklungsprojekt." if dev
+                   else f"„{board['data'].get('name', 'Board')}“ ist wieder ein einfaches Board.")
+        self.refresh_all()
 
     def rename_object(self):
         obj = self.sync.get(getattr(self, "menu_target", ""))
@@ -980,6 +994,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "new-list": self.new_list,
             "new-board": self.new_board,
             "rename-object": self.rename_object,
+            "toggle-dev": self.toggle_dev,
             "delete-object": self.delete_object,
             "invite": self.invite,
             "people": lambda: security_ui.PeopleDialog(self).present(self),
