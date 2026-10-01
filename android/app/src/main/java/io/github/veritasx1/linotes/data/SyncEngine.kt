@@ -325,7 +325,10 @@ class SyncEngine(private val context: Context) {
             for (field in listOf("body", "enc")) if (meta.has(field)) { body.put(field, meta.get(field)); meta.remove(field) }
             meta.remove("evicted")
             // Title and first line stay readable (for us) when only the metadata is kept on the phone.
-            meta.remove("title"); meta.remove("preview")
+            // Locked notes keep their title visible (like Apple's Notes) – still end-to-end
+            // encrypted like all metadata; the preview would leak content.
+            if (!data.has("enc")) meta.remove("title")
+            meta.remove("preview")
             data.optJSONArray("body")?.let { blocks ->
                 val lines = (0 until blocks.length()).mapNotNull { blocks.optJSONObject(it)?.optString("x")?.trim() }.filter { it.isNotEmpty() }
                 meta.put("title", lines.firstOrNull()?.take(120) ?: "").put("preview", lines.drop(1).joinToString(" ").take(160))

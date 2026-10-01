@@ -336,7 +336,10 @@ class SyncEngine:
                 meta["title"] = lines[0][:120] if lines else ""
                 meta["preview"] = " ".join(lines[1:])[:160]
             else:
-                meta.pop("title", None)
+                # Locked notes keep their title visible (like Apple's Notes) – it stays
+                # end-to-end encrypted like all metadata; the preview would leak content.
+                if "enc" not in data:
+                    meta.pop("title", None)
                 meta.pop("preview", None)
             return {"v": 2, "m": e2e.seal(key, meta, f"{object_id}|m"), "b": e2e.seal(key, body, f"{object_id}|b")}
         return {"v": 2, "m": e2e.seal(key, data, f"{object_id}|m")}
