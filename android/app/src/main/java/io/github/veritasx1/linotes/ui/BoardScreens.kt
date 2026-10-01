@@ -351,6 +351,11 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
     var color by remember { mutableStateOf(card.data.optString("color").takeIf { it.isNotEmpty() && it != "null" }) }
     var column by remember { mutableStateOf(card.data.optString("column")) }
     var priority by remember { mutableStateOf(card.data.optString("priority").takeIf { it in PRIORITY_MARKS } ?: "") }
+    val dev = isDevBoard(sync.get(card.data.optString("board")))
+    fun text(key: String) = card.data.optString(key).takeIf { it != "null" }.orEmpty()
+    var impact by remember { mutableStateOf(text("impact")) }
+    var verification by remember { mutableStateOf(text("verification")) }
+    var version by remember { mutableStateOf(text("version")) }
 
     fun save() {
         sync.update(cardId) { data ->
@@ -360,6 +365,11 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
             if (assignee != 0) data.put("assignee", assignee) else data.remove("assignee")
             if (color != null) data.put("color", color) else data.remove("color")
             if (priority.isNotEmpty()) data.put("priority", priority) else data.remove("priority")
+            if (dev) {
+                for ((key, value) in listOf("impact" to impact, "verification" to verification, "version" to version)) {
+                    if (value.isNotBlank()) data.put(key, value.trim()) else data.remove(key)
+                }
+            }
             if (column != data.optString("column")) {
                 data.put("column", column)
                 data.put("order", Model.now())
@@ -416,8 +426,11 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                         }
                     }
                 }
-                val dev = isDevBoard(sync.get(card.data.optString("board")))
-                if (dev) TraceSection(sync, card)
+                if (dev) {
+                    FormSection("Auswirkungsanalyse") { MultiLineField(impact, { impact = it }, "Was ist betroffen, welche Risiken?") }
+                    FormSection("Verifikation") { MultiLineField(verification, { verification = it }, "Tests, Prüfungen und Nachweise") }
+                    TraceSection(sync, card, version) { version = it }
+                }
                 Spacer(Modifier.height(16.dp))
                 FormSection {
                     GroupRow("Karte löschen", chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
@@ -452,12 +465,30 @@ fun FormField(value: String, onChange: (String) -> Unit, placeholder: String) {
 
 /** Development projects: card id and who moved the card where, when. */
 @Composable
-private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card: SyncObject) {
+private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card: SyncObject, version: String, onVersion: (String) -> Unit) {
     val colors = palette
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     FormSection("Nachverfolgung") {
         GroupRow("Karten-ID", detail = shortId(card.id), chevron = false, divider = true) {
             clipboard.setText(androidx.compose.ui.text.AnnotatedString(shortId(card.id)))
+        }
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Version", style = Type.body, color = colors.label, modifier = Modifier.width(110.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                if (version.isEmpty()) Text("z. B. 2.1", style = Type.body, color = colors.tertiary)
+                BasicTextField(version, onVersion, singleLine = true, textStyle = Type.body.copy(color = colors.secondary, textAlign = androidx.compose.ui.text.style.TextAlign.End),
+                    cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
+            }
+        }
+        HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
+        val commits = card.data.optJSONArray("commits")
+        if (commits == null || commits.length() == 0) {
+            GroupRow("Noch keine Commits", subtitle = "Commits mit der Karten-ID werden verknüpft.", chevron = false, divider = true, titleColor = colors.secondary)
+        } else {
+            for (index in 0 until commits.length()) {
+                val commit = commits.getJSONObject(index)
+                GroupRow(commit.optString("s"), subtitle = "Commit " + commit.optString("h"), chevron = false, divider = true)
+            }
         }
         val history = card.data.optJSONArray("history")
         if (history == null || history.length() == 0) {
@@ -471,6 +502,16 @@ private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card
                         moment.hour, moment.minute, sync.userName(step.optInt("by"))))
             }
         }
+    }
+}
+
+@Composable
+private fun MultiLineField(value: String, onChange: (String) -> Unit, placeholder: String) {
+    val colors = palette
+    Box(Modifier.fillMaxWidth().heightIn(min = 70.dp).padding(16.dp)) {
+        if (value.isEmpty()) Text(placeholder, style = Type.body, color = colors.tertiary)
+        BasicTextField(value, onChange, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
+            modifier = Modifier.fillMaxWidth())
     }
 }
 
