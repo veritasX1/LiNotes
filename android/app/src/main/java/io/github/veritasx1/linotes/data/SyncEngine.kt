@@ -469,11 +469,55 @@ class SyncEngine(private val context: Context) {
     // SHARES
     // ================================================================
 
+    /** Objects that move together with `obj` into or out of a share. A folder takes everything
+     *  inside along (like Apple's shared folders): subfolders, their notes, lists with items,
+     *  boards with columns and cards – same as container_members in linux/linotes/sync.py. */
     private fun containerMembers(obj: SyncObject): List<SyncObject> = listOf(obj) + when (obj.kind) {
-        "folder" -> all("note").filter { it.data.optString("folder") == obj.id }
+        "folder" -> {
+            val folders = all("folder")
+            val tree = mutableSetOf(obj.id)
+            val subfolders = mutableListOf<SyncObject>()
+            val todo = ArrayDeque(listOf(obj.id))
+            while (todo.isNotEmpty()) {
+                val parent = todo.removeFirst()
+                for (folder in folders) if (folder.data.optString("parent") == parent && tree.add(folder.id)) { subfolders.add(folder); todo.add(folder.id) }
+            }
+            subfolders + all("note").filter { it.data.optString("folder") in tree } +
+                (all("list") + all("board")).filter { it.data.optString("folder") in tree }.flatMap { containerMembers(it) }
+        }
         "list" -> all("item").filter { it.data.optString("list") == obj.id }
         "board" -> (all("column") + all("card")).filter { it.data.optString("board") == obj.id }
         else -> emptyList()
+    }
+
+    /** Move a folder ("parent") or list/board ("folder") into a folder (null = top / none). Into a
+     *  shared folder it takes on that share with everything inside (re-encrypted); out of it, it
+     *  becomes private again – unless it was shared on its own. Blocking (pictures are re-uploaded). */
+    fun shareAfterMove(obj: SyncObject, folderId: String?): String? {
+        val field = if (obj.kind == "folder") "parent" else "folder"
+        val target = folderId?.let { get(it) }
+        val oldPlace = obj.data.optString(field).takeIf { it.isNotEmpty() && it != "null" }?.let { get(it) }
+        return when {
+            target?.share != null -> target.share
+            obj.share != null && oldPlace?.share == obj.share -> null  // it was shared through its old folder
+            else -> obj.share
+        }
+    }
+
+    fun moveToFolder(objectId: String, folderId: String?) {
+        val obj = get(objectId) ?: return
+        val field = if (obj.kind == "folder") "parent" else "folder"
+        val share = shareAfterMove(obj, folderId)
+        if (share == obj.share) {
+            update(objectId) { if (folderId != null) it.put(field, folderId) else it.remove(field) }
+            return
+        }
+        for (item in containerMembers(obj)) {
+            val full = if (item.evicted) fetchNote(item.id) ?: item else item
+            val data = rekeyFiles(full, share)
+            if (full.id == objectId) { if (folderId != null) data.put(field, folderId) else data.remove(field) }
+            put(full.kind, data, share, full.id)
+        }
     }
 
     fun shareMembers(shareId: String?): List<Int> {

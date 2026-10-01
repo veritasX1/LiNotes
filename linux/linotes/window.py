@@ -946,14 +946,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         is_folder = folder["kind"] == "folder"
         blocked = (model.folder_descendants(self.sync, folder_id) | {folder_id}) if is_folder else set()
-        # For now within the same space; moving between private and shared comes with shared projects.
-        targets = [f for f in self.sync.objects("folder")
-                   if f["id"] not in blocked and f.get("share") == folder.get("share")]
-        targets.sort(key=lambda f: model.folder_path(self.sync, f).lower())
-        choices = [(None, "Oberste Ebene" if is_folder else "Kein Ordner")] + [(f["id"], model.folder_path(self.sync, f)) for f in targets]
+        targets = [f for f in self.sync.objects("folder") if f["id"] not in blocked]
+        targets.sort(key=lambda f: (bool(f.get("share")), model.folder_path(self.sync, f).lower()))
+        choices = [(None, "Oberste Ebene" if is_folder else "Kein Ordner")] + [
+            (f["id"], model.folder_path(self.sync, f) + (" (geteilt)" if f.get("share") else "")) for f in targets]
         current = model.folder_parent(self.sync, folder) if is_folder else (folder["data"].get("folder") or None)
         choices = [choice for choice in choices if choice[0] != current]
-        dialog = Adw.AlertDialog(heading=f"„{folder['data'].get('name', 'Ordner')}“ verschieben nach")
+        dialog = Adw.AlertDialog(heading=f"„{folder['data'].get('name', 'Ordner')}“ verschieben nach",
+                                 body="In einem geteilten Ordner sehen alle, mit denen er geteilt ist, auch den Inhalt.")
         dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
         dialog.set_extra_child(dropdown)
         dialog.add_response("cancel", "Abbrechen")
@@ -964,14 +964,15 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if response != "ok":
                 return
             parent = choices[dropdown.get_selected()][0]
-            if is_folder:
-                self.sync.update(folder_id, parent=parent)
-            else:
-                self.sync.update(folder_id, folder=parent)
+            if self.sync.share_after_move(folder, parent) != folder.get("share") and folder["owner"] != self.sync.user_id:
+                self.toast("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+                return
             if parent:
                 self.sidebar.collapsed.discard(parent)
-            self.refresh_all()
-            self.toast("Verschoben")
+            # Into or out of a shared folder everything inside is re-encrypted – may take a moment.
+            run_async(lambda: self.sync.move_to_folder(folder_id, parent),
+                      lambda _result, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error else self.toast("Verschoben"),
+                                              self.refresh_all()))
 
         dialog.connect("response", on_response)
         dialog.present(self)

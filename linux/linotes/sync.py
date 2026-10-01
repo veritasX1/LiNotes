@@ -484,16 +484,60 @@ class SyncEngine:
     # ========================================================
 
     def container_members(self, obj):
-        """Objects that move together with `obj` into or out of a share."""
+        """Objects that move together with `obj` into or out of a share.
+        A folder takes everything inside along (like Apple's shared folders):
+        subfolders, their notes, lists with their items, boards with columns and cards."""
         kind = obj["kind"]
         result = [obj]
         if kind == "folder":
-            result += [n for n in self.objects("note") if n["data"].get("folder") == obj["id"]]
+            tree, todo = {obj["id"]}, [obj["id"]]
+            folders = self.objects("folder")
+            while todo:
+                parent = todo.pop()
+                for folder in folders:
+                    if folder["data"].get("parent") == parent and folder["id"] not in tree:
+                        tree.add(folder["id"])
+                        todo.append(folder["id"])
+                        result.append(folder)
+            result += [n for n in self.objects("note") if n["data"].get("folder") in tree]
+            for container in self.objects("list") + self.objects("board"):
+                if container["data"].get("folder") in tree:
+                    result += self.container_members(container)
         elif kind == "list":
             result += [i for i in self.objects("item") if i["data"].get("list") == obj["id"]]
         elif kind == "board":
             result += [c for c in self.objects("column") + self.objects("card") if c["data"].get("board") == obj["id"]]
         return result
+
+    def share_after_move(self, obj, folder_id):
+        field = "parent" if obj["kind"] == "folder" else "folder"
+        target = self.get(folder_id) if folder_id else None
+        old_place = self.get(obj["data"].get(field) or "")
+        if target is not None and target.get("share"):
+            return target["share"]
+        if obj.get("share") and old_place is not None and old_place.get("share") == obj.get("share"):
+            return None  # it was shared through its old folder
+        return obj.get("share")
+
+    def move_to_folder(self, object_id, folder_id):
+        """Move a folder (field "parent"), list or board (field "folder") into a folder
+        (None = top / no folder). Into a shared folder it takes on the folder's share
+        with everything inside (re-encrypted); out of it, it becomes private again –
+        unless it was shared on its own. Blocking (pictures are uploaded again)."""
+        obj = self.get(object_id)
+        if obj is None:
+            return
+        field = "parent" if obj["kind"] == "folder" else "folder"
+        share = self.share_after_move(obj, folder_id)
+        if share == obj.get("share"):
+            self.update(object_id, **{field: folder_id})
+            return
+        for item in self.container_members(obj):
+            data = self.rekey_files(item, share)
+            if item["id"] == object_id:
+                data[field] = folder_id
+            self.put(item["kind"], data, share, item["id"], notify=False)
+        self.emit({object_id})
 
     def share_members(self, share_id):
         share = self.get(share_id) if share_id else None

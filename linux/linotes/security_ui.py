@@ -661,7 +661,7 @@ class ShareDialog(Adw.Dialog):
         page_widget = Adw.PreferencesPage()
         description = "Wähle, wer mitlesen und mitbearbeiten darf."
         if obj["kind"] == "folder":
-            description += " Alle Notizen in diesem Ordner werden mitgeteilt."
+            description += " Alles in diesem Ordner wird mitgeteilt – Unterordner, Notizen, Listen und Boards."
         group = Adw.PreferencesGroup(title=obj["data"].get("name") or "", description=description)
         current = set(self.sync.share_members(obj.get("share"))) - {self.sync.user_id}
         self.checks = {}
