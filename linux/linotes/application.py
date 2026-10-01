@@ -19,6 +19,19 @@ class LiNotesApplication(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.sync = None
+        self.start_with_new_note = False
+        # Quick note from anywhere: "linotes --neue-notiz" (dock menu, own keyboard shortcut).
+        self.add_main_option("neue-notiz", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Neue Notiz anlegen", None)
+
+    def do_handle_local_options(self, options):
+        if options.contains("neue-notiz"):
+            self.register(None)
+            if self.get_is_remote():
+                # LiNotes is already running: open the new note there.
+                self.activate_action("new-note", None)
+                return 0
+            self.start_with_new_note = True
+        return -1
 
     def do_startup(self):
         Adw.Application.do_startup(self)
@@ -31,7 +44,7 @@ class LiNotesApplication(Adw.Application):
         css.load_from_path(str(Path(__file__).with_name("style.css")))
         Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
-        for name, callback in (("quit", self.quit_app), ("about", self.about)):
+        for name, callback in (("quit", self.quit_app), ("about", self.about), ("new-note", self.new_note)):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, function=callback: function())
             self.add_action(action)
@@ -43,6 +56,18 @@ class LiNotesApplication(Adw.Application):
             self.sync = SyncEngine()
         window = self.get_active_window() or LiNotesWindow(self, self.sync)
         window.present()
+        if self.start_with_new_note:
+            self.start_with_new_note = False
+            GLib.idle_add(lambda: (self.new_note(), False)[1])
+
+    def new_note(self):
+        if self.sync is None:
+            self.activate()
+            return
+        window = self.get_active_window() or LiNotesWindow(self, self.sync)
+        window.present()
+        if window.pages.get_visible_child_name() == "main":
+            window.new_note()
 
     def quit_app(self):
         for window in self.get_windows():

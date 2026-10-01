@@ -19,6 +19,7 @@ import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.ui.AppState
 import io.github.veritasx1.linotes.ui.LiNotesApp
 import io.github.veritasx1.linotes.ui.Route
+import io.github.veritasx1.linotes.ui.newNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -153,12 +154,26 @@ class MainActivity : FragmentActivity() {
             }
         })
         handleShare(intent)
+        handleNewNote(intent)
         setContent { LiNotesApp(state) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleShare(intent)
+        handleNewNote(intent)
+    }
+
+    /** Quick note from the tile in the quick settings or the app shortcut. */
+    private fun handleNewNote(intent: Intent?) {
+        if (intent?.action != ACTION_NEW_NOTE || !state.signedIn) return
+        state.tab = 0
+        newNote(state, null)
+        intent.action = null
+    }
+
+    companion object {
+        const val ACTION_NEW_NOTE = "io.github.veritasx1.linotes.NEW_NOTE"
     }
 
     /** Text shared from another app becomes a new note. */

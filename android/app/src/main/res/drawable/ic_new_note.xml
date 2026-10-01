@@ -1,0 +1,6 @@
+<!-- Paper with pencil, used for the quick settings tile and the app shortcut. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFB87D00"
+        android:pathData="M5,3h9l-2,2H5v14h14v-7l2,-2v9a2,2 0,0 1,-2 2H5a2,2 0,0 1,-2 -2V5a2,2 0,0 1,2 -2zM18.4,2.6a1.4,1.4 0,0 1,2 0l1,1a1.4,1.4 0,0 1,0 2L13,14l-3.5,1 1,-3.5z"/>
+</vector>

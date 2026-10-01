@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long press on the LiNotes icon: "Neue Notiz". -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new-note"
+        android:enabled="true"
+        android:icon="@drawable/ic_new_note"
+        android:shortcutShortLabel="@string/new_note">
+        <intent
+            android:action="io.github.veritasx1.linotes.NEW_NOTE"
+            android:targetPackage="io.github.veritasx1.linotes"
+            android:targetClass="io.github.veritasx1.linotes.MainActivity" />
+    </shortcut>
+</shortcuts>
