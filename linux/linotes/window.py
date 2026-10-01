@@ -669,27 +669,74 @@ class LiNotesWindow(Adw.ApplicationWindow):
         dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
 
         def on_response(_dialog, response):
-            if response != "ok":
-                return
-            folder = self.sync.get(choices[dropdown.get_selected()][0])
-            share = folder.get("share")
-            if share and note["data"].get("enc"):
-                self.toast("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre.")
-                return
-            if share != note.get("share") and note["owner"] != self.sync.user_id:
-                self.toast("Nur wer die Notiz erstellt hat, kann sie in einen anderen Bereich verschieben.")
-                return
-            current = self.sync.get(note["id"])
-
-            def move():
-                data = self.sync.rekey_files(current, share) if share != current.get("share") else dict(current["data"])
-                data["folder"] = folder["id"]
-                self.sync.put("note", data, share, current["id"])
-
-            run_async(move, lambda *_a: (self.toast(f"Nach „{folder['data'].get('name')}“ verschoben"), self.refresh_list_only()))
+            if response == "ok":
+                self.move_note_to(note["id"], choices[dropdown.get_selected()][0])
 
         dialog.connect("response", on_response)
         dialog.present(self)
+
+    def move_note_to(self, note_id, folder_id):
+        """Move a note into a folder (from the dialog or by drag and drop)."""
+        note = self.sync.get(note_id)
+        folder = self.sync.get(folder_id) if folder_id else None
+        if note is None or folder is None or note["data"].get("folder") == folder_id:
+            return
+        share = folder.get("share")
+        if share and note["data"].get("enc"):
+            self.toast("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre.")
+            return
+        if share != note.get("share") and note["owner"] != self.sync.user_id:
+            self.toast("Nur wer die Notiz erstellt hat, kann sie in einen anderen Bereich verschieben.")
+            return
+
+        def move():
+            current = self.sync.get(note_id)
+            data = self.sync.rekey_files(current, share) if share != current.get("share") else dict(current["data"])
+            data["folder"] = folder["id"]
+            self.sync.put("note", data, share, current["id"], notify=False)
+            self.sync.emit_from_thread({note_id})
+
+        run_async(move, lambda _r, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error
+                                           else self.toast(f"Nach „{folder['data'].get('name')}“ verschoben"),
+                                           self.refresh_list_only()))
+
+    def move_object_to(self, object_id, folder_id):
+        """Move a folder, list or board into a folder (None = top / no folder) – dialog or drag and drop."""
+        obj = self.sync.get(object_id)
+        if obj is None:
+            return
+        if obj["kind"] == "folder" and folder_id and folder_id in (model.folder_descendants(self.sync, object_id) | {object_id}):
+            self.toast("Ein Ordner kann nicht in sich selbst liegen.")
+            return
+        field = "parent" if obj["kind"] == "folder" else "folder"
+        if (obj["data"].get(field) or None) == folder_id:
+            return
+        if self.sync.share_after_move(obj, folder_id) != obj.get("share") and obj["owner"] != self.sync.user_id:
+            self.toast("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+            return
+        if folder_id:
+            self.sidebar.collapsed.discard(folder_id)
+        # Into or out of a shared folder everything inside is re-encrypted – may take a moment.
+        run_async(lambda: self.sync.move_to_folder(object_id, folder_id),
+                  lambda _result, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error else self.toast("Verschoben"),
+                                          self.refresh_all()))
+
+    def drop_on(self, target, payload):
+        """Drag and drop onto the sidebar. target: "folder:<id>" or a section ("Notizen",
+        "Listen", "Aufgaben" = take out of its folder). payload: "<kind>:<id>"."""
+        kind, _sep, object_id = payload.partition(":")
+        if target.startswith("folder:"):
+            folder_id = target.partition(":")[2]
+            if kind == "note":
+                self.move_note_to(object_id, folder_id)
+            elif kind in ("folder", "list", "board"):
+                self.move_object_to(object_id, folder_id)
+            return True
+        section_kinds = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board"}
+        if section_kinds.get(target) == kind:
+            self.move_object_to(object_id, None)
+            return True
+        return False
 
     def insert_photo(self):
         note = self.sync.get(self.current_note)
@@ -963,16 +1010,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         def on_response(_dialog, response):
             if response != "ok":
                 return
-            parent = choices[dropdown.get_selected()][0]
-            if self.sync.share_after_move(folder, parent) != folder.get("share") and folder["owner"] != self.sync.user_id:
-                self.toast("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
-                return
-            if parent:
-                self.sidebar.collapsed.discard(parent)
-            # Into or out of a shared folder everything inside is re-encrypted – may take a moment.
-            run_async(lambda: self.sync.move_to_folder(folder_id, parent),
-                      lambda _result, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error else self.toast("Verschoben"),
-                                              self.refresh_all()))
+            self.move_object_to(folder_id, choices[dropdown.get_selected()][0])
 
         dialog.connect("response", on_response)
         dialog.present(self)
