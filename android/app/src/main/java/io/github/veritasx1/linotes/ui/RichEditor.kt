@@ -42,6 +42,17 @@ val LIST_TYPES = setOf("bullet", "dash", "number", "check")
 /** An empty list item holds this invisible character: Android draws no marker for a line
  *  without characters, and a zero-length span at the end also indents the line above. */
 const val PLACEHOLDER = '\u200B'
+
+/** Web addresses that become tappable links (trailing punctuation is not part of the address). */
+private val LINK = Regex("""(?:https?://|www\.)[^\s<>"']+[^\s<>"'.,;:!?)\]]""")
+
+/** How a web address looks: accent color, underlined. Not saved – found again on every change. */
+class LinkSpan(private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.color = color
+        paint.isUnderlineText = true
+    }
+}
 const val MAX_INDENT = 4
 
 /** Paragraph style: size/weight of the text plus the list marker in the margin. */
@@ -381,6 +392,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         enterAt = -1
         deletedBreakAt = -1
         deletedPlaceholderAt = -1
+        markLinks(text)
         invalidate()
     }
 
@@ -446,8 +458,35 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         onEdited?.invoke()
     }
 
+    private fun markLinks(text: Editable) {
+        for (old in text.getSpans(0, text.length, LinkSpan::class.java)) text.removeSpan(old)
+        for (match in LINK.findAll(text)) {
+            text.setSpan(LinkSpan(colors.accent), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /** A short tap on a web address opens it in the browser (like Notes). */
+    private fun openLinkAt(event: MotionEvent): Boolean {
+        val text = text ?: return false
+        if (event.eventTime - event.downTime > android.view.ViewConfiguration.getLongPressTimeout()) return false
+        val offset = getOffsetForPosition(event.x, event.y)
+        val link = text.getSpans(offset, offset, LinkSpan::class.java).firstOrNull() ?: return false
+        val start = text.getSpanStart(link)
+        val end = text.getSpanEnd(link)
+        if (offset !in start until end) return false
+        val address = text.substring(start, end).let { if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it" }
+        return try {
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(address))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (error: android.content.ActivityNotFoundException) {
+            false
+        }
+    }
+
     private fun handleTouch(event: MotionEvent): Boolean {
         if (event.action != MotionEvent.ACTION_UP) return false
+        if (openLinkAt(event)) return true
         val layout = layout ?: return false
         val text = text ?: return false
         val y = event.y.toInt() - totalPaddingTop + scrollY
@@ -550,6 +589,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         // set only once the whole text exists.
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         setText(builder, BufferType.EDITABLE)
+        text?.let { markLinks(it) }
         busy = false
     }
 

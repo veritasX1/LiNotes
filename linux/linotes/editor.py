@@ -7,6 +7,7 @@ so the text itself stays clean. Images are child anchors.
 """
 
 import math
+import re
 import threading
 
 import gi
@@ -23,6 +24,8 @@ PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
               "bullet", "dash", "number", "check")
 LISTS = ("bullet", "dash", "number", "check")
 INLINE = ("b", "i", "u", "s", "h")
+# Web addresses that become clickable links (trailing punctuation is not part of the address).
+LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
 MAX_INDENT = 4
 INDENT = 26
 LIST_MARGIN = 30
@@ -70,6 +73,9 @@ class NoteEditor(Gtk.TextView):
         click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         click.connect("pressed", self.on_click)
         self.add_controller(click)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self.on_motion)
+        self.add_controller(motion)
 
         self.pending_line_style = None
         self.edit_source = None
@@ -105,6 +111,8 @@ class NoteEditor(Gtk.TextView):
         tag("u", underline=Pango.Underline.SINGLE)
         tag("s", strikethrough=True)
         tag("h", background_rgba=rgba(1.0, 0.85, 0.2, 0.45))
+        # Web addresses: shown as links, a click opens them (not saved – found again on every change).
+        tag("link", foreground_rgba=rgba(0.72, 0.49, 0.0, 1.0), underline=Pango.Underline.SINGLE)
         tag("image", pixels_above_lines=6, pixels_below_lines=6)
         self.update_margins()
 
@@ -225,6 +233,7 @@ class NoteEditor(Gtk.TextView):
         self.queue_draw()
         if self.loading:
             return
+        self.mark_links()
         if self.edit_source is not None:
             GLib.source_remove(self.edit_source)
         self.edit_source = GLib.timeout_add(700, self.emit_edited)
@@ -456,8 +465,37 @@ class NoteEditor(Gtk.TextView):
         blocks[start:end + 1] = run
         self.load_blocks(blocks, keep_cursor=True)
 
+    def mark_links(self):
+        buffer = self.get_buffer()
+        start, end = buffer.get_bounds()
+        buffer.remove_tag_by_name("link", start, end)
+        for match in LINK.finditer(buffer.get_text(start, end, True)):
+            buffer.apply_tag_by_name("link", buffer.get_iter_at_offset(match.start()), buffer.get_iter_at_offset(match.end()))
+
+    def link_at(self, x, y):
+        """The web address under the pointer (widget coordinates), or None."""
+        buffer_x, buffer_y = self.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
+        found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
+        tag = self.get_buffer().get_tag_table().lookup("link")
+        if not found or not iterator.has_tag(tag):
+            return None
+        start, end = iterator.copy(), iterator.copy()
+        if not start.starts_tag(tag):
+            start.backward_to_tag_toggle(tag)
+        end.forward_to_tag_toggle(tag)
+        url = self.get_buffer().get_text(start, end, True)
+        return url if url.startswith(("http://", "https://")) else "https://" + url
+
+    def on_motion(self, _controller, x, y):
+        self.set_cursor_from_name("pointer" if self.link_at(x, y) else "text")
+
     def on_click(self, gesture, n_press, x, y):
-        """Clicks on a check circle toggle the item."""
+        """Clicks on a check circle toggle the item; a click on a web address opens it."""
+        url = self.link_at(x, y) if n_press == 1 else None
+        if url:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            Gtk.UriLauncher.new(url).launch(self.get_root(), None, None)
+            return
         buffer_x, buffer_y = self.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
         found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
         if not found:
@@ -590,6 +628,7 @@ class NoteEditor(Gtk.TextView):
                 buffer.apply_tag_by_name("image", start, with_break)
         buffer.end_irreversible_action()
         self.loading = False
+        self.mark_links()
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
         buffer.place_cursor(cursor)
         self.queue_draw()
