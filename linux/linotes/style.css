@@ -237,3 +237,15 @@ button.text-highlight {
   letter-spacing: 6px;
   font-feature-settings: "tnum";
 }
+
+.color-check {
+    color: white;
+    -gtk-icon-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.color-swatch {
+    min-width: 26px;
+    min-height: 26px;
+    padding: 0;
+}
+
