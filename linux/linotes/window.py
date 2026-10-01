@@ -818,7 +818,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             shopping = self.sync.put("list", {"name": name, "grocery": True, "order": time.time()})
             self.sidebar.refresh()
             self.sidebar.select("list:" + shopping["id"])
-        ask_text(self, "Neue Einkaufsliste", create, placeholder="z. B. Drogerie", action="Erstellen")
+        ask_text(self, "Neue Liste", create, placeholder="z. B. Drogerie", action="Erstellen")
 
     def new_board(self):
         def create(name, _choice):

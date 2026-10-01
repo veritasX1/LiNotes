@@ -754,7 +754,7 @@ HELP = [
          "auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt."),
     ]),
     ("Listen und Aufgaben", [
-        ("Einkaufslisten", "Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen "
+        ("Listen", "Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen "
          "einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis."),
         ("Aufgaben-Board", "Karten per Ziehen zwischen Spalten verschieben. Ein Klick öffnet Fälligkeit, Zuständigkeit, "
          "Farbe und Notizen."),

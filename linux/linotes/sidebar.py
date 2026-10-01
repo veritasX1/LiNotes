@@ -89,7 +89,7 @@ class Sidebar(Gtk.Box):
         account.append(self.account_label)
         menu = Gio.Menu()
         menu.append("Neuen Ordner", "win.new-folder")
-        menu.append("Neue Einkaufsliste", "win.new-list")
+        menu.append("Neue Liste", "win.new-list")
         menu.append("Neues Board", "win.new-board")
         section = Gio.Menu()
         section.append("Mit Server verbinden …", "win.connect")
@@ -155,7 +155,7 @@ class Sidebar(Gtk.Box):
         for shopping in sorted(sync.objects("list"), key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
             open_items = sum(1 for item in items if item["data"].get("list") == shopping["id"] and not item["data"].get("done"))
             hint = "geteilt" if shopping.get("share") else None
-            self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items, hint), "Einkaufslisten")
+            self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items, hint), "Listen")
 
         cards = sync.objects("card")
         for board in sorted(sync.objects("board"), key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
