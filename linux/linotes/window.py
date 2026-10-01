@@ -165,6 +165,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_list.set_size_request(280, -1)
         self.note_list.connect("note-selected", lambda _list, note_id: (self.open_note(note_id), self.show_note_narrow()))
         self.note_list.connect("context", self.on_note_context)
+        self.note_list.connect("open-key", lambda _list, key: self.sidebar.select(key) or self.select(key))
         self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
         self.note_pane = NotePane(self.sync)
         self.note_pane.editor.connect("edited", lambda _editor: self.save_current())
@@ -441,6 +442,27 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return [n for n in notes if n["data"].get("folder") == object_id], name
         return notes, "Alle Notizen"
 
+    def folder_extras(self, key):
+        """Subfolders, lists and boards of a folder – shown above its notes."""
+        kind, _sep, folder_id = key.partition(":")
+        if kind != "folder":
+            return []
+        sync = self.sync
+        live = [n for n in sync.objects("note") if not n["data"].get("trashed")]
+        entries = []
+        for folder in sorted((f for f in sync.objects("folder") if model.folder_parent(sync, f) == folder_id), key=model.folder_sort_key):
+            entries.append(("folder:" + folder["id"], "folder", folder["data"].get("name", "Ordner"),
+                            sum(1 for n in live if n["data"].get("folder") == folder["id"]), "Ordner"))
+        items = sync.objects("item")
+        for shopping in sorted((l for l in sync.objects("list") if l["data"].get("folder") == folder_id), key=lambda l: l["data"].get("name", "").lower()):
+            entries.append(("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"),
+                            sum(1 for i in items if i["data"].get("list") == shopping["id"] and not i["data"].get("done")), "Listen"))
+        cards = sync.objects("card")
+        for board in sorted((b for b in sync.objects("board") if b["data"].get("folder") == folder_id), key=lambda b: b["data"].get("name", "").lower()):
+            entries.append(("board:" + board["id"], "board", board["data"].get("name", "Board"),
+                            sum(1 for c in cards if c["data"].get("board") == board["id"] and not c["data"].get("archived")), "Boards"))
+        return entries
+
     def show_notes(self, keep_note=True):
         notes, title = self.notes_for(self.current_key)
         tags = self.sidebar.active_tags
@@ -456,6 +478,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if selected and selected not in {n["id"] for n in notes}:
             selected = None
         self.note_list.show(title, notes, selected, "Keine Treffer" if query else "Keine Notizen")
+        self.note_list.show_extras([] if query else self.folder_extras(self.current_key))
         if selected is None:
             if notes and not keep_note:
                 first = sorted(notes, key=lambda n: (not n["data"].get("pinned"), -model.modified(n)))[0]
@@ -916,17 +939,19 @@ class LiNotesWindow(Adw.ApplicationWindow):
                      body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
 
     def move_folder(self, folder_id):
-        """Move a folder into another folder (or to the top), like dragging in Notes."""
+        """Move a folder (into another folder or to the top) or a list/board into a
+        folder (or out of it), like dragging in Notes."""
         folder = self.sync.get(folder_id)
-        if folder is None or folder["kind"] != "folder":
+        if folder is None or folder["kind"] not in ("folder", "list", "board"):
             return
-        blocked = model.folder_descendants(self.sync, folder_id) | {folder_id}
+        is_folder = folder["kind"] == "folder"
+        blocked = (model.folder_descendants(self.sync, folder_id) | {folder_id}) if is_folder else set()
         # For now within the same space; moving between private and shared comes with shared projects.
         targets = [f for f in self.sync.objects("folder")
                    if f["id"] not in blocked and f.get("share") == folder.get("share")]
         targets.sort(key=lambda f: model.folder_path(self.sync, f).lower())
-        choices = [(None, "Oberste Ebene")] + [(f["id"], model.folder_path(self.sync, f)) for f in targets]
-        current = model.folder_parent(self.sync, folder)
+        choices = [(None, "Oberste Ebene" if is_folder else "Kein Ordner")] + [(f["id"], model.folder_path(self.sync, f)) for f in targets]
+        current = model.folder_parent(self.sync, folder) if is_folder else (folder["data"].get("folder") or None)
         choices = [choice for choice in choices if choice[0] != current]
         dialog = Adw.AlertDialog(heading=f"„{folder['data'].get('name', 'Ordner')}“ verschieben nach")
         dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
@@ -939,27 +964,48 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if response != "ok":
                 return
             parent = choices[dropdown.get_selected()][0]
-            self.sync.update(folder_id, parent=parent)
+            if is_folder:
+                self.sync.update(folder_id, parent=parent)
+            else:
+                self.sync.update(folder_id, folder=parent)
             if parent:
                 self.sidebar.collapsed.discard(parent)
             self.refresh_all()
-            self.toast("Ordner verschoben")
+            self.toast("Verschoben")
 
         dialog.connect("response", on_response)
         dialog.present(self)
 
-    def new_list(self):
+    def target_folder(self, folder_id=None):
+        """The folder a new list/board goes into: the given one, else the selected folder."""
+        if folder_id is None and self.current_key.startswith("folder:"):
+            folder_id = self.current_key.partition(":")[2]
+        folder = self.sync.get(folder_id) if folder_id else None
+        return folder if folder is not None and folder["kind"] == "folder" else None
+
+    def new_list(self, folder_id=None):
+        folder = self.target_folder(folder_id)
+
         def create(name, _choice):
-            shopping = self.sync.put("list", {"name": name, "grocery": True, "order": time.time()})
+            data = {"name": name, "grocery": True, "order": time.time()}
+            if folder is not None:
+                data["folder"] = folder["id"]
+            shopping = self.sync.put("list", data, folder.get("share") if folder else None)
             self.sidebar.refresh()
             self.sidebar.select("list:" + shopping["id"])
         ask_text(self, "Neue Liste", create, placeholder="z. B. Drogerie", action="Erstellen")
 
-    def new_board(self):
+    def new_board(self, folder_id=None):
+        folder = self.target_folder(folder_id)
+
         def create(name, _choice):
-            board = self.sync.put("board", {"name": name, "order": time.time()})
+            data = {"name": name, "order": time.time()}
+            if folder is not None:
+                data["folder"] = folder["id"]
+            share = folder.get("share") if folder else None
+            board = self.sync.put("board", data, share)
             for order, (_key, column) in enumerate(model.DEFAULT_COLUMNS):
-                self.sync.put("column", {"board": board["id"], "name": column, "order": order}, None, notify=False)
+                self.sync.put("column", {"board": board["id"], "name": column, "order": order}, share, notify=False)
             self.sidebar.refresh()
             self.sidebar.select("board:" + board["id"])
         ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen")
@@ -974,6 +1020,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         menu.append("Umbenennen …", "win.rename-object")
         if kind == "folder":
             menu.append("Neuer Unterordner …", "win.new-subfolder")
+            menu.append("Neue Liste hier …", "win.new-list-here")
+            menu.append("Neues Board hier …", "win.new-board-here")
+        if kind in ("folder", "list", "board"):
             menu.append("Verschieben nach …", "win.move-object")
         if kind == "board":
             menu.append("Bericht exportieren …", "win.export-object")
@@ -1043,6 +1092,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
             body = f"„{name}“ gehört allen – es wird auch für die anderen gelöscht."
         else:
             body = f"„{name}“ und alles darin wird gelöscht."
+            if kind == "folder":
+                body = (f"„{name}“, seine Unterordner und ihre Notizen werden gelöscht (Notizen landen in "
+                        "„Zuletzt gelöscht“). Listen und Boards darin bleiben erhalten – ohne Ordner.")
 
         def remove():
             if kind == "folder":
@@ -1053,6 +1105,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
                         self.sync.update(note["id"], notify=False, trashed=time.time())
                 for folder_id in doomed - {obj["id"]}:
                     self.sync.delete(folder_id, notify=False)
+                # Lists and boards have no trash: they stay, just without a folder.
+                for item in self.sync.objects("list") + self.sync.objects("board"):
+                    if item["data"].get("folder") in doomed:
+                        self.sync.update(item["id"], notify=False, folder=None)
             elif kind == "list":
                 for item in self.sync.objects("item"):
                     if item["data"].get("list") == obj["id"]:
@@ -1115,6 +1171,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
             "new-subfolder": lambda: self.new_folder(getattr(self, "menu_target", None)),
+            "new-list-here": lambda: self.new_list(getattr(self, "menu_target", None)),
+            "new-board-here": lambda: self.new_board(getattr(self, "menu_target", None)),
             "move-object": lambda: self.move_folder(getattr(self, "menu_target", "")),
             "export-object": lambda: self.export_board(getattr(self, "menu_target", "")),
             "delete-object": self.delete_object,
