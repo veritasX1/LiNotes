@@ -1,6 +1,9 @@
 """The LiNotes main window."""
 
 import mimetypes
+import re
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -592,7 +595,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def update_note_actions(self):
         note = self.sync.get(self.current_note) if self.current_note else None
         has = note is not None
-        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo"):
+        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo",
+                     "export-note", "print-note"):
             self.lookup_action(name).set_enabled(has)
         if has:
             locked = bool(note["data"].get("enc"))
@@ -602,6 +606,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.lock_button.set_tooltip_text("Jetzt sperren" if unlocked else "Entsperren" if locked else "Notiz sperren")
             self.lock_button.get_child().queue_draw()
             self.lookup_action("insert-photo").set_enabled(not locked and not note["data"].get("trashed"))
+            # A locked note can only be exported or printed while it is open.
+            for name in ("export-note", "print-note"):
+                self.lookup_action(name).set_enabled(not locked or unlocked)
 
     def delete_note(self, note_id=None):
         note_id = note_id or self.current_note
@@ -660,6 +667,79 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.current_note = copy["id"]
         self.refresh_list_only()
         self.open_note(copy["id"])
+
+    def note_for_print(self):
+        """Title, PDF header and content of the open note (as shown, so an unlocked note works too)."""
+        note = self.sync.get(self.current_note) if self.current_note else None
+        if note is None:
+            return None
+        blocks = self.note_pane.editor.to_blocks() if self.note_pane.get_visible_child_name() == "editor" \
+            else model.note_blocks(note)
+        title = model.blocks_title(blocks) or "Notiz"
+        modified = time.strftime("%d.%m.%Y %H:%M", time.localtime(note["data"].get("modified") or time.time()))
+        return note, title, f"{title} · {modified}", blocks
+
+    def write_note_pdf(self, path):
+        from . import report
+        note, title, header, blocks = self.note_for_print()
+        report.write_note_pdf(blocks, path, header,
+                              image_path=lambda reference: self.sync.fetch_file(reference, note.get("share")))
+        return title
+
+    def export_note(self):
+        """Like Apple's "Als PDF exportieren …"."""
+        found = self.note_for_print()
+        if found is None:
+            return
+        safe = re.sub(r'[/\\:*?"<>|]', "_", found[1])[:80]
+        dialog = Gtk.FileDialog(title="Als PDF exportieren")
+        dialog.set_initial_name(f"{safe}.pdf")
+
+        def chosen(dialog, result):
+            try:
+                path = dialog.save_finish(result).get_path()
+            except GLib.Error:
+                return
+            path = path if path.lower().endswith(".pdf") else path + ".pdf"
+            self.write_note_pdf(path)
+            self.toast(f"PDF gespeichert: {Path(path).name}")
+        dialog.save(self, None, chosen)
+
+    def print_note(self):
+        """The usual print dialog; the note goes to the printer as PDF."""
+        if self.note_for_print() is None:
+            return
+        folder = Path(tempfile.mkdtemp(prefix="linotes-print-"))
+        path = str(folder / "notiz.pdf")
+        title = self.write_note_pdf(path)
+        dialog = Gtk.PrintUnixDialog(title="Drucken", transient_for=self, modal=True)
+        dialog.set_manual_capabilities(Gtk.PrintCapabilities.COPIES | Gtk.PrintCapabilities.PAGE_SET)
+
+        def finished(*_args):
+            shutil.rmtree(folder, ignore_errors=True)
+
+        def response(dialog, answer):
+            printer = dialog.get_selected_printer()
+            settings, setup = dialog.get_settings(), dialog.get_page_setup()
+            dialog.destroy()
+            if answer != Gtk.ResponseType.OK or printer is None:
+                finished()
+                return
+            if not printer.accepts_pdf():
+                self.toast("Dieser Drucker nimmt kein PDF an – bitte als PDF exportieren und von dort drucken.")
+                finished()
+                return
+            job = Gtk.PrintJob.new(title, printer, settings, setup)
+            try:
+                job.set_source_file(path)
+            except GLib.Error as error:
+                self.toast(f"Drucken nicht möglich: {error.message}")
+                finished()
+                return
+            job.send(lambda _job, error: (finished(), error and self.toast(f"Drucken fehlgeschlagen: {error.message}")))
+            self.toast(f"„{title}“ wird gedruckt.")
+        dialog.connect("response", response)
+        dialog.present()
 
     def move_note(self, note_id=None):
         note = self.sync.get(note_id or self.current_note)
@@ -800,6 +880,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Teilen …", "win.share-note")
             menu.append("Verschieben nach …", "win.move-note")
             menu.append("Duplizieren", "win.duplicate-note")
+            menu.append("Als PDF exportieren …", "win.export-note")
+            menu.append("Drucken …", "win.print-note")
             menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
             menu.append("Löschen", "win.delete-note")
         self.popup_menu(menu, widget, x, y)
@@ -1209,6 +1291,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "restore-note": self.restore_current,
             "pin-note": self.toggle_pin,
             "duplicate-note": self.duplicate,
+            "export-note": self.export_note,
+            "print-note": self.print_note,
             "move-note": self.move_note,
             "toggle-lock": self.toggle_lock,
             "lock-button": self.on_lock_button,

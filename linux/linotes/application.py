@@ -50,6 +50,8 @@ class LiNotesApplication(Adw.Application):
             self.add_action(action)
         self.set_accels_for_action("app.quit", ["<Control>q"])
         self.set_accels_for_action("win.lock-all", ["<Control><Alt>l"])
+        self.set_accels_for_action("win.print-note", ["<Control>p"])
+        self.set_accels_for_action("win.export-note", ["<Control><Shift>e"])
 
     def do_activate(self):
         if self.sync is None:
