@@ -81,6 +81,7 @@ class NoteList(Gtk.Box):
     __gsignals__ = {
         "note-selected": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "context": (GObject.SignalFlags.RUN_FIRST, None, (str, object, float, float)),
+        "open-key": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
     def __init__(self, sync):
@@ -107,6 +108,15 @@ class NoteList(Gtk.Box):
         self.count.add_css_class("caption")
         self.count.set_margin_start(16)
         self.append(self.count)
+
+        # What else lives in the selected folder: subfolders, lists, boards.
+        self.extras = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.extras.add_css_class("navigation-sidebar")
+        self.extras.add_css_class("folder-extras")
+        self.extras.set_header_func(self.header_func)
+        self.extras.connect("row-activated", lambda _box, row: self.emit("open-key", row.key))
+        self.extras.set_visible(False)
+        self.append(self.extras)
 
         self.list = Gtk.ListBox()
         self.list.add_css_class("note-list")
@@ -139,6 +149,28 @@ class NoteList(Gtk.Box):
         self.stack.add_named(self.empty, "empty")
         self.append(self.stack)
         self.mode = "list"
+
+    def show_extras(self, entries):
+        """entries: [(key, icon, label, count, group)]"""
+        self.extras.remove_all()
+        for key, icon, label, count, group in entries:
+            row = Gtk.ListBoxRow()
+            row.key, row.group = key, group
+            box = Gtk.Box(spacing=10)
+            box.set_margin_top(4)
+            box.set_margin_bottom(4)
+            box.set_margin_start(6)
+            box.set_margin_end(6)
+            symbol = Icon(icon, 16)
+            symbol.add_css_class("accent-icon")
+            box.append(symbol)
+            box.append(Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3))
+            number = Gtk.Label(label=str(count))
+            number.add_css_class("sidebar-count")
+            box.append(number)
+            row.set_child(box)
+            self.extras.append(row)
+        self.extras.set_visible(bool(entries))
 
     def header_func(self, row, before):
         if before is None or before.group != row.group:

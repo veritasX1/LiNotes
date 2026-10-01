@@ -153,13 +153,13 @@ class Sidebar(Gtk.Box):
         items = sync.objects("item")
         for shopping in sorted(sync.objects("list"), key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
             open_items = sum(1 for item in items if item["data"].get("list") == shopping["id"] and not item["data"].get("done"))
-            hint = "geteilt" if shopping.get("share") else None
+            hint = self.place_hint(shopping)
             self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items, hint), "Listen")
 
         cards = sync.objects("card")
         for board in sorted(sync.objects("board"), key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
             open_cards = sum(1 for card in cards if card["data"].get("board") == board["id"] and not card["data"].get("archived"))
-            hint = "geteilt" if board.get("share") else None
+            hint = self.place_hint(board)
             self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards, hint), "Aufgaben")
 
         self.refresh_tags(live)
@@ -186,6 +186,12 @@ class Sidebar(Gtk.Box):
                 count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid), owner_hint, depth,
                 (expanded, lambda fid=folder["id"]: self.toggle_folder(fid)) if has_children else None,
             ), section)
+
+    def place_hint(self, obj):
+        """Folder name (if in a folder) and "geteilt" – the tabs stay grouped by place."""
+        folder = self.sync.get(obj["data"].get("folder") or "")
+        parts = ([folder["data"].get("name", "Ordner")] if folder else []) + (["geteilt"] if obj.get("share") else [])
+        return " · ".join(parts) or None
 
     def toggle_folder(self, folder_id):
         self.collapsed ^= {folder_id}
