@@ -55,3 +55,26 @@ fun folderPath(sync: SyncEngine, folder: SyncObject): String {
     }
     return names.reversed().joinToString(" › ")
 }
+
+/** "Verschieben nach …" for folders, lists and boards – within the same space (private or one share). */
+@androidx.compose.runtime.Composable
+fun MoveToFolderSheet(state: AppState, obj: SyncObject, onDone: () -> Unit) {
+    val sync = state.sync
+    val isFolder = obj.kind == "folder"
+    val blocked = if (isFolder) folderDescendants(sync, obj.id) + obj.id else emptySet()
+    val current = if (isFolder) folderParent(sync, obj) else obj.data.optString("folder").takeIf { it.isNotEmpty() && it != "null" }
+    val targets = sync.all("folder").filter { it.id !in blocked && it.share == obj.share && it.id != current }
+        .sortedBy { folderPath(sync, it).lowercase() }
+    val field = if (isFolder) "parent" else "folder"
+    ActionSheet("„${obj.data.optString("name")}“ verschieben nach", buildList {
+        if (current != null) add(SheetAction(if (isFolder) "Oberste Ebene" else "Kein Ordner") { sync.update(obj.id) { it.remove(field) } })
+        targets.forEach { target -> add(SheetAction(folderPath(sync, target)) { sync.update(obj.id) { it.put(field, target.id) } }) }
+    }, onDone)
+}
+
+/** Lists or boards grouped by folder: (folder or null, items), unfiled first. */
+fun groupByFolder(sync: SyncEngine, objects: List<SyncObject>): List<Pair<SyncObject?, List<SyncObject>>> {
+    val byFolder = objects.groupBy { obj -> obj.data.optString("folder").let { id -> sync.get(id)?.takeIf { it.kind == "folder" } } }
+    return byFolder.entries.sortedWith(compareBy({ it.key != null }, { it.key?.let { folder -> folderPath(sync, folder).lowercase() } ?: "" }))
+        .map { it.key to it.value }
+}

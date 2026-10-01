@@ -112,18 +112,20 @@ fun BoardsScreen(state: AppState, revision: Long) {
     var creating by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
+    var moving by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
         title = "Aufgaben",
         actions = { BarButton(Glyph.Plus, "Neues Board") { creating = "new" } },
     ) {
         if (boards.isEmpty()) item { EmptyState("Keine Boards", glyph = Glyph.Board) }
-        section("boards", header = "Boards") {
-            boards.forEachIndexed { index, board ->
+        // Grouped by folder: unfiled boards first, then one section per folder.
+        for ((folder, group) in groupByFolder(sync, boards)) section("boards-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Boards") {
+            group.forEachIndexed { index, board ->
                 GroupRow(board.data.optString("name", "Board"), Glyph.Board,
                     subtitle = shareLabel(sync, board),
                     detail = "${cards.count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
-                    divider = index < boards.lastIndex, onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
+                    divider = index < group.lastIndex, onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
             }
         }
     }
@@ -142,6 +144,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
     menu?.let { board ->
         ActionSheet(board.data.optString("name"), listOf(
             SheetAction("Umbenennen") { renaming = board },
+            SheetAction("Verschieben nach …") { moving = board },
             SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
             SheetAction("Bericht teilen (PDF) …") { Report.share(state, context, board.id) },
             SheetAction(if (isDevBoard(board)) "Entwicklungsprojekt ausschalten" else "Als Entwicklungsprojekt führen") {
@@ -155,6 +158,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
             },
         )) { menu = null }
     }
+    moving?.let { board -> MoveToFolderSheet(state, board) { moving = null } }
     renaming?.let { board ->
         AlertDialog("Board umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", board.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->

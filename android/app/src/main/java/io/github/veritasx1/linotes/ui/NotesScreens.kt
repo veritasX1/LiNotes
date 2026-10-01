@@ -63,6 +63,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
     var rename by remember { mutableStateOf<SyncObject?>(null) }
     var newSubfolder by remember { mutableStateOf<SyncObject?>(null) }
     var movingFolder by remember { mutableStateOf<SyncObject?>(null) }
+    var newHere by remember { mutableStateOf<Pair<SyncObject, String>?>(null) }
 
     val notes = remember(revision) { sync.all("note") }
     val live = notes.filter { !it.data.has("trashed") }
@@ -149,15 +150,26 @@ fun FoldersScreen(state: AppState, revision: Long) {
             newSubfolder = null
         }
     }
-    movingFolder?.let { folder ->
-        val blocked = folderDescendants(sync, folder.id) + folder.id
-        val current = folderParent(sync, folder)
-        val targets = sync.all("folder").filter { it.id !in blocked && it.share == folder.share && it.id != current }
-            .sortedBy { folderPath(sync, it).lowercase() }
-        ActionSheet("„${folder.data.optString("name")}“ verschieben nach", buildList {
-            if (current != null) add(SheetAction("Oberste Ebene") { sync.update(folder.id) { it.remove("parent") } })
-            targets.forEach { target -> add(SheetAction(folderPath(sync, target)) { sync.update(folder.id) { it.put("parent", target.id) } }) }
-        }) { movingFolder = null }
+    movingFolder?.let { folder -> MoveToFolderSheet(state, folder) { movingFolder = null } }
+    newHere?.let { (folder, kind) ->
+        AlertDialog(if (kind == "list") "Neue Liste" else "Neues Board", "In „${folder.data.optString("name")}“.", "Erstellen",
+            fields = listOf(AlertField(if (kind == "list") "z. B. Drogerie" else "z. B. Haushalt")), onDismiss = { newHere = null }) { values ->
+            if (values[0].isNotBlank()) {
+                // New lists and boards live where their folder lives (private or in its share).
+                val data = JSONObject().put("name", values[0].trim()).put("order", Model.now()).put("folder", folder.id)
+                if (kind == "list") {
+                    val list = sync.put("list", data.put("grocery", true), folder.share)
+                    state.push(Route.ListDetail(list.id))
+                } else {
+                    val board = sync.put("board", data, folder.share)
+                    Model.defaultColumns.forEachIndexed { order, (_, name) ->
+                        sync.put("column", JSONObject().put("board", board.id).put("name", name).put("order", order), folder.share)
+                    }
+                    state.push(Route.Board(board.id))
+                }
+            }
+            newHere = null
+        }
     }
     folderMenu?.let { folder ->
         val protected = folder.id == Model.privateFolder(sync.userId)
@@ -165,12 +177,16 @@ fun FoldersScreen(state: AppState, revision: Long) {
             add(SheetAction("Umbenennen") { rename = folder })
             add(SheetAction("Teilen …") { state.push(Route.Share(folder.id)) })
             add(SheetAction("Neuer Unterordner …") { newSubfolder = folder })
+            add(SheetAction("Neue Liste hier …") { newHere = folder to "list" })
+            add(SheetAction("Neues Board hier …") { newHere = folder to "board" })
             add(SheetAction("Verschieben nach …") { movingFolder = folder })
             if (!protected) add(SheetAction("Ordner löschen", destructive = true) {
                 // The folder, its subfolders and all their notes (notes go to "Zuletzt gelöscht").
                 val doomed = folderDescendants(sync, folder.id) + folder.id
                 for (note in sync.all("note")) if (note.data.optString("folder") in doomed) sync.update(note.id) { it.put("trashed", Model.now()) }
                 (doomed - folder.id).forEach { sync.delete(it) }
+                // Lists and boards have no trash: they stay, just without a folder.
+                for (item in sync.all("list") + sync.all("board")) if (item.data.optString("folder") in doomed) sync.update(item.id) { it.remove("folder") }
                 sync.delete(folder.id)
             })
         }) { folderMenu = null }
@@ -230,6 +246,9 @@ fun notesFor(sync: SyncEngine, key: String): Pair<List<SyncObject>, String> {
 fun NoteListScreen(state: AppState, key: String, revision: Long) {
     val sync = state.sync
     val (notes, title) = remember(revision, key) { notesFor(sync, key) }
+    val folderId = key.removePrefix("folder:").takeIf { key.startsWith("folder:") }
+    val folderLists = remember(revision, key) { if (folderId == null) emptyList() else sync.all("list").filter { it.data.optString("folder") == folderId }.sortedBy { it.data.optString("name").lowercase() } }
+    val folderBoards = remember(revision, key) { if (folderId == null) emptyList() else sync.all("board").filter { it.data.optString("folder") == folderId }.sortedBy { it.data.optString("name").lowercase() } }
     val subfolders = remember(revision, key) {
         if (!key.startsWith("folder:")) emptyList()
         else sync.all("folder").filter { folderParent(sync, it) == key.removePrefix("folder:") }
@@ -263,7 +282,22 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
                     divider = index < subfolders.lastIndex) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
         }
-        if (shown.isEmpty() && (subfolders.isEmpty() || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
+        if (folderLists.isNotEmpty() && query.isBlank()) section("folder-lists", header = "Listen") {
+            folderLists.forEachIndexed { index, list ->
+                GroupRow(list.data.optString("name", "Liste"), Glyph.Cart, tint = listColor(list),
+                    detail = "${sync.all("item").count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }}",
+                    divider = index < folderLists.lastIndex) { state.push(Route.ListDetail(list.id)) }
+            }
+        }
+        if (folderBoards.isNotEmpty() && query.isBlank()) section("folder-boards", header = "Boards") {
+            folderBoards.forEachIndexed { index, board ->
+                GroupRow(board.data.optString("name", "Board"), Glyph.Board,
+                    detail = "${sync.all("card").count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
+                    divider = index < folderBoards.lastIndex) { state.push(Route.Board(board.id)) }
+            }
+        }
+        val folderHasMore = subfolders.isNotEmpty() || folderLists.isNotEmpty() || folderBoards.isNotEmpty()
+        if (shown.isEmpty() && (!folderHasMore || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
         if (pinned.isNotEmpty()) section("pinned", header = "Angeheftet") {
             pinned.forEachIndexed { index, note -> SwipeNoteRow(state, note, index < pinned.lastIndex, key, onMenu = { menu = note }) }
         }
