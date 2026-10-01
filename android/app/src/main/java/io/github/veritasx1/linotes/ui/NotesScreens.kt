@@ -1,6 +1,5 @@
 package io.github.veritasx1.linotes.ui
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -351,8 +350,7 @@ fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int) {
         value = withContext(Dispatchers.IO) {
             try {
                 val bytes = sync.fetchFile(fileId, share).readBytes()
-                val options = BitmapFactory.Options().apply { inSampleSize = 4 }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+                RichEditor.decodeImage(bytes, maxSize = 480)?.asImageBitmap()
             } catch (error: Exception) {
                 null
             }

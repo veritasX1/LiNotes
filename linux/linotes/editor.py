@@ -664,6 +664,8 @@ class NoteEditor(Gtk.TextView):
             pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
         except GLib.Error:
             return False
+        # Handyfotos sind oft quer gespeichert, die Drehung steht im EXIF.
+        pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
         width = min(520, pixbuf.get_width())
         height = int(pixbuf.get_height() * width / max(1, pixbuf.get_width()))
         picture.set_size_request(width, height)

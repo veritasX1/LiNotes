@@ -69,6 +69,7 @@ def load_thumbnail(sync, file_id, picture, size=88, share=None):
         try:
             path = sync.fetch_file(file_id, share)
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)
+            pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
         except Exception:
             return
         GLib.idle_add(lambda: (picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf)), False)[1])
