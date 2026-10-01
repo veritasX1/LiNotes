@@ -129,6 +129,13 @@ class Store:
             self.local.db = db
         return db
 
+    def release(self):
+        """Nach jedem Request: keine Transaktion (und damit kein veralteter
+        Lese-Snapshot oder Schreib-Lock) bleibt am Thread hängen."""
+        db = getattr(self.local, "db", None)
+        if db is not None and db.in_transaction:
+            db.rollback()
+
     def notify(self):
         with self.changed:
             self.changed.notify_all()
@@ -216,13 +223,18 @@ class Store:
             return None
         db = self.connect()
         row = db.execute(
-            "SELECT users.* FROM sessions JOIN users ON users.id = sessions.user_id WHERE token = ?",
+            "SELECT users.*, sessions.seen AS seen FROM sessions JOIN users ON users.id = sessions.user_id WHERE token = ?",
             (token_hash(token),),
         ).fetchone()
-        if row is not None:
+        if row is not None and row["seen"] < time.time() - 600:
+            # "Zuletzt gesehen" ist unwichtig: nie den Request daran scheitern
+            # lassen und nie eine offene Transaktion zurücklassen.
             now = time.time()
-            db.execute("UPDATE sessions SET seen = ? WHERE token = ? AND seen < ?", (now, token_hash(token), now - 600))
-            db.commit()
+            try:
+                with self.write_lock, db:
+                    db.execute("UPDATE sessions SET seen = ? WHERE token = ?", (now, token_hash(token)))
+            except sqlite3.OperationalError:
+                pass
         return row
 
     def delete_session(self, token):
