@@ -169,12 +169,10 @@ fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
             state.lockAll()
             state.ensureDefaults()
             state.sync.start()
-            state.askKeyfile = created
             state.toastLater("Mit dem Server verbunden – deine Notizen werden hochgeladen.")
             while (state.stack.size > 1) state.pop()
             return
         }
-        state.askKeyfile = created
         state.sync.signIn(url, response, account)
         try { withContext(Dispatchers.IO) { state.sync.syncNow() } } catch (error: Exception) { }
         state.ensureDefaults()
@@ -387,12 +385,11 @@ fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
 // ================================================================
 
 @Composable
-fun KeyfileDialog(state: AppState, firstTime: Boolean, onDone: () -> Unit) {
+fun KeyfileDialog(state: AppState, onDone: () -> Unit) {
     val sync = state.sync
     AlertDialog(
-        if (firstTime) "Schlüsseldatei sichern" else "Schlüsseldatei",
-        (if (firstTime) "Dein Konto ist angelegt. " else "") +
-            "Die Schlüsseldatei ist deine Notfall-Sicherung: Verlierst du alle Geräte, kommst du nur damit wieder an deine Notizen. " +
+        "Schlüsseldatei sichern",
+        "Die Schlüsseldatei ist deine Notfall-Sicherung: Verlierst du alle Geräte, kommst du nur damit wieder an deine Notizen. " +
             "Schütze sie mit einer Passphrase und lege sie z. B. auf einen USB-Stick an einen sicheren Ort.",
         "Speichern …",
         fields = listOf(AlertField("Passphrase (min. 8 Zeichen)", password = true), AlertField("Passphrase wiederholen", password = true)),
@@ -411,6 +408,7 @@ fun KeyfileDialog(state: AppState, firstTime: Boolean, onDone: () -> Unit) {
                     val data = E2E.exportKeyfile(sync.server, user.username, account, values[0])
                     withContext(Dispatchers.Main) {
                         state.saveDocument("LiNotes-${user.username}.linotes-key", data.toString(2).toByteArray()) { saved ->
+                            if (saved) sync.markKeyfileSaved()
                             state.toastLater(if (saved) "Schlüsseldatei gespeichert" else "Nicht gespeichert")
                         }
                     }

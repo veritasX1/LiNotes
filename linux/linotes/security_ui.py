@@ -295,8 +295,8 @@ class Onboarding(Gtk.Box):
             if error is not None:
                 self.fail(self.register_error, error_text(error))
                 return
+            # No key file dialog right away: it is recommended later, never forced at the first start.
             self.emit("signed-in", server, response, account)
-            GLib.idle_add(lambda: (KeyfileDialog(self.window, first_time=True).present(self.window), False)[1])
         run_async(call, done)
 
     # --- link --------------------------------------------------
@@ -421,7 +421,7 @@ class Onboarding(Gtk.Box):
 
 class KeyfileDialog(Adw.Dialog):
 
-    def __init__(self, window, first_time=False):
+    def __init__(self, window):
         super().__init__(title="Schlüsseldatei sichern")
         self.window = window
         self.sync = window.sync
@@ -430,9 +430,8 @@ class KeyfileDialog(Adw.Dialog):
         view.add_top_bar(Adw.HeaderBar())
         box = page(
             "Notfall-Schlüssel",
-            ("Wichtig: Nur mit dieser Datei oder einem deiner Geräte kommst du an deine Notizen. "
-             if first_time else "")
-            + "Lege sie z. B. auf einen USB-Stick an einen sicheren Ort. Die Passphrase schützt die Datei, "
+            "Nur mit dieser Datei oder einem deiner Geräte kommst du an deine Notizen. "
+            "Lege sie z. B. auf einen USB-Stick an einen sicheren Ort. Die Passphrase schützt die Datei, "
               "falls sie in falsche Hände gerät – merke sie dir gut.",
         )
         group = Adw.PreferencesGroup()
@@ -447,11 +446,6 @@ class KeyfileDialog(Adw.Dialog):
         save = pill("Schlüsseldatei speichern …")
         save.connect("clicked", lambda _b: self.save())
         box.append(save)
-        if first_time:
-            later = Gtk.Button(label="Später")
-            later.add_css_class("flat")
-            later.connect("clicked", lambda _b: self.close())
-            box.append(later)
         view.set_content(box)
         self.set_child(view)
 
@@ -476,6 +470,7 @@ class KeyfileDialog(Adw.Dialog):
             data = e2e.export_keyfile(self.sync.server, self.sync.user["username"], self.sync.account, passphrase)
             Path(path).write_text(json.dumps(data, indent=1))
             Path(path).chmod(0o600)
+            self.sync.mark_keyfile_saved()
             self.window.toast("Schlüsseldatei gespeichert")
             self.close()
         dialog.save(self.window, None, chosen)

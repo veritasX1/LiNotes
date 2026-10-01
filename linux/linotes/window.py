@@ -158,6 +158,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_tools.append(self.share_button)
         header.pack_end(self.note_tools)
         content.add_top_bar(header)
+        # A friendly reminder after a few days of use – never at the first start.
+        self.keyfile_banner = Adw.Banner(title="Sichere dein Konto mit einer Schlüsseldatei – falls ein Gerät verloren geht.",
+                                         button_label="Jetzt sichern")
+        self.keyfile_banner.connect("button-clicked", lambda _b: (self.keyfile_banner.set_revealed(False),
+                                                                  security_ui.KeyfileDialog(self).present(self)))
+        content.add_top_bar(self.keyfile_banner)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, shrink_start_child=False)
@@ -336,6 +342,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.on_status(self.sync.online)
 
         self.refresh_all()
+        if self.sync.keyfile_hint_due():
+            # Shown for this session, then again in 30 days at the earliest.
+            self.keyfile_banner.set_revealed(True)
+            self.sync.snooze_keyfile_hint()
         # Start in the note list, not in the search field (Ctrl+F still goes there).
         GLib.idle_add(lambda: self.note_list.list.grab_focus() and False)
         run_async(first_sync, done)
