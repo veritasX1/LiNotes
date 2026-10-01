@@ -38,6 +38,10 @@ import java.io.ByteArrayInputStream
 
 private const val OBJECT = '￼'
 val LIST_TYPES = setOf("bullet", "dash", "number", "check")
+
+/** An empty list item holds this invisible character: Android draws no marker for a line
+ *  without characters, and a zero-length span at the end also indents the line above. */
+const val PLACEHOLDER = '\u200B'
 const val MAX_INDENT = 4
 
 /** Paragraph style: size/weight of the text plus the list marker in the margin. */
@@ -162,6 +166,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     private var enterAt = -1
     private var enterStyle: ParaSpan? = null
     private var deletedBreakAt = -1
+    private var deletedPlaceholderAt = -1
     private var deletedBreakStyle: ParaSpan? = null
     var pendingInline: MutableSet<String>? = null
     var onEdited: (() -> Unit)? = null
@@ -188,6 +193,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 if (busy) return
                 enterAt = -1
                 deletedBreakAt = -1
+                deletedPlaceholderAt = -1
+                if (count == 1 && after == 0 && s[start] == PLACEHOLDER) {
+                    // Backspace on an empty list item: remove the marker (like Notes).
+                    deletedPlaceholderAt = start
+                    deletedBreakStyle = paraAt(s as Spanned, start)
+                }
                 if (count == 1 && after == 0 && s[start] == '\n') {
                     // A line break is about to be deleted (backspace at a paragraph start).
                     deletedBreakAt = start
@@ -259,11 +270,20 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
 
     /** One ParaSpan per paragraph; applies the Enter/Backspace rules of Notes. */
     private fun handleEdit(text: Editable, insertStart: Int, insertCount: Int) {
+        if (deletedPlaceholderAt >= 0) {
+            val style = deletedBreakStyle
+            val paragraphStart = text.lastIndexOf('\n', deletedPlaceholderAt - 1).let { if (it < 0) 0 else it + 1 }
+            if (style != null && style.type in LIST_TYPES) {
+                setPara(text, paragraphStart, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
+                normalize(text)
+                return
+            }
+        }
         // Enter on an empty list item ends the list instead of adding one.
         if (enterAt >= 0) {
             val style = enterStyle
             val paragraphStart = text.lastIndexOf('\n', enterAt - 1).let { if (it < 0) 0 else it + 1 }
-            val content = text.substring(paragraphStart, enterAt).replace(OBJECT.toString(), "")
+            val content = text.substring(paragraphStart, enterAt).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), "")
             if (style != null && style.type in LIST_TYPES && content.isBlank()) {
                 text.delete(enterAt, enterAt + 1)
                 setPara(text, paragraphStart, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
@@ -327,21 +347,40 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 else -> makeSpan("body")
             }
         }
+        // Empty list items get the placeholder, everything else loses it (back to front: offsets stay valid).
+        for (index in starts.indices.reversed()) {
+            val start = starts[index]
+            val end = paragraphEnd(text, start)
+            val content = text.substring(start, end)
+            val bare = content.replace(PLACEHOLDER.toString(), "")
+            if (styles[index].type in LIST_TYPES && bare.isEmpty()) {
+                if (content.isEmpty()) {
+                    val cursorHere = selectionStart == start
+                    text.insert(start, PLACEHOLDER.toString())
+                    // The cursor belongs behind the invisible character, so typing and backspace act on this item.
+                    if (cursorHere) setSelection(start + 1)
+                }
+            } else if (bare.length != content.length) {
+                for (offset in end - 1 downTo start) if (text[offset] == PLACEHOLDER) text.delete(offset, offset + 1)
+            }
+        }
+        val fixedStarts = paragraphStarts(text)
         for (old in text.getSpans(0, text.length, ParaSpan::class.java)) text.removeSpan(old)
         var number = 0
         var previousWasNumber = false
-        starts.forEachIndexed { index, start ->
+        fixedStarts.forEachIndexed { index, start ->
             val span = styles[index]
             if (span.type == "number") {
                 number = if (previousWasNumber) number + 1 else 1
                 span.number = number
             }
             previousWasNumber = span.type == "number"
-            val end = if (index + 1 < starts.size) starts[index + 1] else text.length
+            val end = if (index + 1 < fixedStarts.size) fixedStarts[index + 1] else text.length
             text.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         }
         enterAt = -1
         deletedBreakAt = -1
+        deletedPlaceholderAt = -1
         invalidate()
     }
 
@@ -525,7 +564,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 continue
             }
             val span = paraAt(text, start)
-            val block = JSONObject().put("t", span?.type ?: "body").put("x", text.substring(start, end).replace(OBJECT.toString(), ""))
+            val block = JSONObject().put("t", span?.type ?: "body")
+                .put("x", text.substring(start, end).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), ""))
             if (span != null && span.level > 0) block.put("l", span.level)
             if (span?.type == "check") block.put("c", span.checked)
             val spans = JSONArray()
