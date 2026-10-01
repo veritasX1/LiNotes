@@ -751,7 +751,7 @@ private val HELP = listOf(
             "Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt.",
     ),
     "Listen und Aufgaben" to listOf(
-        "Einkaufslisten" to "Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Abgehakt wird mit dem Kreis.",
+        "Listen" to "Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Abgehakt wird mit dem Kreis.",
         "Aufgaben-Board" to "Karte antippen für Fälligkeit, Zuständigkeit, Farbe und Notizen; lange drücken zum Verschieben.",
     ),
     "Datenschutz" to listOf(
