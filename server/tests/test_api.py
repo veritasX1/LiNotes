@@ -82,6 +82,16 @@ def test_all():
     outsider = client.post("/api/sync", json={"changes": [{"id": "x1", "kind": "note", "share": "nope", "data": {}}]}, headers=anna).json
     assert outsider["results"][0]["status"] == "forbidden"
 
+    # Moving an object out of the share (e.g. out of a shared folder): Anna gets a deletion
+    # stub instead of keeping a stale copy (regression 01.10.2026). Olaf still sees it.
+    client.post("/api/sync", json={"changes": [{"id": "l2", "kind": "list", "share": "s1", "data": {"v": 2}}]}, headers=olaf)
+    cursor = client.get("/api/sync?since=0", headers=anna).json["cursor"]
+    client.post("/api/sync", json={"changes": [{"id": "l2", "kind": "list", "share": None, "data": {"v": 2}}]}, headers=olaf)
+    left = [o for o in client.get(f"/api/sync?since={cursor}", headers=anna).json["objects"] if o["id"] == "l2"]
+    assert len(left) == 1 and left[0]["deleted"] and left[0]["data"] == {}, left
+    mine = [o for o in client.get(f"/api/sync?since={cursor}", headers=olaf).json["objects"] if o["id"] == "l2"]
+    assert len(mine) == 1 and not mine[0]["deleted"], mine
+
     # Removing Anna: she no longer receives the share.
     client.post("/api/sync", json={"changes": [{"id": "s1", "kind": "share", "members": [], "data": {"keys": {}}}]}, headers=olaf)
     after = client.get("/api/sync?since=0", headers=anna).json

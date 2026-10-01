@@ -91,6 +91,15 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- An object left a share (moved out of a shared folder): the share's other
+-- members get a deletion stub, otherwise a stale copy stays on their devices.
+CREATE TABLE IF NOT EXISTS departures (
+    object_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    share_id TEXT NOT NULL,
+    version INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS departures_version ON departures(version);
 """
 
 
@@ -276,11 +285,27 @@ class Store:
     VISIBLE = "(owner = ? OR share IN (SELECT share_id FROM share_members WHERE user_id = ?))"
 
     def changes(self, user_id, since, limit=2000):
-        rows = self.connect().execute(
+        db = self.connect()
+        rows = db.execute(
             f"SELECT * FROM objects WHERE version > ? AND {self.VISIBLE} ORDER BY version LIMIT ?",
             (since, user_id, user_id, limit),
         ).fetchall()
-        return [self.as_dict(row) for row in rows]
+        result = [self.as_dict(row) for row in rows]
+        # Objects that left one of my shares and that I can no longer see: tell me they are gone.
+        gone = db.execute(
+            "SELECT d.object_id, d.kind, d.share_id, d.version, o.owner FROM departures d "
+            "JOIN objects o ON o.id = d.object_id "
+            "WHERE d.version > ? AND d.share_id IN (SELECT share_id FROM share_members WHERE user_id = ?) "
+            # COALESCE: a private object has share NULL, and "NULL IN (…)" would hide the row.
+            "AND NOT (o.owner = ? OR COALESCE(o.share, '') IN (SELECT share_id FROM share_members WHERE user_id = ?)) "
+            "ORDER BY d.version LIMIT ?",
+            (since, user_id, user_id, user_id, limit),
+        ).fetchall()
+        result += [{"id": row["object_id"], "kind": row["kind"], "share": row["share_id"], "owner": row["owner"],
+                    "data": {}, "deleted": True, "version": row["version"], "updated": 0, "updated_by": row["owner"]}
+                   for row in gone]
+        result.sort(key=lambda obj: obj["version"])
+        return result[:limit]
 
     def get(self, object_id, user_id):
         row = self.connect().execute(
@@ -363,6 +388,9 @@ class Store:
             "UPDATE objects SET share = ?, data = ?, deleted = ?, version = ?, updated = ?, updated_by = ? WHERE id = ?",
             (share, "{}" if deleted else encoded, int(deleted), self.next_version(version), now, user_id, object_id),
         )
+        if row["share"] and share != row["share"]:
+            db.execute("INSERT INTO departures(object_id, kind, share_id, version) VALUES (?, ?, ?, ?)",
+                       (object_id, kind, row["share"], version[0]))
         return {"id": object_id, "status": "ok", "version": version[0]}
 
     def apply_share(self, db, user_id, share_id, change, row, encoded, deleted, version):
