@@ -70,13 +70,10 @@ fun FoldersScreen(state: AppState, revision: Long) {
 
     LargeTitleScreen(
         title = "Ordner",
-        actions = { BarButton(Glyph.Gear, "Einstellungen") { state.push(Route.Settings) } },
-        bottomBar = {
-            BottomToolbar(
-                center = "",
-                leading = { BarButton(Glyph.FolderShared, "Neuer Ordner") { newFolder = true } },
-                trailing = { BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, null) } },
-            )
+        actions = {
+            BarButton(Glyph.Gear, "Einstellungen") { state.push(Route.Settings) }
+            BarButton(Glyph.FolderPlus, "Neuer Ordner") { newFolder = true }
+            BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, null) }
         },
     ) {
         item(key = "search") {
@@ -217,12 +214,8 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         title = title,
         backLabel = "Ordner",
         onBack = { state.pop() },
-        bottomBar = {
-            BottomToolbar(
-                center = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
-                trailing = { if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) } },
-            )
-        },
+        subtitle = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
+        actions = { if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) } },
     ) {
         item(key = "search") { SearchField(query, { query = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         if (shown.isEmpty()) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }

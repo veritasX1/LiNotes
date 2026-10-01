@@ -19,7 +19,8 @@ import androidx.compose.ui.unit.dp
 
 /** LiNotes' own symbols (same shapes as on Linux), drawn on a 16×16 grid. */
 enum class Glyph { Folder, FolderShared, Notes, Lock, LockOpen, Trash, Compose, Checklist, Format, Photo, Share, Cart,
-    Board, Tag, Pin, Plus, More, Back, Chevron, Search, Person, Cloud, CloudOff, Close, Gear, Grid, ListLines }
+    Board, Tag, Pin, Plus, More, Back, Chevron, Search, Person, Cloud, CloudOff, Close, Gear, Grid, ListLines,
+    FolderPlus, Key, Fingerprint, Password, UpDown }
 
 @Composable
 fun GlyphIcon(glyph: Glyph, tint: Color, size: Dp = 22.dp, modifier: Modifier = Modifier) {
@@ -40,7 +41,7 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
         drawRoundRect(color, p(x, y), Size(w * s, h * s), CornerRadius(r * s), style = line(width))
 
     when (glyph) {
-        Glyph.Folder, Glyph.FolderShared -> {
+        Glyph.Folder, Glyph.FolderShared, Glyph.FolderPlus -> {
             drawPath(path {
                 m(1.5f, 4f); c(1.5f, 3f, 2f, 2.5f, 3f, 2.5f); l(6f, 2.5f); l(7.5f, 4.5f); l(13f, 4.5f)
                 c(14f, 4.5f, 14.5f, 5f, 14.5f, 6f); l(14.5f, 12.5f); c(14.5f, 13.5f, 14f, 14f, 13f, 14f)
@@ -51,6 +52,36 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
                 drawCircle(color, 1.3f * s, p(8f, 9f))
                 drawPath(path { m(5.5f, 12.8f); c(5.5f, 10.6f, 10.5f, 10.6f, 10.5f, 12.8f) }, color, style = line(1f))
             }
+            if (glyph == Glyph.FolderPlus) {
+                drawLine(color, p(8f, 8.3f), p(8f, 12.2f), 1.2f * s, StrokeCap.Round)
+                drawLine(color, p(6.05f, 10.25f), p(9.95f, 10.25f), 1.2f * s, StrokeCap.Round)
+            }
+        }
+        Glyph.Key -> {
+            drawCircle(color, 2.8f * s, p(4.8f, 8f), style = line())
+            drawLine(color, p(7.6f, 8f), p(14.5f, 8f), 1.35f * s, StrokeCap.Round)
+            drawLine(color, p(12.2f, 8f), p(12.2f, 10.6f), 1.35f * s, StrokeCap.Round)
+            drawLine(color, p(14.3f, 8f), p(14.3f, 10f), 1.35f * s, StrokeCap.Round)
+        }
+        Glyph.Fingerprint -> {
+            fun arc(r: Float, start: Float, sweep: Float) =
+                drawArc(color, start, sweep, false, p(8f - r, 8.5f - r), Size(2 * r * s, 2 * r * s), style = line(1.1f))
+            arc(6.3f, 200f, 140f)
+            arc(4.2f, 180f, 180f)
+            arc(2.1f, 180f, 180f)
+            drawLine(color, p(3.8f, 8.5f), p(3.8f, 11.5f), 1.1f * s, StrokeCap.Round)
+            drawLine(color, p(12.2f, 8.5f), p(12.2f, 13f), 1.1f * s, StrokeCap.Round)
+            drawLine(color, p(5.9f, 8.5f), p(5.9f, 14f), 1.1f * s, StrokeCap.Round)
+            drawLine(color, p(10.1f, 8.5f), p(10.1f, 12f), 1.1f * s, StrokeCap.Round)
+            drawLine(color, p(8f, 8.5f), p(8f, 14.5f), 1.1f * s, StrokeCap.Round)
+        }
+        Glyph.Password -> {
+            rrect(1.5f, 4.5f, 13f, 7f, 2f)
+            for (x in listOf(5f, 8f, 11f)) drawCircle(color, 1f * s, p(x, 8f))
+        }
+        Glyph.UpDown -> {
+            drawPath(path { m(5f, 6.5f); l(8f, 3.5f); l(11f, 6.5f) }, color, style = line(1.6f))
+            drawPath(path { m(5f, 9.5f); l(8f, 12.5f); l(11f, 9.5f) }, color, style = line(1.6f))
         }
         Glyph.Notes -> {
             rrect(2f, 1.5f, 12f, 13f, 2f)
