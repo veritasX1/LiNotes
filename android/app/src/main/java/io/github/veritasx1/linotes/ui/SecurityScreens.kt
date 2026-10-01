@@ -756,6 +756,8 @@ private val HELP = listOf(
         "Entwicklungsprojekt" to "Board in der Übersicht lange drücken → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten " +
             "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche " +
             "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt.",
+        "Bericht" to "Board lange drücken → „Bericht teilen (PDF)“: der aktuelle Stand als PDF, z. B. als Nachweis für Kunden. " +
+            "Bei Entwicklungsprojekten mit Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme).",
     ),
     "Datenschutz" to listOf(
         "Was der Server weiß" to "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, " +
