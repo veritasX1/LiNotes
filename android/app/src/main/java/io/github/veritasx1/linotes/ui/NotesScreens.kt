@@ -255,9 +255,9 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     var locking by remember { mutableStateOf<Pair<SyncObject, Boolean>?>(null) }
 
     val shown = notes.filter { query.isBlank() || Model.text(it).contains(query, true) }
-    val pinned = shown.filter { it.data.optBoolean("pinned") && key != "trash" }.sortedByDescending { Model.modified(it) }
-    val others = (shown - pinned.toSet()).sortedByDescending { Model.modified(it) }
-    val groups = others.groupBy { Model.dateGroup(Model.modified(it)) }
+    var sortMenu by remember { mutableStateOf(false) }
+    val sorted = Model.sortNotes(shown, sync.noteSort(), pinnedFirst = key != "trash")
+    val groups = sorted.groupBy { it.group }
 
     LargeTitleScreen(
         title = title,
@@ -268,6 +268,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
             if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
             // Inside a folder: create a subfolder, list or board here – the folder as a project's filing place.
             if (folderId != null) BarButton(Glyph.FolderPlus, "Neu in diesem Ordner") { createMenu = true }
+            BarButton(Glyph.More, "Sortieren") { sortMenu = true }
             if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) }
         },
     ) {
@@ -297,12 +298,11 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         }
         val folderHasMore = subfolders.isNotEmpty() || folderLists.isNotEmpty() || folderBoards.isNotEmpty()
         if (shown.isEmpty() && (!folderHasMore || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
-        if (pinned.isNotEmpty()) section("pinned", header = "Angeheftet") {
-            pinned.forEachIndexed { index, note -> SwipeNoteRow(state, note, index < pinned.lastIndex, key, onMenu = { menu = note }) }
-        }
         groups.forEach { (group, items) ->
-            section("group-$group", header = group) {
-                items.forEachIndexed { index, note -> SwipeNoteRow(state, note, index < items.lastIndex, key, onMenu = { menu = note }) }
+            section("group-$group", header = group.ifEmpty { null }) {
+                items.forEachIndexed { index, item ->
+                    SwipeNoteRow(state, item.note, index < items.lastIndex, key, stamp = item.stamp, onMenu = { menu = item.note })
+                }
             }
         }
     }
@@ -322,6 +322,9 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         )) { menu = null }
     }
     moving?.let { note -> MoveSheet(state, note) { moving = null } }
+    if (sortMenu) ActionSheet("Notizen sortieren nach", Model.NOTE_SORTS.map { (order, label) ->
+        SheetAction(label + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
+    }) { sortMenu = false }
     if (createMenu) ActionSheet("Neu in diesem Ordner", listOf(
         SheetAction("Neuer Unterordner") { creating = "folder" },
         SheetAction("Neue Liste") { creating = "list" },
@@ -348,7 +351,7 @@ fun restoreNote(state: AppState, note: SyncObject) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SwipeNoteRow(state: AppState, note: SyncObject, divider: Boolean, key: String, onMenu: () -> Unit) {
+fun SwipeNoteRow(state: AppState, note: SyncObject, divider: Boolean, key: String, stamp: Double? = null, onMenu: () -> Unit) {
     val colors = palette
     val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         when (value) {
@@ -376,14 +379,14 @@ fun SwipeNoteRow(state: AppState, note: SyncObject, divider: Boolean, key: Strin
         },
     ) {
         Box(Modifier.background(colors.surface)) {
-            NoteRow(state, note, divider, onLongClick = onMenu) { state.push(Route.Editor(note.id)) }
+            NoteRow(state, note, divider, stamp = stamp, onLongClick = onMenu) { state.push(Route.Editor(note.id)) }
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? = null, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val colors = palette
     val sync = state.sync
     val image = Model.image(note)
@@ -404,7 +407,7 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, onLongClick: ((
                     }
                 }
                 Row {
-                    Text(Model.shortDate(Model.modified(note)), style = Type.subheadline, color = colors.label)
+                    Text(Model.shortDate(stamp ?: Model.modified(note)), style = Type.subheadline, color = colors.label)
                     Spacer(Modifier.width(8.dp))
                     Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) "Gesperrt" else "Kein weiterer Text" },
                         style = Type.subheadline, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -137,6 +137,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.view_toggle.append(self.list_mode)
         self.view_toggle.append(self.gallery_mode)
         header.pack_start(self.view_toggle)
+        # Like Apple's "Ansicht → Sortieren nach": applies to all folders and both devices.
+        sort_menu = Gio.Menu()
+        section = Gio.Menu()
+        for key, label in model.NOTE_SORTS:
+            section.append(label, f"win.sort-notes::{key}")
+        sort_menu.append_section("Notizen sortieren nach", section)
+        self.sort_button = icon_menu_button("more", "Sortieren", Gtk.PopoverMenu.new_from_model(sort_menu))
+        header.pack_start(self.sort_button)
         self.delete_button = icon_button("trash", "Löschen")
         self.delete_button.set_action_name("win.delete-note")
         header.pack_start(self.delete_button)
@@ -436,6 +444,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def show_note_tools(self, visible):
         self.note_tools.set_visible(visible)
         self.view_toggle.set_visible(visible)
+        self.sort_button.set_visible(visible)
         self.delete_button.set_visible(visible)
         self.update_narrow()
 
@@ -1260,6 +1269,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def on_sync_changed(self, ids):
         if self.pages.get_visible_child_name() != "main":
             return
+        order = self.sync.settings().get("note_sort", "modified")
+        if self.sort_action.get_state().get_string() != order:
+            self.sort_action.set_state(GLib.Variant.new_string(order))
         self.sidebar.refresh()
         visible = self.stack.get_visible_child_name()
         if visible == "list":
@@ -1326,6 +1338,16 @@ class LiNotesWindow(Adw.ApplicationWindow):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, function=callback: function())
             self.add_action(action)
+        current = self.sync.settings().get("note_sort", "modified")
+        self.sort_action = Gio.SimpleAction.new_stateful("sort-notes", GLib.VariantType.new("s"), GLib.Variant.new_string(current))
+        self.sort_action.connect("activate", lambda action, value: self.sort_notes(value.get_string()))
+        self.add_action(self.sort_action)
+
+    def sort_notes(self, order):
+        self.sort_action.set_state(GLib.Variant.new_string(order))
+        if self.sync.settings().get("note_sort", "modified") != order:
+            self.sync.update_settings(note_sort=order)
+        self.show_notes()
 
     def on_key(self, controller, keyval, keycode, state):
         control = bool(state & Gdk.ModifierType.CONTROL_MASK)

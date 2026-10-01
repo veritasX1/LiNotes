@@ -594,6 +594,11 @@ class SyncEngine(private val context: Context) {
         put("settings", data, null, "settings-$userId")
     }
 
+    /** How note lists are sorted – synced, so all devices show the same order. */
+    fun noteSort(): String = settings().optString("note_sort", "modified")
+
+    fun setNoteSort(order: String) = updateSettings { it.put("note_sort", order) }
+
     fun keyfileSaved(): Boolean = settings().optDouble("keyfile_saved", 0.0) > 0
 
     fun markKeyfileSaved() = updateSettings { it.put("keyfile_saved", System.currentTimeMillis() / 1000.0) }

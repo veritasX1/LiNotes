@@ -16,7 +16,7 @@ from .icons import Icon, drag_source
 
 class NoteRow(Gtk.ListBoxRow):
 
-    def __init__(self, note, group, sync):
+    def __init__(self, note, group, sync, stamp=None):
         super().__init__()
         self.note_id = note["id"]
         self.group = group
@@ -39,7 +39,7 @@ class NoteRow(Gtk.ListBoxRow):
 
         meta = Gtk.Box()
         meta.add_css_class("note-row-meta")
-        date = Gtk.Label(label=model.short_date(model.modified(note)), xalign=0)
+        date = Gtk.Label(label=model.short_date(stamp or model.modified(note)), xalign=0)
         date.add_css_class("note-row-date")
         meta.append(date)
         preview_text = model.note_preview(note) or ("Gesperrt" if data.get("enc") else "Kein weiterer Text")
@@ -174,7 +174,7 @@ class NoteList(Gtk.Box):
         self.extras.set_visible(bool(entries))
 
     def header_func(self, row, before):
-        if before is None or before.group != row.group:
+        if row.group and (before is None or before.group != row.group):
             label = Gtk.Label(label=row.group, xalign=0)
             label.add_css_class("list-section-header")
             row.set_header(label)
@@ -196,15 +196,9 @@ class NoteList(Gtk.Box):
             self.gallery.remove(child)
             child = following
 
-        pinned = [note for note in notes if note["data"].get("pinned") and not note["data"].get("trashed")]
-        others = [note for note in notes if note not in pinned]
-        pinned.sort(key=model.modified, reverse=True)
-        others.sort(key=model.modified, reverse=True)
-
         select_row = None
-        for note in pinned + others:
-            group = "Angeheftet" if note in pinned else model.date_group(model.modified(note))
-            row = NoteRow(note, group, self.sync)
+        for note, group, stamp in model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")):
+            row = NoteRow(note, group, self.sync, stamp)
             self.list.append(row)
             if note["id"] == selected_id:
                 select_row = row
