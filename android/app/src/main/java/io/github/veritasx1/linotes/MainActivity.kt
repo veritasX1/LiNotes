@@ -39,6 +39,15 @@ class MainActivity : FragmentActivity() {
         callback(bytes, mime)
     }
 
+    // Photo straight from the camera: the camera app writes into a file we hand it.
+    private var pendingPhoto: Pair<java.io.File, (ByteArray, String) -> Unit>? = null
+    private val photo = registerForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val (file, callback) = pendingPhoto ?: return@registerForActivityResult
+        pendingPhoto = null
+        if (taken && file.length() > 0) callback(file.readBytes(), "image/jpeg")
+        file.delete()
+    }
+
     private var pendingSave: Pair<ByteArray, (Boolean) -> Unit>? = null
     private var pendingOpen: ((ByteArray?) -> Unit)? = null
     private var pendingCamera: ((Boolean) -> Unit)? = null
@@ -88,6 +97,17 @@ class MainActivity : FragmentActivity() {
         state.pickImage = { callback ->
             pendingImage = callback
             picker.launch("image/*")
+        }
+        state.takePhoto = { callback ->
+            // The app declares the camera permission (QR codes), so the camera app needs it granted too.
+            state.requestCamera { granted ->
+                if (!granted) state.toastLater("Ohne Kamera-Erlaubnis kein Foto.")
+                else {
+                    val file = java.io.File(java.io.File(cacheDir, "photos").apply { mkdirs() }, "foto-${System.currentTimeMillis()}.jpg")
+                    pendingPhoto = file to callback
+                    photo.launch(androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file))
+                }
+            }
         }
         state.authenticate = { title, done -> authenticate(title, done) }
         state.saveDocument = { name, content, done ->
