@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -31,6 +33,7 @@ import android.view.MotionEvent
 import android.widget.EditText
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 
 private const val OBJECT = '￼'
 val LIST_TYPES = setOf("bullet", "dash", "number", "check")
@@ -584,7 +587,31 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
             while (bounds.outWidth / sample > maxSize || bounds.outHeight / sample > maxSize) sample *= 2
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: return null
+            return applyExifOrientation(bytes, bitmap)
+        }
+
+        /** Handyfotos sind oft quer gespeichert, die Drehung steht im EXIF. */
+        fun applyExifOrientation(bytes: ByteArray, bitmap: Bitmap): Bitmap {
+            val orientation = try {
+                ExifInterface(ByteArrayInputStream(bytes))
+                    .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            } catch (error: Exception) {
+                ExifInterface.ORIENTATION_NORMAL
+            }
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> { matrix.postRotate(90f); matrix.postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_TRANSVERSE -> { matrix.postRotate(270f); matrix.postScale(-1f, 1f) }
+                else -> return bitmap
+            }
+            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         }
     }
 
