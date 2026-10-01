@@ -344,6 +344,8 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             data.put("enc", Vault.sealBody(key, body)).put("title", Model.blocksTitle(body)).put("modified", Model.now())
             sync.put("note", data, current.share, current.id)
             state.toastLater("Notiz gesperrt")
+            // Locking hides the content right away.
+            state.lockAll()
         } else {
             val body = Vault.openBody(key, data.getJSONObject("enc"))
             data.remove("enc")
