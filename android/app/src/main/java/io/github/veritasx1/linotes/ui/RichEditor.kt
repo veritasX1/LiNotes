@@ -166,6 +166,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var pendingInline: MutableSet<String>? = null
     var onEdited: (() -> Unit)? = null
     var onStyleChanged: (() -> Unit)? = null
+    /** The cursor moved (typing, tapping, new line) – the screen keeps it above the keyboard. */
+    var onCaretMoved: (() -> Unit)? = null
     var autoSortChecked = false
 
     init {
@@ -459,6 +461,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         super.onSelectionChanged(selStart, selEnd)
         pendingInline = null
         onStyleChanged?.invoke()
+        // After the next layout pass, so the line positions are up to date.
+        post { onCaretMoved?.invoke() }
     }
 
     // --- loading and saving ------------------------------------
