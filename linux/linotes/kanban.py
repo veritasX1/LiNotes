@@ -160,8 +160,9 @@ class ColumnWidget(Gtk.Box):
         text = entry.get_text().strip()
         entry.set_text("")
         if text:
-            self.board.add_card(self.column_id, text)
-            GLib.idle_add(lambda: (self.board.focus_add(self.column_id), False)[1])
+            board, column_id = self.board, self.column_id
+            board.add_card(column_id, text)
+            GLib.idle_add(lambda: (board.focus_add(column_id), board.reveal_add(column_id), False)[2])
 
     def on_drop(self, target, value, x, y):
         self.remove_css_class("drop-target")
@@ -211,6 +212,7 @@ class BoardView(Gtk.Box):
         self.columns_box.set_margin_top(14)
         self.columns_box.set_margin_bottom(20)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.columns_box)
+        self.scroller = scroller
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
 
@@ -245,10 +247,22 @@ class BoardView(Gtk.Box):
         if board is None:
             return
         self.title.set_label(board["data"].get("name", "Board"))
+        # Neuaufbau (auch durch eigene Änderungen, die vom Server zurückkommen)
+        # darf weder Scrollposition noch das gerade benutzte Eingabefeld verlieren.
+        typing = None
+        hadj, vadj = self.scroller.get_hadjustment(), self.scroller.get_vadjustment()
+        scroll = (hadj.get_value(), vadj.get_value())
+        root = self.get_root()
+        focus = root.get_focus() if root else None
         total = 0
         child = self.columns_box.get_first_child()
         while child is not None:
             following = child.get_next_sibling()
+            entry = child.add_entry
+            # Der Fokus liegt im inneren Gtk.Text des Eingabefelds.
+            focused = focus is not None and (focus is entry or focus.is_ancestor(entry))
+            if focused or entry.get_text():
+                typing = (child.column_id, entry.get_text(), entry.get_position(), focused)
             self.columns_box.remove(child)
             child = following
         for column in self.columns():
@@ -257,12 +271,47 @@ class BoardView(Gtk.Box):
             self.columns_box.append(ColumnWidget(self, column, cards))
         where = share_label(self.sync, board)
         self.subtitle.set_label(f"{total} Karten · {where}")
+        self.restore_scroll(scroll, typing[0] if typing and typing[3] else None)
+        if typing:
+            # Erst nach dem Layout lässt sich das neue Feld fokussieren.
+            self.focus_add(*typing)
+            GLib.idle_add(lambda: (self.focus_add(*typing), False)[1])
 
-    def focus_add(self, column_id):
+    def restore_scroll(self, scroll, column_id=None):
+        def apply():
+            self.scroller.get_hadjustment().set_value(scroll[0])
+            vadj = self.scroller.get_vadjustment()
+            vadj.set_value(scroll[1])
+            if column_id:
+                # Wer gerade Karten eintippt, behält das Eingabefeld im Blick.
+                self.reveal_add(column_id)
+            return False
+        apply()
+        GLib.idle_add(apply)
+
+    def reveal_add(self, column_id):
+        child = self.columns_box.get_first_child()
+        while child is not None and child.column_id != column_id:
+            child = child.get_next_sibling()
+        if child is None:
+            return
+        found, bounds = child.add_entry.compute_bounds(self.columns_box)
+        if not found:
+            return
+        vadj = self.scroller.get_vadjustment()
+        bottom = bounds.get_y() + bounds.get_height() + 20
+        if bottom > vadj.get_value() + vadj.get_page_size():
+            vadj.set_value(min(bottom - vadj.get_page_size(), vadj.get_upper() - vadj.get_page_size()))
+
+    def focus_add(self, column_id, text="", position=-1, focus=True):
         child = self.columns_box.get_first_child()
         while child is not None:
             if child.column_id == column_id:
-                child.add_entry.grab_focus()
+                entry = child.add_entry
+                entry.set_text(text)
+                if focus:
+                    entry.grab_focus_without_selecting()
+                    entry.set_position(position)
             child = child.get_next_sibling()
 
     # --- actions ------------------------------------------------
@@ -389,13 +438,18 @@ class CardDialog(Adw.Dialog):
         self.color_buttons = {}
         group_button = None
         for key, value in [(None, None)] + LABEL_COLORS:
-            button = Gtk.ToggleButton()
+            button = Gtk.ToggleButton(valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
             button.set_size_request(26, 26)
             button.add_css_class("circular")
+            button.add_css_class("color-swatch")
             if value:
                 provider = Gtk.CssProvider()
-                provider.load_from_string(f"button {{ background: {value}; min-width: 22px; min-height: 22px; }}")
+                provider.load_from_string(f"button {{ background: {value}; }}")
                 button.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+                # Haken zeigt die gewählte Farbe (wie auf Android/macOS).
+                check = Gtk.Image(icon_name="object-select-symbolic", pixel_size=14)
+                check.add_css_class("color-check")
+                button.set_child(check)
             else:
                 button.set_label("–")
             if group_button:
@@ -403,7 +457,10 @@ class CardDialog(Adw.Dialog):
             group_button = group_button or button
             button.set_active(key == self.color)
             button.connect("toggled", self.on_color, key)
+            button.connect("toggled", lambda _b: self.update_checks())
+            self.color_buttons[key] = button
             color_box.append(button)
+        self.update_checks()
         colors.add_suffix(color_box)
         group.add(colors)
         page.add(group)
@@ -437,6 +494,12 @@ class CardDialog(Adw.Dialog):
         self.set_child(view)
         self.connect("closed", lambda _dialog: self.save())
         self.deleted = False
+
+    def update_checks(self):
+        for button in self.color_buttons.values():
+            check = button.get_child()
+            if isinstance(check, Gtk.Image):
+                check.set_opacity(1 if button.get_active() else 0)
 
     def on_color(self, button, key):
         if button.get_active():
