@@ -61,6 +61,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
     var newFolder by remember { mutableStateOf(false) }
     var folderMenu by remember { mutableStateOf<SyncObject?>(null) }
     var rename by remember { mutableStateOf<SyncObject?>(null) }
+    var newSubfolder by remember { mutableStateOf<SyncObject?>(null) }
+    var movingFolder by remember { mutableStateOf<SyncObject?>(null) }
 
     val notes = remember(revision) { sync.all("note") }
     val live = notes.filter { !it.data.has("trashed") }
@@ -92,9 +94,9 @@ fun FoldersScreen(state: AppState, revision: Long) {
         }
         section("mine", header = "Meine Notizen") {
             GroupRow("Alle Notizen", Glyph.Notes, detail = "${live.size}") { state.push(Route.NoteList("all")) }
-            folders.filter { it.share == null }.forEach { folder ->
+            folderTree(sync, folders.filter { it.share == null }).forEach { (folder, depth) ->
                 GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder, detail = "${count { it.data.optString("folder") == folder.id }}",
-                    onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
+                    indent = (20 * depth).dp, onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
             GroupRow("Gesperrt", Glyph.Lock, detail = "${count { it.data.has("enc") }}") { state.push(Route.NoteList("locked")) }
             GroupRow("Zuletzt gelöscht", Glyph.Trash, detail = "${notes.count { it.data.has("trashed") }}", divider = false) {
@@ -107,9 +109,11 @@ fun FoldersScreen(state: AppState, revision: Long) {
             if (loose.isNotEmpty()) GroupRow("Mit mir geteilt", Glyph.Person, detail = "${loose.size}", divider = shared.isNotEmpty()) {
                 state.push(Route.NoteList("shared-notes"))
             }
-            shared.forEachIndexed { index, folder ->
-                GroupRow(folder.data.optString("name", "Ordner"), Glyph.FolderShared, detail = "${count { it.data.optString("folder") == folder.id }}",
-                    divider = index < shared.lastIndex, onLongClick = { folderMenu = folder }) {
+            val sharedTree = folderTree(sync, shared)
+            sharedTree.forEachIndexed { index, (folder, depth) ->
+                GroupRow(folder.data.optString("name", "Ordner"), if (depth == 0) Glyph.FolderShared else Glyph.Folder,
+                    detail = "${count { it.data.optString("folder") == folder.id }}", indent = (20 * depth).dp,
+                    divider = index < sharedTree.lastIndex, onLongClick = { folderMenu = folder }) {
                     state.push(Route.NoteList("folder:${folder.id}"))
                 }
             }
@@ -136,13 +140,37 @@ fun FoldersScreen(state: AppState, revision: Long) {
             newFolder = false
         }
     }
+    newSubfolder?.let { parent ->
+        AlertDialog("Neuer Unterordner", "Neuer Ordner in „${parent.data.optString("name")}“.", "Sichern",
+            fields = listOf(AlertField("Name")), onDismiss = { newSubfolder = null }) { values ->
+            // A subfolder lives where its parent lives (private or in the parent's share).
+            if (values[0].isNotBlank()) sync.put("folder", JSONObject().put("name", values[0].trim()).put("order", Model.now())
+                .put("parent", parent.id), parent.share)
+            newSubfolder = null
+        }
+    }
+    movingFolder?.let { folder ->
+        val blocked = folderDescendants(sync, folder.id) + folder.id
+        val current = folderParent(sync, folder)
+        val targets = sync.all("folder").filter { it.id !in blocked && it.share == folder.share && it.id != current }
+            .sortedBy { folderPath(sync, it).lowercase() }
+        ActionSheet("„${folder.data.optString("name")}“ verschieben nach", buildList {
+            if (current != null) add(SheetAction("Oberste Ebene") { sync.update(folder.id) { it.remove("parent") } })
+            targets.forEach { target -> add(SheetAction(folderPath(sync, target)) { sync.update(folder.id) { it.put("parent", target.id) } }) }
+        }) { movingFolder = null }
+    }
     folderMenu?.let { folder ->
         val protected = folder.id == Model.privateFolder(sync.userId)
         ActionSheet(folder.data.optString("name"), buildList {
             add(SheetAction("Umbenennen") { rename = folder })
             add(SheetAction("Teilen …") { state.push(Route.Share(folder.id)) })
+            add(SheetAction("Neuer Unterordner …") { newSubfolder = folder })
+            add(SheetAction("Verschieben nach …") { movingFolder = folder })
             if (!protected) add(SheetAction("Ordner löschen", destructive = true) {
-                for (note in sync.all("note")) if (note.data.optString("folder") == folder.id) sync.update(note.id) { it.put("trashed", Model.now()) }
+                // The folder, its subfolders and all their notes (notes go to "Zuletzt gelöscht").
+                val doomed = folderDescendants(sync, folder.id) + folder.id
+                for (note in sync.all("note")) if (note.data.optString("folder") in doomed) sync.update(note.id) { it.put("trashed", Model.now()) }
+                (doomed - folder.id).forEach { sync.delete(it) }
                 sync.delete(folder.id)
             })
         }) { folderMenu = null }
@@ -202,6 +230,11 @@ fun notesFor(sync: SyncEngine, key: String): Pair<List<SyncObject>, String> {
 fun NoteListScreen(state: AppState, key: String, revision: Long) {
     val sync = state.sync
     val (notes, title) = remember(revision, key) { notesFor(sync, key) }
+    val subfolders = remember(revision, key) {
+        if (!key.startsWith("folder:")) emptyList()
+        else sync.all("folder").filter { folderParent(sync, it) == key.removePrefix("folder:") }
+            .sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name").lowercase() }))
+    }
     var query by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var moving by remember { mutableStateOf<SyncObject?>(null) }
@@ -223,7 +256,14 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         },
     ) {
         item(key = "search") { SearchField(query, { query = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-        if (shown.isEmpty()) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
+        if (subfolders.isNotEmpty() && query.isBlank()) section("subfolders", header = "Ordner") {
+            subfolders.forEachIndexed { index, folder ->
+                GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder,
+                    detail = "${sync.all("note").count { it.data.optString("folder") == folder.id && !it.data.has("trashed") }}",
+                    divider = index < subfolders.lastIndex) { state.push(Route.NoteList("folder:${folder.id}")) }
+            }
+        }
+        if (shown.isEmpty() && (subfolders.isEmpty() || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
         if (pinned.isNotEmpty()) section("pinned", header = "Angeheftet") {
             pinned.forEachIndexed { index, note -> SwipeNoteRow(state, note, index < pinned.lastIndex, key, onMenu = { menu = note }) }
         }
@@ -363,9 +403,9 @@ fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int) {
 fun MoveSheet(state: AppState, note: SyncObject, onDone: () -> Unit) {
     val sync = state.sync
     val folders = sync.all("folder").filter { it.id != note.data.optString("folder") }
-        .sortedWith(compareBy({ it.share != null }, { it.data.optString("name") }))
+        .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
     ActionSheet("Verschieben nach", folders.map { folder ->
-        val label = folder.data.optString("name") + if (folder.share != null) " (geteilt)" else ""
+        val label = folderPath(sync, folder) + if (folder.share != null) " (geteilt)" else ""
         SheetAction(label) {
             when {
                 folder.share != null && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")

@@ -276,3 +276,9 @@ button.text-highlight {
   font-size: 8.25pt;
   opacity: 0.5;
 }
+
+.sidebar-expander {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+}

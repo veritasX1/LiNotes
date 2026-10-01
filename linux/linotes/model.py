@@ -124,6 +124,63 @@ def empty_note_body():
     return [{"t": "title", "x": ""}]
 
 
+# --- folders ----------------------------------------------------
+
+def folder_parent(sync, folder):
+    """Parent folder id, or None at the top (also when the parent is gone)."""
+    parent = folder["data"].get("parent")
+    return parent if parent and parent != folder["id"] and sync.get(parent) else None
+
+
+def folder_sort_key(folder):
+    return (folder["data"].get("order", 0), folder["data"].get("name", "").lower())
+
+
+def folder_tree(sync, folders):
+    """[(folder, depth)] depth-first. A folder whose parent is not among
+    `folders` starts a tree of its own (e.g. a shared folder in a private one)."""
+    ids = {folder["id"] for folder in folders}
+    children = {}
+    for folder in folders:
+        parent = folder_parent(sync, folder)
+        children.setdefault(parent if parent in ids else None, []).append(folder)
+    result, seen = [], set()
+
+    def walk(parent, depth):
+        for folder in sorted(children.get(parent, []), key=folder_sort_key):
+            if folder["id"] in seen:
+                continue
+            seen.add(folder["id"])
+            result.append((folder, depth))
+            walk(folder["id"], depth + 1)
+    walk(None, 0)
+    return result
+
+
+def folder_descendants(sync, folder_id):
+    """Ids of all folders below `folder_id` (not including it)."""
+    found, todo = set(), [folder_id]
+    folders = sync.objects("folder")
+    while todo:
+        current = todo.pop()
+        for folder in folders:
+            if folder["data"].get("parent") == current and folder["id"] not in found and folder["id"] != folder_id:
+                found.add(folder["id"])
+                todo.append(folder["id"])
+    return found
+
+
+def folder_path(sync, folder):
+    """"Projekte › LiNotes › Entwicklung" – for move dialogs."""
+    names, current, guard = [], folder, 0
+    while current is not None and guard < 32:
+        names.append(current["data"].get("name", "Ordner"))
+        parent = folder_parent(sync, current)
+        current = sync.get(parent) if parent else None
+        guard += 1
+    return " › ".join(reversed(names))
+
+
 # --- board cards ------------------------------------------------
 
 # Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title.

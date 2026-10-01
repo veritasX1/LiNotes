@@ -242,6 +242,7 @@ fun GroupRow(
     chevron: Boolean = true,
     divider: Boolean = true,
     titleColor: Color = palette.label,
+    indent: Dp = 0.dp,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -254,7 +255,7 @@ fun GroupRow(
         ),
     ) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = 16.dp + indent, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (glyph != null) {
@@ -272,7 +273,7 @@ fun GroupRow(
                 GlyphIcon(Glyph.Chevron, colors.tertiary, 14.dp)
             }
         }
-        if (divider) HorizontalDivider(Modifier.padding(start = if (glyph != null) 54.dp else 16.dp), 0.5.dp, colors.separator)
+        if (divider) HorizontalDivider(Modifier.padding(start = indent + if (glyph != null) 54.dp else 16.dp), 0.5.dp, colors.separator)
     }
 }
 
