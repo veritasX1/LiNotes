@@ -854,8 +854,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             data["modified"] = time.time()
             self.sync.put("note", data, current.get("share"), current["id"])
             self.toast("Notiz gesperrt")
+            # Locking hides the content right away (and every other open locked note).
+            self.lock_all()
             self.refresh_list_only()
-            self.open_note(current["id"])
+            self.note_pane.show_locked(current["id"])
         self.with_vault(lock)
 
     def change_vault_password(self):
