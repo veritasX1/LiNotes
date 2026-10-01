@@ -119,6 +119,9 @@ class MainActivity : FragmentActivity() {
             }
 
             override fun onStop(owner: LifecycleOwner) {
+                // Like Apple: leaving the app or switching the screen off locks the notes
+                // (the open locked note is saved first, then pushed below).
+                state.lockAll()
                 state.sync.launch { try { state.sync.pushOnce() } catch (error: Exception) { } }
                 state.sync.stop()
             }

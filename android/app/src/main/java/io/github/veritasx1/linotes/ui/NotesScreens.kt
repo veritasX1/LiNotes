@@ -71,6 +71,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
     LargeTitleScreen(
         title = "Ordner",
         actions = {
+            // Like Apple's "Lock Now": shown while locked notes are open.
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
             BarButton(Glyph.Gear, "Einstellungen") { state.push(Route.Settings) }
             BarButton(Glyph.FolderPlus, "Neuer Ordner") { newFolder = true }
             BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, null) }
@@ -215,7 +217,10 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         backLabel = "Ordner",
         onBack = { state.pop() },
         subtitle = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
-        actions = { if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) } },
+        actions = {
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
+            if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) }
+        },
     ) {
         item(key = "search") { SearchField(query, { query = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         if (shown.isEmpty()) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
