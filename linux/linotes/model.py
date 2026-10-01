@@ -19,15 +19,21 @@ def note_blocks(note):
     return note["data"].get("body") or []
 
 
-def note_title(note, locked_label="Gesperrte Notiz"):
-    data = note["data"]
-    if data.get("enc"):
-        return locked_label
-    for block in note_blocks(note):
+def blocks_title(blocks):
+    for block in blocks:
         text = block.get("x", "").strip()
         if text:
             return text[:120]
-    return data.get("title") or "Neue Notiz"
+    return ""
+
+
+def note_title(note, locked_label="Gesperrte Notiz"):
+    """Locked notes keep their title visible, like in Apple's Notes (only the
+    content is behind the notes password)."""
+    data = note["data"]
+    if data.get("enc"):
+        return data.get("title") or locked_label
+    return blocks_title(note_blocks(note)) or data.get("title") or "Neue Notiz"
 
 
 def note_preview(note):

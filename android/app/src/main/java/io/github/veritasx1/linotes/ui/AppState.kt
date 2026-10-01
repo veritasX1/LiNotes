@@ -40,8 +40,12 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
         mutableStateListOf<Route>(Route.Boards),
     )
     var toast by mutableStateOf<String?>(null)
-    var vaultKey: ByteArray? = null
+    /** Observed: when it goes away, open locked notes redraw as locked. */
+    var vaultKey by mutableStateOf<ByteArray?>(null)
         private set
+
+    /** Saves the open locked note before the key goes away (set by the editor). */
+    var flushLocked: (() -> Unit)? = null
     private var vaultUsed = 0L
     var pickImage: ((ByteArray, String) -> Unit) -> Unit = {}
 
@@ -110,10 +114,12 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     }
 
     fun checkAutoLock() {
-        if (vaultKey != null && System.currentTimeMillis() - vaultUsed > 10 * 60 * 1000) vaultKey = null
+        // Like Apple: an unlocked note stays open for a few minutes of inactivity.
+        if (vaultKey != null && System.currentTimeMillis() - vaultUsed > 5 * 60 * 1000) lockAll()
     }
 
     fun lockAll() {
+        if (vaultKey != null) flushLocked?.invoke()
         vaultKey = null
     }
 

@@ -17,8 +17,17 @@ object Model {
 
     fun isLocked(note: SyncObject) = note.data.has("enc")
 
+    fun blocksTitle(blocks: JSONArray): String {
+        for (index in 0 until blocks.length()) {
+            val text = blocks.optJSONObject(index)?.optString("x")?.trim().orEmpty()
+            if (text.isNotEmpty()) return text.take(120)
+        }
+        return ""
+    }
+
     fun title(note: SyncObject): String {
-        if (isLocked(note)) return "Gesperrte Notiz"
+        // Locked notes keep their title visible, like in Apple's Notes.
+        if (isLocked(note)) return note.data.optString("title").ifEmpty { "Gesperrte Notiz" }
         val body = blocks(note)
         for (index in 0 until body.length()) {
             val text = body.optJSONObject(index)?.optString("x")?.trim().orEmpty()

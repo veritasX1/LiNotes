@@ -36,6 +36,10 @@ fun LiNotesApp(state: AppState) {
                 state.showToast("Bitte melde dich erneut an.")
             }
         }
+        // Unlocked notes lock again after a few minutes without use (like Apple).
+        LaunchedEffect(Unit) {
+            while (true) { kotlinx.coroutines.delay(30_000); state.checkAutoLock() }
+        }
         LaunchedEffect(Unit) {
             state.sync.requests.collect { request -> if (state.incoming.none { it.optString("channel") == request.optString("channel") }) state.incoming.add(request) }
         }

@@ -148,7 +148,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         val data = JSONObject(current.data.toString()).put("modified", Model.now())
         if (data.has("enc")) {
             val key = state.vaultKey ?: return
-            data.put("enc", Vault.sealBody(key, blocks))
+            data.put("enc", Vault.sealBody(key, blocks)).put("title", Model.blocksTitle(blocks))
             state.touchVault()
         } else {
             data.put("body", blocks)
@@ -156,10 +156,20 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         sync.put("note", data, current.share, current.id)
     }
 
+    // Locking (timeout, app in background, "lock now") saves the open note first.
+    DisposableEffect(noteId) {
+        state.flushLocked = { if (sync.get(noteId)?.data?.has("enc") == true) save() }
+        onDispose { state.flushLocked = null }
+    }
+
     // Load the note (and reload it when it changes on another device).
-    val body = remember(revision, noteId, unlockedRevision) { currentBody() }
+    val body = remember(revision, noteId, unlockedRevision, state.vaultKey) { currentBody() }
     LaunchedEffect(body?.toString(), colors.dark) {
         val text = body?.toString() ?: return@LaunchedEffect
+        if (locked && note.data.optString("title").isEmpty() && Model.blocksTitle(body).isNotEmpty()) {
+            // Notes locked before titles stayed visible get theirs now.
+            sync.update(noteId) { it.put("title", Model.blocksTitle(body)) }
+        }
         if (text != loadedBlocks.value) {
             val firstLoad = loadedBlocks.value == null
             loadedBlocks.value = text
@@ -196,6 +206,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             title = "", backLabel = backLabel, onBack = { save(); state.pop() }, background = colors.plain,
             actions = {
                 if (!trashed && !locked) BarButton(Glyph.Share, "Teilen") { save(); state.push(Route.Share(note.id)) }
+                // Like Apple: the open lock in an unlocked note locks it again right away.
+                if (locked && state.vaultKey != null) BarButton(Glyph.LockOpen, "Jetzt sperren") { state.lockAll() }
                 BarButton(Glyph.More, "Mehr") { save(); showMenu = true }
             },
         )
@@ -329,12 +341,13 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
         if (lock) {
             val body = data.optJSONArray("body") ?: JSONArray()
             data.remove("body")
-            data.put("enc", Vault.sealBody(key, body)).put("modified", Model.now())
+            data.put("enc", Vault.sealBody(key, body)).put("title", Model.blocksTitle(body)).put("modified", Model.now())
             sync.put("note", data, current.share, current.id)
             state.toastLater("Notiz gesperrt")
         } else {
             val body = Vault.openBody(key, data.getJSONObject("enc"))
             data.remove("enc")
+            data.remove("title")
             data.put("body", body)
             sync.put("note", data, current.share, current.id)
             state.toastLater("Sperre entfernt")

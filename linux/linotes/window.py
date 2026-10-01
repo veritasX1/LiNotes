@@ -24,7 +24,8 @@ from .sync import device_name
 
 
 DECORATION_LAYOUT = "close,minimize,maximize:"
-AUTO_LOCK_SECONDS = 10 * 60
+# Like Apple: an unlocked note stays open for a few minutes of inactivity.
+AUTO_LOCK_SECONDS = 5 * 60
 TRASH_DAYS = 30
 
 PARAGRAPH_MENU = [
@@ -72,6 +73,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         sync.connect_status(self.on_status)
         sync.connect_channels(self.on_channel)
         GLib.timeout_add_seconds(30, self.check_auto_lock)
+        self.watch_screen_lock()
 
         if sync.restore():
             self.enter_main()
@@ -149,7 +151,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         photo.set_action_name("win.insert-photo")
         self.note_tools.append(photo)
         self.lock_button = icon_button("lock", "Notiz sperren")
-        self.lock_button.set_action_name("win.toggle-lock")
+        self.lock_button.set_action_name("win.lock-button")
         self.note_tools.append(self.lock_button)
         self.share_button = icon_button("share", "Notiz teilen …")
         self.share_button.set_action_name("win.share-note")
@@ -519,6 +521,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.note_pane.show_locked(note_id)
                 return
             self.touch_vault()
+            if not note["data"].get("title") and model.blocks_title(blocks):
+                # Notes locked before titles stayed visible get theirs now.
+                self.sync.update(note_id, title=model.blocks_title(blocks))
         else:
             blocks = model.note_blocks(note)
         self.editing_blocks = blocks
@@ -539,6 +544,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if self.vault_key is None:
                 return
             data["enc"] = vault.seal(self.vault_key, {"body": blocks})
+            data["title"] = model.blocks_title(blocks)
             self.touch_vault()
         else:
             data["body"] = blocks
@@ -553,12 +559,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def update_note_actions(self):
         note = self.sync.get(self.current_note) if self.current_note else None
         has = note is not None
-        for name in ("delete-note", "toggle-lock", "move-note", "pin-note", "duplicate-note", "insert-photo"):
+        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo"):
             self.lookup_action(name).set_enabled(has)
         if has:
             locked = bool(note["data"].get("enc"))
-            self.lock_button.get_child().name = "lock-open" if locked else "lock"
-            self.lock_button.set_tooltip_text("Sperre entfernen" if locked else "Notiz sperren")
+            # Like Apple: the open lock in an unlocked note locks it again right away.
+            unlocked = locked and self.vault_key is not None
+            self.lock_button.get_child().name = "lock-open" if unlocked else "lock"
+            self.lock_button.set_tooltip_text("Jetzt sperren" if unlocked else "Entsperren" if locked else "Notiz sperren")
             self.lock_button.get_child().queue_draw()
             self.lookup_action("insert-photo").set_enabled(not locked and not note["data"].get("trashed"))
 
@@ -750,6 +758,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(self.current_note) if self.current_note else None
         if note is not None and note["data"].get("enc"):
             self.note_pane.show_locked(note["id"])
+        self.update_note_actions()
 
     def with_vault(self, then, reason="Gib dein Notizen-Passwort ein."):
         """Make sure the vault is unlocked (creating it first if needed)."""
@@ -788,6 +797,27 @@ class LiNotesWindow(Adw.ApplicationWindow):
             run_async(derive, done)
         ask_password(self, "Gesperrte Notizen", reason, unlock, hint=existing["data"].get("hint"), action="Entsperren")
 
+    def on_lock_button(self):
+        note = self.sync.get(self.current_note) if self.current_note else None
+        if note is None or not note["data"].get("enc"):
+            self.toggle_lock()
+        elif self.vault_key is not None:
+            self.lock_all()
+        else:
+            self.unlock_current()
+
+    def watch_screen_lock(self):
+        """Like Apple when the device sleeps: locking the screen locks the notes."""
+        def on_signal(_connection, _sender, _path, _iface, _signal, params, *_args):
+            if params.unpack()[0]:
+                self.lock_all()
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            bus.signal_subscribe(None, "org.gnome.ScreenSaver", "ActiveChanged", "/org/gnome/ScreenSaver",
+                                 None, Gio.DBusSignalFlags.NONE, on_signal)
+        except GLib.Error:
+            pass
+
     def unlock_current(self):
         note_id = self.current_note
         self.with_vault(lambda: self.open_note(note_id))
@@ -802,6 +832,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 body = vault.open_box(self.vault_key, current["data"]["enc"])["body"]
                 data = dict(current["data"])
                 data.pop("enc")
+                data.pop("title", None)
                 data["body"] = body
                 self.sync.put("note", data, current.get("share"), current["id"])
                 self.toast("Sperre entfernt")
@@ -819,6 +850,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             data = dict(current["data"])
             body = data.pop("body", [])
             data["enc"] = vault.seal(self.vault_key, {"body": body})
+            data["title"] = model.blocks_title(body)
             data["modified"] = time.time()
             self.sync.put("note", data, current.get("share"), current["id"])
             self.toast("Notiz gesperrt")
@@ -988,6 +1020,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "duplicate-note": self.duplicate,
             "move-note": self.move_note,
             "toggle-lock": self.toggle_lock,
+            "lock-button": self.on_lock_button,
             "lock-all": self.lock_all,
             "insert-photo": self.insert_photo,
             "new-folder": self.new_folder,
