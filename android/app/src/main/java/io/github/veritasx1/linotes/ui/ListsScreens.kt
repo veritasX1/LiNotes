@@ -59,20 +59,22 @@ fun ListsScreen(state: AppState, revision: Long) {
     var creating by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
+    var moving by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
         title = "Listen",
         actions = { BarButton(Glyph.Plus, "Neue Liste") { creating = true } },
     ) {
         if (lists.isEmpty()) item { EmptyState("Keine Listen", glyph = Glyph.Cart) }
-        section("lists", header = "Meine Listen") {
-            lists.forEachIndexed { index, list ->
+        // Grouped by folder: unfiled lists first ("Meine Listen"), then one section per folder.
+        for ((folder, group) in groupByFolder(sync, lists)) section("lists-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Meine Listen") {
+            group.forEachIndexed { index, list ->
                 val open = items.count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }
                 GroupRow(
                     title = list.data.optString("name", "Liste"),
                     subtitle = shareLabel(sync, list),
                     detail = "$open",
-                    divider = index < lists.lastIndex,
+                    divider = index < group.lastIndex,
                     onLongClick = { menu = list },
                     glyph = Glyph.Cart,
                     tint = listColor(list),
@@ -90,7 +92,8 @@ fun ListsScreen(state: AppState, revision: Long) {
             creating = false
         }
     }
-    menu?.let { list -> ListMenu(state, list, onRename = { renaming = list }) { menu = null } }
+    menu?.let { list -> ListMenu(state, list, onRename = { renaming = list }, onMove = { moving = list }) { menu = null } }
+    moving?.let { list -> MoveToFolderSheet(state, list) { moving = null } }
     renaming?.let { list ->
         AlertDialog("Liste umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", list.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->
@@ -101,10 +104,11 @@ fun ListsScreen(state: AppState, revision: Long) {
 }
 
 @Composable
-private fun ListMenu(state: AppState, list: SyncObject, onRename: () -> Unit, onDone: () -> Unit) {
+private fun ListMenu(state: AppState, list: SyncObject, onRename: () -> Unit, onMove: () -> Unit, onDone: () -> Unit) {
     val sync = state.sync
     ActionSheet(list.data.optString("name"), listOf(
         SheetAction("Umbenennen") { onRename() },
+        SheetAction("Verschieben nach …") { onMove() },
         SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
         SheetAction(if (list.data.optBoolean("grocery")) "Warengruppen ausschalten" else "Nach Warengruppen sortieren") {
             sync.update(list.id) { it.put("grocery", !it.optBoolean("grocery")) }
