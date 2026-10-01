@@ -270,3 +270,9 @@ button.text-highlight {
   font-size: 9pt;
   opacity: 0.55;
 }
+
+.card-id {
+  font-family: monospace;
+  font-size: 8.25pt;
+  opacity: 0.5;
+}

@@ -64,10 +64,23 @@ val CARD_COLORS = listOf("rot" to Color(0xFFE0463A), "orange" to Color(0xFFF08C0
 val PRIORITIES = listOf("" to "Keine", "niedrig" to "Niedrig", "mittel" to "Mittel", "hoch" to "Hoch")
 val PRIORITY_MARKS = mapOf("niedrig" to "!", "mittel" to "!!", "hoch" to "!!!")
 
-/** A card counts as done while it is in the last column; remember since when. */
-fun markDone(data: JSONObject, columns: List<SyncObject>, columnId: String) {
+/** One step of a card's status history. The column name is kept as it was,
+ *  so the history stays readable after a column is renamed or deleted. */
+fun historyEntry(column: SyncObject?, columnId: String, userId: Int): JSONObject =
+    JSONObject().put("c", columnId).put("n", column?.data?.optString("name") ?: "").put("at", Model.now()).put("by", userId)
+
+/** Moving a card to another column: done date (last column) and history.
+ *  The history is written on every board; only development projects show it. */
+fun recordMove(data: JSONObject, columns: List<SyncObject>, columnId: String, userId: Int) {
     if (columns.lastOrNull()?.id == columnId) data.put("done_at", Model.now()) else data.remove("done_at")
+    val history = data.optJSONArray("history") ?: org.json.JSONArray()
+    history.put(historyEntry(columns.firstOrNull { it.id == columnId }, columnId, userId))
+    data.put("history", history)
 }
+
+fun isDevBoard(board: SyncObject?) = board?.data?.optBoolean("dev") == true
+
+fun shortId(id: String) = id.take(8)
 
 private fun momentLabel(seconds: Double): String {
     val moment = java.time.Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
@@ -79,13 +92,13 @@ private fun momentLabel(seconds: Double): String {
     }
 }
 
-/** Erstellt … · Bearbeitet … · Erledigt … (whatever is known). */
-fun cardDates(card: SyncObject): String {
+/** Erstellt … · Bearbeitet … · Erledigt … (whatever is known). Ordinary boards keep it short. */
+fun cardDates(card: SyncObject, dev: Boolean): String {
     val created = card.data.optDouble("created", 0.0)
     val done = card.data.optDouble("done_at", 0.0)
     return buildList {
         if (created > 0) add("Erstellt " + momentLabel(created))
-        if (card.updated > 0 && (created <= 0 || card.updated - created > 60)) add("Bearbeitet " + momentLabel(card.updated))
+        if (dev && card.updated > 0 && (created <= 0 || card.updated - created > 60)) add("Bearbeitet " + momentLabel(card.updated))
         if (done > 0) add("Erledigt " + momentLabel(done))
     }.joinToString(" · ")
 }
@@ -129,6 +142,11 @@ fun BoardsScreen(state: AppState, revision: Long) {
         ActionSheet(board.data.optString("name"), listOf(
             SheetAction("Umbenennen") { renaming = board },
             SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
+            SheetAction(if (isDevBoard(board)) "Entwicklungsprojekt ausschalten" else "Als Entwicklungsprojekt führen") {
+                val dev = !isDevBoard(board)
+                sync.update(board.id) { it.put("dev", dev) }
+                state.toastLater(if (dev) "„${board.data.optString("name")}“ ist jetzt ein Entwicklungsprojekt." else "„${board.data.optString("name")}“ ist wieder ein einfaches Board.")
+            },
             SheetAction("Board löschen", destructive = true) {
                 for (child in sync.all("card") + sync.all("column")) if (child.data.optString("board") == board.id) sync.delete(child.id)
                 sync.delete(board.id)
@@ -165,7 +183,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
             BarButton(Glyph.Plus, "Spalte hinzufügen") { addColumn = true }
         })
         Text(board.data.optString("name"), style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
-        Text("${cards.size} Karten · " + shareLabel(sync, board),
+        Text("${cards.size} Karten · " + shareLabel(sync, board) + if (isDevBoard(board)) " · Entwicklungsprojekt" else "",
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(10.dp))
         LazyRow(Modifier.weight(1f).navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
@@ -181,7 +199,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
                     }
                     LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(columnCards, key = { it.id }) { card ->
-                            CardView(state, card, isLast = columns.lastOrNull()?.id == column.id,
+                            CardView(state, card, isLast = columns.lastOrNull()?.id == column.id, dev = isDevBoard(board),
                                 onClick = { editing = card.id }, onLongClick = { moving = card })
                         }
                     }
@@ -189,7 +207,8 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
                     AddCardField(colors.accent) { title ->
                         val order = (columnCards.lastOrNull()?.data?.optDouble("order", 0.0) ?: 0.0) + 1
                         sync.put("card", JSONObject().put("board", boardId).put("column", column.id).put("title", title)
-                            .put("order", order).put("created_by", sync.userId).put("created", Model.now()), board.share)
+                            .put("order", order).put("created_by", sync.userId).put("created", Model.now())
+                            .put("history", org.json.JSONArray().put(historyEntry(column, column.id, sync.userId))), board.share)
                     }
                 }
             }
@@ -201,7 +220,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
         ActionSheet("„${card.data.optString("title")}“ verschieben nach", columns.filter { it.id != card.data.optString("column") }.map { column ->
             SheetAction(column.data.optString("name")) {
                 val last = cards.filter { it.data.optString("column") == column.id }.maxOfOrNull { it.data.optDouble("order", 0.0) } ?: 0.0
-                sync.update(card.id) { it.put("column", column.id).put("order", last + 1); markDone(it, columns, column.id) }
+                sync.update(card.id) { it.put("column", column.id).put("order", last + 1); recordMove(it, columns, column.id, sync.userId) }
             }
         } + SheetAction("Karte löschen", destructive = true) { sync.delete(card.id) }) { moving = null }
     }
@@ -243,7 +262,7 @@ private fun swapColumns(state: AppState, columns: List<SyncObject>, a: Int, b: I
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val colors = palette
     val data = card.data
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(colors.surface)
@@ -266,9 +285,14 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, onClick
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
         val doneAt = data.optDouble("done_at", 0.0).takeIf { isLast && it > 0 }
         val assignee = data.optInt("assignee")
-        if (due != null || doneAt != null || assignee != 0) {
+        if (due != null || doneAt != null || assignee != 0 || dev) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (dev) {
+                    Text(shortId(card.id), style = Type.caption.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                        color = colors.tertiary)
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (due != null) {
                     val overdue = due.isBefore(LocalDate.now()) && !isLast
                     Text("Fällig: " + dueLabel(due), style = Type.footnote, color = if (overdue) colors.red else colors.secondary, modifier = Modifier.weight(1f))
@@ -339,7 +363,7 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
             if (column != data.optString("column")) {
                 data.put("column", column)
                 data.put("order", Model.now())
-                markDone(data, columns, column)
+                recordMove(data, columns, column, sync.userId)
             }
         }
         onDone()
@@ -392,11 +416,13 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                         }
                     }
                 }
+                val dev = isDevBoard(sync.get(card.data.optString("board")))
+                if (dev) TraceSection(sync, card)
                 Spacer(Modifier.height(16.dp))
                 FormSection {
                     GroupRow("Karte löschen", chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
                 }
-                val dates = cardDates(card)
+                val dates = cardDates(card, dev)
                 if (dates.isNotEmpty()) {
                     Text(dates, style = Type.footnote, color = colors.secondary, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 12.dp))
                 }
@@ -421,6 +447,30 @@ fun FormField(value: String, onChange: (String) -> Unit, placeholder: String) {
         if (value.isEmpty()) Text(placeholder, style = Type.body, color = colors.tertiary)
         BasicTextField(value, onChange, singleLine = true, textStyle = Type.headline.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
             modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/** Development projects: card id and who moved the card where, when. */
+@Composable
+private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card: SyncObject) {
+    val colors = palette
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    FormSection("Nachverfolgung") {
+        GroupRow("Karten-ID", detail = shortId(card.id), chevron = false, divider = true) {
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString(shortId(card.id)))
+        }
+        val history = card.data.optJSONArray("history")
+        if (history == null || history.length() == 0) {
+            GroupRow("Noch kein Verlauf", subtitle = "Beginnt mit dem nächsten Verschieben.", chevron = false, divider = false, titleColor = colors.secondary)
+        } else {
+            for (index in history.length() - 1 downTo 0) {
+                val step = history.getJSONObject(index)
+                val moment = java.time.Instant.ofEpochMilli((step.optDouble("at", 0.0) * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
+                GroupRow(step.optString("n").ifEmpty { "Spalte" }, chevron = false, divider = index > 0,
+                    subtitle = "%02d.%02d.%d %02d:%02d · %s".format(moment.dayOfMonth, moment.monthValue, moment.year,
+                        moment.hour, moment.minute, sync.userName(step.optInt("by"))))
+            }
+        }
     }
 }
 

@@ -752,7 +752,10 @@ private val HELP = listOf(
     ),
     "Listen und Aufgaben" to listOf(
         "Listen" to "Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Abgehakt wird mit dem Kreis.",
-        "Aufgaben-Board" to "Karte antippen für Fälligkeit, Zuständigkeit, Farbe und Notizen; lange drücken zum Verschieben.",
+        "Aufgaben-Board" to "Karte antippen für Fälligkeit, Zuständigkeit, Priorität, Farbe und Notizen; lange drücken zum Verschieben.",
+        "Entwicklungsprojekt" to "Board in der Übersicht lange drücken → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten " +
+            "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche " +
+            "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt.",
     ),
     "Datenschutz" to listOf(
         "Was der Server weiß" to "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, " +

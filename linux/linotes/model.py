@@ -138,6 +138,38 @@ def done_fields(sync, board_id, column_id):
     return {"done_at": None}
 
 
+def history_entry(sync, column_id):
+    """One step of a card's status history. The column name is kept as it was,
+    so the history stays readable after a column is renamed or deleted."""
+    column = sync.get(column_id)
+    return {"c": column_id, "n": column["data"].get("name", "") if column else "",
+            "at": time.time(), "by": sync.user_id}
+
+
+def new_card_fields(sync, column_id):
+    """Fields every new card gets: who created it when, and the first history step."""
+    return {"created_by": sync.user_id, "created": time.time(), "history": [history_entry(sync, column_id)]}
+
+
+def move_fields(sync, card, column_id):
+    """Fields for moving a card to another column: done date and history.
+    The history is written on every board; only development projects show it."""
+    data = card["data"]
+    if column_id == data.get("column"):
+        return {"column": column_id}
+    return {"column": column_id, **done_fields(sync, data.get("board"), column_id),
+            "history": list(data.get("history") or []) + [history_entry(sync, column_id)]}
+
+
+def is_dev_board(sync, board_id):
+    board = sync.get(board_id)
+    return bool(board and board["data"].get("dev"))
+
+
+def short_id(object_id):
+    return object_id[:8]
+
+
 def moment_label(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
     delta = (datetime.date.today() - moment.date()).days
@@ -148,13 +180,14 @@ def moment_label(timestamp):
     return moment.strftime("%d.%m.%Y")
 
 
-def card_dates(card):
-    """Erstellt … · Bearbeitet … · Erledigt … (whatever is known)."""
+def card_dates(card, dev=False):
+    """Erstellt … · Bearbeitet … · Erledigt … (whatever is known).
+    Ordinary boards keep it short: created and done only."""
     data = card["data"]
     parts = []
     if data.get("created"):
         parts.append("Erstellt " + moment_label(data["created"]))
-    if card.get("updated") and (not data.get("created") or card["updated"] - data["created"] > 60):
+    if dev and card.get("updated") and (not data.get("created") or card["updated"] - data["created"] > 60):
         parts.append("Bearbeitet " + moment_label(card["updated"]))
     if data.get("done_at"):
         parts.append("Erledigt " + moment_label(data["done_at"]))
