@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,6 +78,10 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var sortChecked by remember { mutableStateOf(false) }
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    var viewportHeight by remember { mutableIntStateOf(0) }
+    var editorTop by remember { mutableStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
 
     // Content that only lives on the server is fetched when the note opens.
     DisposableEffect(noteId) {
@@ -233,11 +242,33 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             LockedPlaceholder(state) { unlockedRevision++ }
             return@Column
         }
+        // Keep the cursor line visible above the keyboard: the editor is a platform EditText inside a
+        // Compose scroll column, which does not follow the cursor by itself.
+        fun keepCaretVisible() {
+            val layout = editor.layout ?: return
+            if (!editor.hasFocus() || viewportHeight <= 0) return
+            val line = layout.getLineForOffset(editor.selectionEnd.coerceAtLeast(0))
+            val margin = (32 * density.density).toInt()
+            val top = (editorTop + editor.totalPaddingTop + layout.getLineTop(line)).toInt()
+            val bottom = (editorTop + editor.totalPaddingTop + layout.getLineBottom(line)).toInt()
+            val target = when {
+                bottom + margin > scrollState.value + viewportHeight -> bottom + margin - viewportHeight
+                top - margin < scrollState.value -> (top - margin).coerceAtLeast(0)
+                else -> return
+            }
+            scope.launch { scrollState.animateScrollTo(target) }
+        }
+        DisposableEffect(editor) {
+            editor.onCaretMoved = { keepCaretVisible() }
+            onDispose { editor.onCaretMoved = null }
+        }
+        val imeBottom = WindowInsets.ime.getBottom(density)
+        LaunchedEffect(imeBottom) { if (imeBottom > 0) { kotlinx.coroutines.delay(50); keepCaretVisible() } }
         Column(Modifier.weight(1f).imePadding()) {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Column(Modifier.weight(1f).onSizeChanged { viewportHeight = it.height }.verticalScroll(scrollState)) {
                 Text(Model.longDate(Model.modified(note)), style = Type.footnote, color = colors.secondary,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                AndroidView({ editor }, Modifier.fillMaxWidth())
+                AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
             }
             if (showFormat) FormatPanel(editor, styleTick) { showFormat = false }
             if (!trashed) EditorToolbar(
