@@ -13,19 +13,29 @@ from .icons import Icon
 
 class SidebarRow(Gtk.ListBoxRow):
 
-    def __init__(self, key, icon, label, count=None, owner_hint=None):
+    def __init__(self, key, icon, label, count=None, owner_hint=None, depth=0, expander=None):
         super().__init__()
         self.key = key
         box = Gtk.Box(spacing=10)
         box.set_margin_top(5)
         box.set_margin_bottom(5)
-        box.set_margin_start(6)
+        box.set_margin_start(6 + 16 * depth)
         box.set_margin_end(6)
         symbol = Icon(icon, 16)
         symbol.add_css_class("accent-icon")
         box.append(symbol)
         text = Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3)
         box.append(text)
+        if expander is not None:
+            # Subfolders fold in and out like in Apple's Notes; the arrow sits on the
+            # right so that all folder symbols of one level stay aligned.
+            expanded, on_toggle = expander
+            arrow = Gtk.Button(icon_name="pan-down-symbolic" if expanded else "pan-start-symbolic", valign=Gtk.Align.CENTER)
+            arrow.add_css_class("flat")
+            arrow.add_css_class("sidebar-expander")
+            arrow.set_tooltip_text("Unterordner zuklappen" if expanded else "Unterordner aufklappen")
+            arrow.connect("clicked", lambda _button: on_toggle())
+            box.append(arrow)
         if owner_hint:
             hint = Gtk.Label(label=owner_hint)
             hint.add_css_class("sidebar-count")
@@ -49,6 +59,7 @@ class Sidebar(Gtk.Box):
         self.window = window
         self.sync = window.sync
         self.selected_key = None
+        self.collapsed = set()
         self.active_tags = set()
         self.updating = False
 
@@ -126,27 +137,14 @@ class Sidebar(Gtk.Box):
 
         self.add(SidebarRow("all", "notes", "Alle Notizen", len(live)), "Notizen")
 
-        folders = sorted(sync.objects("folder"), key=lambda f: (f["data"].get("order", 0), f["data"].get("name", "").lower()))
-        for folder in folders:
-            if folder.get("share"):
-                continue
-            self.add(SidebarRow(
-                "folder:" + folder["id"], "folder", folder["data"].get("name", "Ordner"),
-                count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid),
-            ), "Notizen")
+        folders = sync.objects("folder")
+        self.add_folder_tree([f for f in folders if not f.get("share")], "Notizen", count)
         locked = count(lambda note: bool(note["data"].get("enc")))
         self.add(SidebarRow("locked", "lock", "Gesperrt", locked), "Notizen")
         trashed = sum(1 for note in notes if note["data"].get("trashed"))
         self.add(SidebarRow("trash", "trash", "Zuletzt gelöscht", trashed), "Notizen")
 
-        for folder in folders:
-            if not folder.get("share"):
-                continue
-            owner_hint = None if folder["owner"] == self.sync.user_id else f"von {self.sync.user_name(folder['owner'])}"
-            self.add(SidebarRow(
-                "folder:" + folder["id"], "folder-shared", folder["data"].get("name", "Ordner"),
-                count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid), owner_hint,
-            ), "Geteilt")
+        self.add_folder_tree([f for f in folders if f.get("share")], "Geteilt", count)
         # Single notes shared with me (outside a shared folder of mine).
         loose = [note for note in live if note.get("share") and not self.sync.get(note["data"].get("folder") or "")]
         if loose:
@@ -167,6 +165,31 @@ class Sidebar(Gtk.Box):
         self.refresh_tags(live)
         self.updating = False
         self.select(selected or "all", emit=False)
+
+    def add_folder_tree(self, folders, section, count):
+        hidden_below = None
+        for folder, depth in model.folder_tree(self.sync, folders):
+            if hidden_below is not None and depth > hidden_below:
+                continue
+            hidden_below = None
+            has_children = any(model.folder_parent(self.sync, f) == folder["id"] for f in folders)
+            expanded = folder["id"] not in self.collapsed
+            if has_children and not expanded:
+                hidden_below = depth
+            shared = bool(folder.get("share"))
+            owner_hint = None
+            if shared and depth == 0 and folder["owner"] != self.sync.user_id:
+                owner_hint = f"von {self.sync.user_name(folder['owner'])}"
+            self.add(SidebarRow(
+                "folder:" + folder["id"], "folder-shared" if shared and depth == 0 else "folder",
+                folder["data"].get("name", "Ordner"),
+                count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid), owner_hint, depth,
+                (expanded, lambda fid=folder["id"]: self.toggle_folder(fid)) if has_children else None,
+            ), section)
+
+    def toggle_folder(self, folder_id):
+        self.collapsed ^= {folder_id}
+        self.refresh()
 
     def add(self, row, section):
         row.section = section

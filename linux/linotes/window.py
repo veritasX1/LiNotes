@@ -632,8 +632,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(note_id or self.current_note)
         if note is None:
             return
-        folders = sorted(self.sync.objects("folder"), key=lambda f: (bool(f.get("share")), f["data"].get("name", "")))
-        choices = [(f["id"], f["data"].get("name", "") + (" (geteilt)" if f.get("share") else ""))
+        folders = sorted(self.sync.objects("folder"), key=lambda f: (bool(f.get("share")), model.folder_path(self.sync, f).lower()))
+        choices = [(f["id"], model.folder_path(self.sync, f) + (" (geteilt)" if f.get("share") else ""))
                    for f in folders if f["id"] != note["data"].get("folder")]
         if not choices:
             return
@@ -895,13 +895,58 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # FOLDERS, LISTS, BOARDS
     # ========================================================
 
-    def new_folder(self):
+    def new_folder(self, parent_id=None):
+        parent = self.sync.get(parent_id) if parent_id else None
+
         def create(name, _choice):
-            folder = self.sync.put("folder", {"name": name, "order": time.time()})
+            data = {"name": name, "order": time.time()}
+            if parent is not None:
+                data["parent"] = parent["id"]
+            # A subfolder lives where its parent lives (private or in the parent's share).
+            folder = self.sync.put("folder", data, parent.get("share") if parent else None)
+            if parent is not None:
+                self.sidebar.collapsed.discard(parent["id"])
             self.sidebar.refresh()
             self.sidebar.select("folder:" + folder["id"])
-        ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen",
-                 body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
+        if parent is not None:
+            ask_text(self, "Neuer Unterordner", create, placeholder="Name", action="Erstellen",
+                     body=f"Neuer Ordner in „{parent['data'].get('name', 'Ordner')}“.")
+        else:
+            ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen",
+                     body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
+
+    def move_folder(self, folder_id):
+        """Move a folder into another folder (or to the top), like dragging in Notes."""
+        folder = self.sync.get(folder_id)
+        if folder is None or folder["kind"] != "folder":
+            return
+        blocked = model.folder_descendants(self.sync, folder_id) | {folder_id}
+        # For now within the same space; moving between private and shared comes with shared projects.
+        targets = [f for f in self.sync.objects("folder")
+                   if f["id"] not in blocked and f.get("share") == folder.get("share")]
+        targets.sort(key=lambda f: model.folder_path(self.sync, f).lower())
+        choices = [(None, "Oberste Ebene")] + [(f["id"], model.folder_path(self.sync, f)) for f in targets]
+        current = model.folder_parent(self.sync, folder)
+        choices = [choice for choice in choices if choice[0] != current]
+        dialog = Adw.AlertDialog(heading=f"„{folder['data'].get('name', 'Ordner')}“ verschieben nach")
+        dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
+        dialog.set_extra_child(dropdown)
+        dialog.add_response("cancel", "Abbrechen")
+        dialog.add_response("ok", "Verschieben")
+        dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+
+        def on_response(_dialog, response):
+            if response != "ok":
+                return
+            parent = choices[dropdown.get_selected()][0]
+            self.sync.update(folder_id, parent=parent)
+            if parent:
+                self.sidebar.collapsed.discard(parent)
+            self.refresh_all()
+            self.toast("Ordner verschoben")
+
+        dialog.connect("response", on_response)
+        dialog.present(self)
 
     def new_list(self):
         def create(name, _choice):
@@ -927,6 +972,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("Teilen …", "win.share-object")
         menu.append("Umbenennen …", "win.rename-object")
+        if kind == "folder":
+            menu.append("Neuer Unterordner …", "win.new-subfolder")
+            menu.append("Verschieben nach …", "win.move-object")
         if kind == "board":
             menu.append("Bericht exportieren …", "win.export-object")
             menu.append("Entwicklungsprojekt ausschalten" if obj["data"].get("dev") else "Als Entwicklungsprojekt führen",
@@ -998,9 +1046,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
         def remove():
             if kind == "folder":
+                # The folder, its subfolders and all their notes (notes go to "Zuletzt gelöscht").
+                doomed = model.folder_descendants(self.sync, obj["id"]) | {obj["id"]}
                 for note in self.sync.objects("note"):
-                    if note["data"].get("folder") == obj["id"]:
+                    if note["data"].get("folder") in doomed:
                         self.sync.update(note["id"], notify=False, trashed=time.time())
+                for folder_id in doomed - {obj["id"]}:
+                    self.sync.delete(folder_id, notify=False)
             elif kind == "list":
                 for item in self.sync.objects("item"):
                     if item["data"].get("list") == obj["id"]:
@@ -1062,6 +1114,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "new-board": self.new_board,
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
+            "new-subfolder": lambda: self.new_folder(getattr(self, "menu_target", None)),
+            "move-object": lambda: self.move_folder(getattr(self, "menu_target", "")),
             "export-object": lambda: self.export_board(getattr(self, "menu_target", "")),
             "delete-object": self.delete_object,
             "invite": self.invite,
