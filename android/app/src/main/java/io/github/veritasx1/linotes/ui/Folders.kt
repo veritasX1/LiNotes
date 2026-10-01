@@ -131,3 +131,33 @@ fun dropOnFolder(state: AppState, payload: String, folderId: String?) {
 
 fun acceptsOnFolder(payload: String, folderId: String) =
     payload.substringBefore(":") in setOf("note", "folder", "list", "board") && payload != "folder:$folderId"
+
+/** "Neu in diesem Ordner": subfolder, list or board – a folder as a project's filing place.
+ *  Everything new lives where the folder lives (private or in its share). */
+@androidx.compose.runtime.Composable
+fun CreateInFolder(state: AppState, folder: SyncObject, kind: String, onDone: () -> Unit) {
+    val sync = state.sync
+    val (title, hint) = when (kind) {
+        "folder" -> "Neuer Unterordner" to "Name"
+        "list" -> "Neue Liste" to "z. B. Drogerie"
+        else -> "Neues Board" to "z. B. Haushalt"
+    }
+    AlertDialog(title, "In „${folder.data.optString("name")}“.", "Erstellen", fields = listOf(AlertField(hint)), onDismiss = onDone) { values ->
+        val name = values[0].trim()
+        if (name.isNotEmpty()) {
+            val data = JSONObject().put("name", name).put("order", io.github.veritasx1.linotes.data.Model.now())
+            when (kind) {
+                "folder" -> sync.put("folder", data.put("parent", folder.id), folder.share)
+                "list" -> state.push(Route.ListDetail(sync.put("list", data.put("folder", folder.id).put("grocery", true), folder.share).id))
+                else -> {
+                    val board = sync.put("board", data.put("folder", folder.id), folder.share)
+                    io.github.veritasx1.linotes.data.Model.defaultColumns.forEachIndexed { order, (_, column) ->
+                        sync.put("column", JSONObject().put("board", board.id).put("name", column).put("order", order), folder.share)
+                    }
+                    state.push(Route.Board(board.id))
+                }
+            }
+        }
+        onDone()
+    }
+}
