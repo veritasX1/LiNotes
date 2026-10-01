@@ -67,7 +67,9 @@ fun ListsScreen(state: AppState, revision: Long) {
     ) {
         if (lists.isEmpty()) item { EmptyState("Keine Listen", glyph = Glyph.Cart) }
         // Grouped by folder: unfiled lists first ("Meine Listen"), then one section per folder.
-        for ((folder, group) in groupByFolder(sync, lists)) section("lists-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Meine Listen") {
+        // Drag a list onto a section heading to move it into that folder (or out, on "Meine Listen").
+        for ((folder, group) in groupByFolder(sync, lists)) section("lists-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Meine Listen",
+            headerDrop = Pair({ it.startsWith("list:") }, { dropOnFolder(state, it, folder?.id) })) {
             group.forEachIndexed { index, list ->
                 val open = items.count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }
                 GroupRow(
@@ -76,6 +78,7 @@ fun ListsScreen(state: AppState, revision: Long) {
                     detail = "$open",
                     divider = index < group.lastIndex,
                     onLongClick = { menu = list },
+                    dragPayload = "list:${list.id}",
                     glyph = Glyph.Cart,
                     tint = listColor(list),
                 ) { state.push(Route.ListDetail(list.id)) }
