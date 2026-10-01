@@ -15,11 +15,11 @@
 .note-editor,
 .note-editor text {
   background-color: var(--view-bg-color);
-  font-size: 15px;
+  font-size: 11.25pt;
 }
 
 .note-date {
-  font-size: 12px;
+  font-size: 9pt;
   opacity: 0.55;
 }
 
@@ -48,7 +48,7 @@
 }
 
 .note-row-meta {
-  font-size: 13px;
+  font-size: 9.75pt;
 }
 
 .note-row-date {
@@ -62,7 +62,7 @@
 
 .list-section-header {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 9.75pt;
   margin: 14px 16px 4px 16px;
 }
 
@@ -72,11 +72,11 @@
 
 .sidebar-count {
   opacity: 0.5;
-  font-size: 13px;
+  font-size: 9.75pt;
 }
 
 .sidebar-heading {
-  font-size: 12px;
+  font-size: 9pt;
   font-weight: 700;
   opacity: 0.55;
   margin: 12px 12px 2px 12px;
@@ -86,7 +86,7 @@
   padding: 2px 10px;
   border-radius: 99px;
   min-height: 0;
-  font-size: 13px;
+  font-size: 9.75pt;
   background-color: alpha(currentColor, 0.08);
 }
 
@@ -96,12 +96,12 @@
 }
 
 .large-title {
-  font-size: 28px;
+  font-size: 21pt;
   font-weight: 800;
 }
 
 .list-title {
-  font-size: 28px;
+  font-size: 21pt;
   font-weight: 800;
   color: var(--accent-color);
 }
@@ -110,18 +110,29 @@
   padding: 6px 4px;
 }
 
+/* The remove button only shows on the row under the mouse or with keyboard focus. */
+.item-row .item-remove {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+row:hover .item-row .item-remove,
+.item-row:focus-within .item-remove {
+  opacity: 1;
+}
+
 .item-done label {
   opacity: 0.45;
 }
 
 .category-header {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 11.25pt;
   margin: 16px 0 2px 0;
 }
 
 .add-entry {
-  font-size: 15px;
+  font-size: 11.25pt;
 }
 
 /* Kanban */
@@ -138,7 +149,7 @@
 
 .column-title {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 11.25pt;
 }
 
 .column-count {
@@ -161,7 +172,7 @@
 }
 
 .card-meta {
-  font-size: 12px;
+  font-size: 9pt;
   opacity: 0.65;
 }
 
@@ -177,7 +188,7 @@
 }
 
 .avatar-chip {
-  font-size: 11px;
+  font-size: 8.25pt;
   font-weight: 700;
   padding: 1px 7px;
   border-radius: 99px;
@@ -232,7 +243,7 @@ button.text-highlight {
 }
 
 .pairing-code {
-  font-size: 44px;
+  font-size: 33pt;
   font-weight: 800;
   letter-spacing: 6px;
   font-feature-settings: "tnum";
