@@ -62,11 +62,7 @@ fun ListsScreen(state: AppState, revision: Long) {
 
     LargeTitleScreen(
         title = "Listen",
-        bottomBar = {
-            BottomToolbar(center = "", leading = {
-                TextButton("+ Neue Liste", bold = true) { creating = true }
-            })
-        },
+        actions = { BarButton(Glyph.Plus, "Neue Liste") { creating = true } },
     ) {
         if (lists.isEmpty()) item { EmptyState("Keine Listen", glyph = Glyph.Cart) }
         section("lists", header = "Meine Listen") {
