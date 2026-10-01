@@ -30,6 +30,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +46,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -126,7 +130,7 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
     val width = LocalConfiguration.current.screenWidthDp
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
-        NavBar(board.data.optString("name"), "Aufgaben", { state.pop() }, actions = {
+        NavBar("", "Aufgaben", { state.pop() }, actions = {
             BarButton(Glyph.Share, "Teilen") { state.push(Route.Share(board.id)) }
             BarButton(Glyph.Plus, "Spalte hinzufügen") { addColumn = true }
         })
@@ -138,12 +142,12 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(columns, key = { it.id }) { column ->
                 val columnCards = cards.filter { it.data.optString("column") == column.id }.sortedBy { it.data.optDouble("order", 0.0) }
-                Column(Modifier.width((width * 0.82f).dp).fillMaxHeight().clip(RoundedCornerShape(14.dp)).background(colors.fill.copy(alpha = 0.5f)).padding(10.dp)) {
+                Column(Modifier.width((width * 0.82f).dp).fillMaxHeight().clip(RoundedCornerShape(14.dp)).background(if (colors.dark) colors.fill.copy(alpha = 0.5f) else colors.fill).padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(column.data.optString("name"), style = Type.headline, color = colors.label)
                         Spacer(Modifier.width(6.dp))
                         Text("${columnCards.size}", style = Type.subheadline, color = colors.secondary, modifier = Modifier.weight(1f))
-                        BarButton(Glyph.More, "Spalte", tint = colors.secondary) { columnMenu = column }
+                        BarButton(Glyph.More, "Spalte ${column.data.optString("name")} bearbeiten", tint = colors.secondary) { columnMenu = column }
                     }
                     LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(columnCards, key = { it.id }) { card ->
@@ -273,6 +277,7 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
     val colors = palette
     val sync = state.sync
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val card = sync.get(cardId) ?: return onDone()
     var title by remember { mutableStateOf(card.data.optString("title")) }
     var notes by remember { mutableStateOf(card.data.optString("notes")) }
@@ -309,21 +314,20 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                         BasicTextField(notes, { notes = it }, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
                             modifier = Modifier.fillMaxWidth())
                     }
-                }
-                FormSection("Spalte") {
-                    columns.forEachIndexed { index, item ->
-                        ChoiceRow(item.data.optString("name"), column == item.id, index < columns.lastIndex) { column = item.id }
+                    val links = remember(notes) { LINK.findAll(notes).map { it.value.trimEnd('.', ',', ')', ';') }.distinct().toList() }
+                    links.forEach { link ->
+                        HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
+                        Text(link, style = Type.subheadline, color = colors.accentText, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Link öffnen") { runCatching { uriHandler.openUri(link) } }
+                                .padding(horizontal = 16.dp, vertical = 12.dp))
                     }
                 }
-                FormSection("Zuständig") {
-                    ChoiceRow("Niemand", assignee == 0, true) { assignee = 0 }
-                    sync.users.forEachIndexed { index, user ->
-                        ChoiceRow(user.name, assignee == user.id, index < sync.users.lastIndex) { assignee = user.id }
-                    }
-                }
-                FormSection("Fälligkeit") {
+                FormSection {
+                    PickerRow("Spalte", columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
+                    PickerRow("Zuständig", listOf(0 to "Niemand") + sync.users.map { it.id to it.name }, assignee, divider = true) { assignee = it }
                     val label = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "%02d.%02d.%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "Kein Datum"
-                    GroupRow(label, chevron = false, divider = due != null) {
+                    GroupRow("Fällig", detail = label, chevron = false, divider = due != null) {
                         val start = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
                         DatePickerDialog(context, { _, year, month, day ->
                             due = "%04d-%02d-%02d".format(year, month + 1, day)
@@ -371,10 +375,28 @@ fun FormField(value: String, onChange: (String) -> Unit, placeholder: String) {
     }
 }
 
+private val LINK = Regex("""https?://\S+""")
+
+/** A row with the current value that opens a menu of choices (like a UIKit pull-down button). */
 @Composable
-fun ChoiceRow(label: String, selected: Boolean, divider: Boolean, onClick: () -> Unit) {
+fun <T> PickerRow(title: String, options: List<Pair<T, String>>, selected: T, divider: Boolean, onSelect: (T) -> Unit) {
     val colors = palette
-    GroupRow(label, chevron = false, divider = divider, trailing = {
-        if (selected) Text("✓", style = Type.headline, color = colors.accentText)
-    }, onClick = onClick)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        GroupRow(title, detail = options.firstOrNull { it.first == selected }?.second ?: "", chevron = false, divider = divider,
+            trailing = { Spacer(Modifier.width(6.dp)); GlyphIcon(Glyph.UpDown, colors.tertiary, 14.dp) }) { open = true }
+        // Anchored at the right edge, under the current value.
+        Box(Modifier.align(Alignment.BottomEnd)) {
+            DropdownMenu(open, { open = false }, offset = DpOffset((-16).dp, 0.dp),
+                shape = RoundedCornerShape(12.dp), containerColor = if (colors.dark) Color(0xFF2C2C2E) else colors.surface) {
+                options.forEach { (value, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label, style = Type.body, color = colors.label) },
+                        trailingIcon = { if (value == selected) Text("✓", style = Type.headline, color = colors.accentText) },
+                        onClick = { onSelect(value); open = false },
+                    )
+                }
+            }
+        }
+    }
 }

@@ -23,6 +23,7 @@ import android.text.TextWatcher
 import android.text.style.BackgroundColorSpan
 import android.text.style.ImageSpan
 import android.text.style.LeadingMarginSpan
+import android.text.style.LineHeightSpan
 import android.text.style.MetricAffectingSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
@@ -46,9 +47,18 @@ class ParaSpan(
     val checked: Boolean,
     private val density: Float,
     private val colors: EditorColors,
-) : MetricAffectingSpan(), LeadingMarginSpan {
+) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan {
 
     var number = 1
+
+    /** Headings get some air above them (not at the very top of the note). */
+    override fun chooseHeight(text: CharSequence, start: Int, end: Int, spanstartv: Int, lineHeight: Int, fm: Paint.FontMetricsInt) {
+        val extra = when (type) { "heading" -> 16; "subheading" -> 10; else -> return }
+        if (start == 0 || text !is Spanned || start != text.getSpanStart(this)) return
+        val add = (extra * density).toInt()
+        fm.ascent -= add
+        fm.top -= add
+    }
 
     private fun apply(paint: TextPaint) {
         when (type) {

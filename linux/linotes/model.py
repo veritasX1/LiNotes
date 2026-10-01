@@ -142,7 +142,7 @@ def ensure_defaults(sync):
     if sync.get(default_private_folder(user_id)) is None and default_private_folder(user_id) not in sync.state["remote"]:
         sync.put("folder", {"name": "Notizen", "order": 0}, None, default_private_folder(user_id), notify=False)
     if sync.get(default_list(user_id)) is None and default_list(user_id) not in sync.state["remote"]:
-        sync.put("list", {"name": "Einkaufsliste", "color": "orange", "grocery": True, "order": 0},
+        sync.put("list", {"name": "Einkaufsliste", "color": "gelb", "grocery": True, "order": 0},
                  None, default_list(user_id), notify=False)
     board = default_board(user_id)
     if sync.get(board) is None and board not in sync.state["remote"]:

@@ -29,7 +29,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,6 +50,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -108,22 +116,48 @@ fun NavBar(
 ) {
     val colors = palette
     Column(Modifier.background(if (showDivider) colors.bar else background).statusBarsPadding()) {
-        Box(Modifier.fillMaxWidth().height(44.dp)) {
-            if (onBack != null) {
-                Row(
-                    Modifier.align(Alignment.CenterStart).clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack)
-                        .padding(start = 6.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    GlyphIcon(Glyph.Back, colors.accentText, 22.dp)
-                    if (backLabel != null) Text(backLabel, style = Type.body, color = colors.accentText, maxLines = 1)
+        // Back button and actions keep their width; the title gets the space between them,
+        // centered on the screen as long as it fits (like UINavigationBar).
+        Layout(
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            content = {
+                Box {
+                    if (onBack != null) {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack, onClickLabel = "Zurück", role = Role.Button)
+                                .padding(start = 6.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            GlyphIcon(Glyph.Back, colors.accentText, 22.dp)
+                            if (backLabel != null) Text(backLabel, style = Type.body, color = colors.accentText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
+                Box {
+                    androidx.compose.animation.AnimatedVisibility(visible = title.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                        Text(title, style = Type.headline, color = colors.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+            },
+        ) { measurables, constraints ->
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val actionsPlaceable = measurables[2].measure(loose.copy(maxWidth = width / 2))
+            val backPlaceable = measurables[0].measure(loose.copy(maxWidth = (width - actionsPlaceable.width) * 2 / 3))
+            val gap = 8.dp.roundToPx()
+            val side = maxOf(backPlaceable.width, actionsPlaceable.width) + gap
+            val centered = width - 2 * side
+            val titleWidth = if (centered >= width / 3) centered else (width - backPlaceable.width - actionsPlaceable.width - 2 * gap).coerceAtLeast(0)
+            val titlePlaceable = measurables[1].measure(loose.copy(minWidth = titleWidth, maxWidth = titleWidth))
+            val titleX = if (centered >= width / 3) side else backPlaceable.width + gap
+            layout(width, height) {
+                backPlaceable.place(0, (height - backPlaceable.height) / 2)
+                titlePlaceable.place(titleX, (height - titlePlaceable.height) / 2)
+                actionsPlaceable.place(width - actionsPlaceable.width, (height - actionsPlaceable.height) / 2)
             }
-            androidx.compose.animation.AnimatedVisibility(visible = title.isNotEmpty(), modifier = Modifier.align(Alignment.Center), enter = fadeIn(), exit = fadeOut()) {
-                Text(title, style = Type.headline, color = colors.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(200.dp), textAlign = TextAlign.Center)
-            }
-            Row(Modifier.align(Alignment.CenterEnd).padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
         }
         if (showDivider) HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
     }
@@ -132,10 +166,28 @@ fun NavBar(
 @Composable
 fun BarButton(glyph: Glyph, description: String, tint: Color = palette.accentText, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(44.dp).clip(RoundedCornerShape(22.dp))
+            .clickable(enabled = enabled, onClickLabel = description, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         GlyphIcon(glyph, if (enabled) tint else tint.copy(alpha = 0.35f), 22.dp)
+    }
+}
+
+/** On/off switch in the shape of UISwitch, tinted with the accent color. */
+@Composable
+fun IosSwitch(checked: Boolean, description: String, onToggle: () -> Unit) {
+    val colors = palette
+    val offset by androidx.compose.animation.core.animateDpAsState(if (checked) 20.dp else 0.dp, label = "switch")
+    Box(
+        Modifier.size(51.dp, 31.dp).clip(RoundedCornerShape(16.dp))
+            .background(if (checked) colors.accent else colors.fill.copy(alpha = if (colors.dark) 0.32f else 0.16f))
+            .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle() })
+            .semantics { contentDescription = description }
+            .padding(2.dp),
+    ) {
+        Box(Modifier.padding(start = offset).size(27.dp).shadow(2.dp, CircleShape).clip(CircleShape).background(Color.White))
     }
 }
 
@@ -157,14 +209,19 @@ fun LazyListScope.section(
     key: String,
     header: String? = null,
     footer: String? = null,
+    compact: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     item(key = key) {
         val colors = palette
         Column(Modifier.padding(horizontal = 16.dp).padding(top = if (header != null) 18.dp else 10.dp)) {
-            if (header != null) {
+            if (header != null && compact) {
+                // Small grey header of grouped settings, same as FormSection.
+                Text(header, style = Type.footnote, color = colors.secondary,
+                    modifier = Modifier.padding(start = 16.dp, bottom = 6.dp).semantics { heading() })
+            } else if (header != null) {
                 Text(header, style = Type.title3.copy(fontWeight = FontWeight.Bold), color = colors.label,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp).semantics { heading() })
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(colors.surface), content = content)
             if (footer != null) {

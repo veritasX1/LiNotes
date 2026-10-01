@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +83,16 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     LaunchedEffect(noteId, note?.evicted) {
         if (note?.evicted == true) {
             loadFailed = withContext(Dispatchers.IO) { try { sync.fetchNote(noteId) == null } catch (error: Exception) { true } }
+        }
+    }
+
+    // Leaving the note (back arrow, back gesture, tab switch) closes the keyboard; the
+    // editor is a platform EditText, so Compose would leave it open on the list.
+    val hostView = LocalView.current
+    DisposableEffect(noteId) {
+        onDispose {
+            val input = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            input.hideSoftInputFromWindow(hostView.windowToken, 0)
         }
     }
 

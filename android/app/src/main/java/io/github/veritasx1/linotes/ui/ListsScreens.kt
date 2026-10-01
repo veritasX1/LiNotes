@@ -43,8 +43,9 @@ import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncObject
 import org.json.JSONObject
 
+// The first entry is the default for lists without a color: the app's accent yellow.
 val LIST_COLORS = listOf(
-    "orange" to Color(0xFFFF9500), "rot" to Color(0xFFFF3B30), "gelb" to Color(0xFFE6A200),
+    "gelb" to Color(0xFFE6A200), "orange" to Color(0xFFFF9500), "rot" to Color(0xFFFF3B30),
     "grün" to Color(0xFF34C759), "blau" to Color(0xFF007AFF), "lila" to Color(0xFFAF52DE),
 )
 
