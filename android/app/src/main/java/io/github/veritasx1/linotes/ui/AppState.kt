@@ -48,6 +48,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var flushLocked: (() -> Unit)? = null
     private var vaultUsed = 0L
     var pickImage: ((ByteArray, String) -> Unit) -> Unit = {}
+    var takePhoto: ((ByteArray, String) -> Unit) -> Unit = {}
 
     // Platform hooks, filled in by MainActivity.
     var authenticate: (title: String, done: (Boolean) -> Unit) -> Unit = { _, done -> done(false) }

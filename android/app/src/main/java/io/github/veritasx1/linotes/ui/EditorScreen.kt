@@ -78,6 +78,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var sortChecked by remember { mutableStateOf(false) }
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
+    var photoMenu by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     var viewportHeight by remember { mutableIntStateOf(0) }
     var editorTop by remember { mutableStateOf(0f) }
@@ -276,16 +277,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 onChecklist = { editor.applyParagraph("check") },
                 onPhoto = {
                     if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos möglich.")
-                    else state.pickImage { bytes, mime ->
-                        scope.launch {
-                            try {
-                                val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                                editor.insertImage(id)
-                            } catch (error: Exception) {
-                                state.showToast(errorText(error))
-                            }
-                        }
-                    }
+                    else photoMenu = true
                 },
                 onCompose = { save(); state.pop(); newNote(state, note.data.optString("folder").let { "folder:$it" }) },
             )
@@ -319,6 +311,23 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             }) { keepChoice = false }
     }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
+    if (photoMenu) {
+        // Like Notes: take a photo or choose one.
+        fun insert(bytes: ByteArray, @Suppress("UNUSED_PARAMETER") mime: String) {
+            scope.launch {
+                try {
+                    val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
+                    editor.insertImage(id)
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
+        ActionSheet(null, listOf(
+            SheetAction("Foto aufnehmen") { state.takePhoto(::insert) },
+            SheetAction("Aus Fotos wählen") { state.pickImage(::insert) },
+        )) { photoMenu = false }
+    }
 }
 
 @Composable
