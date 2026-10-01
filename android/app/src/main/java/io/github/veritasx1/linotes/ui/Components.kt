@@ -383,23 +383,6 @@ fun TabBar(items: List<TabItem>, selected: Int, onSelect: (Int) -> Unit) {
 }
 
 // ================================================================
-// BOTTOM TOOLBAR (like the one in Notes' list)
-// ================================================================
-
-@Composable
-fun BottomToolbar(center: String, leading: @Composable () -> Unit = {}, trailing: @Composable () -> Unit = {}) {
-    val colors = palette
-    Column(Modifier.fillMaxWidth().background(colors.bar)) {
-        HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
-        Box(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 6.dp)) {
-            Box(Modifier.align(Alignment.CenterStart)) { leading() }
-            Text(center, style = Type.caption, color = colors.label, modifier = Modifier.align(Alignment.Center))
-            Box(Modifier.align(Alignment.CenterEnd)) { trailing() }
-        }
-    }
-}
-
-// ================================================================
 // ALERTS AND ACTION SHEETS (iOS style)
 // ================================================================
 

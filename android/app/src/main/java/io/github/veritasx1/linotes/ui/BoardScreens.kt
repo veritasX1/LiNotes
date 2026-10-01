@@ -71,7 +71,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
 
     LargeTitleScreen(
         title = "Aufgaben",
-        bottomBar = { BottomToolbar(center = "", leading = { TextButton("+ Neues Board", bold = true) { creating = "new" } }) },
+        actions = { BarButton(Glyph.Plus, "Neues Board") { creating = "new" } },
     ) {
         if (boards.isEmpty()) item { EmptyState("Keine Boards", glyph = Glyph.Board) }
         section("boards", header = "Boards") {
