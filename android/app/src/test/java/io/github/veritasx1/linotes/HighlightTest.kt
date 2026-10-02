@@ -13,7 +13,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Karte 323ae9ca: Markieren in Farben; Olafs Finding: nach Enter nicht markiert weiterschreiben. */
+/** Karte 323ae9ca: Markieren in Farben (Olafs Finding: nach Enter nicht markiert weiterschreiben);
+ *  Karte 6a3b4e37: Trennlinie. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -67,5 +68,32 @@ class HighlightTest {
         editor.setSelection(2 + 4)
         type(editor, "\n")
         assertEquals(listOf("-", """[[0,4,"h:mint"]]""", """[[0,5,"h:mint"]]"""), spans(editor))
+    }
+
+    private fun kinds(editor: RichEditor) = editor.toBlocks().map { it.getString("t") + ":" + it.optString("x") }
+
+    @Test
+    fun dividerLoadsSavesAndComesFromDashes() {
+        val editor = editor(JSONObject().put("t", "title").put("x", "T"), body("oben"), JSONObject().put("t", "divider"), body("unten"))
+        assertEquals(listOf("title:T", "body:oben", "divider:", "body:unten"), kinds(editor))
+        editor.setSelection(editor.text!!.length)
+        type(editor, "\n")
+        type(editor, "---")
+        type(editor, "\n")
+        type(editor, "weiter")
+        assertEquals(listOf("title:T", "body:oben", "divider:", "body:unten", "divider:", "body:weiter"), kinds(editor))
+    }
+
+    @Test
+    fun dividerFromTheMenuInTheMiddleOfALine() {
+        val editor = editor(JSONObject().put("t", "title").put("x", "T"), body("eins"))
+        editor.setSelection(editor.text!!.length)
+        editor.insertDivider()
+        type(editor, "zwei")
+        assertEquals(listOf("title:T", "body:eins", "divider:", "body:zwei"), kinds(editor))
+        // Backspace at the start of "zwei" removes the divider, the text stays.
+        val zwei = editor.text!!.indexOf("zwei")
+        editor.text!!.delete(zwei - 1, zwei)
+        assertEquals(listOf("title:T", "body:eins", "body:zwei"), kinds(editor))
     }
 }

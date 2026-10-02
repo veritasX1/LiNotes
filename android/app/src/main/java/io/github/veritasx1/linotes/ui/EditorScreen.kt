@@ -583,6 +583,9 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(-1) }.padding(horizontal = 10.dp, vertical = 8.dp))
             Text("Einrücken", fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(1) }.padding(horizontal = 10.dp, vertical = 8.dp))
+            // Also: "---" and Enter on an empty line.
+            Text("Trennlinie", fontSize = 14.sp, color = colors.label,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.insertDivider() }.padding(horizontal = 10.dp, vertical = 8.dp))
         }
     }
 }

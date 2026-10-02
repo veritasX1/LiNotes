@@ -176,6 +176,23 @@ val HIGHLIGHTS = linkedMapOf(
     "h:purple" to 0xBF7AF0, "h:mint" to 0x4CD9C0, "h:blue" to 0x5AC8FA,
 )
 
+/** A divider: an object character on a line of its own, drawn as a thin line across the editor. */
+class DividerSpan(private val density: Float, private val color: Int, private val width: () -> Int) : android.text.style.ReplacementSpan() {
+    override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        fm?.let {
+            val half = (8 * density).toInt()
+            it.ascent = -half; it.top = -half; it.descent = half; it.bottom = half
+        }
+        return width().coerceAtLeast(1)
+    }
+
+    override fun draw(canvas: Canvas, text: CharSequence, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
+        val line = Paint().apply { color = this@DividerSpan.color; strokeWidth = density }
+        val middle = (top + bottom) / 2f
+        canvas.drawLine(x, middle, x + width(), middle, line)
+    }
+}
+
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
 data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
@@ -319,12 +336,34 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val style = enterStyle
             val paragraphStart = text.lastIndexOf('\n', enterAt - 1).let { if (it < 0) 0 else it + 1 }
             val content = text.substring(paragraphStart, enterAt).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), "")
+            if ((style == null || style.type == "body") && content.trim() in setOf("---", "—-", "–-", "—", "___")) {
+                // "---" and Enter becomes a divider (keyboards may turn "--" into a dash).
+                text.replace(paragraphStart, enterAt, OBJECT.toString())
+                text.setSpan(dividerSpan(), paragraphStart, paragraphStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSelection((paragraphStart + 2).coerceAtMost(text.length))
+                normalize(text)
+                return
+            }
             if (style != null && style.type in LIST_TYPES && content.isBlank()) {
                 text.delete(enterAt, enterAt + 1)
                 setPara(text, paragraphStart, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
                 normalize(text)
                 return
             }
+        }
+        // Backspace right after a divider removes the divider; after a photo it does nothing –
+        // text joined into an object line would get lost.
+        if (deletedBreakAt > 0 && text[deletedBreakAt - 1] == OBJECT) {
+            val divider = text.getSpans(deletedBreakAt - 1, deletedBreakAt, DividerSpan::class.java).isNotEmpty()
+            text.insert(deletedBreakAt, "\n")
+            if (divider) {
+                text.delete(deletedBreakAt - 1, deletedBreakAt + 1)
+                setSelection(deletedBreakAt - 1)
+            } else {
+                setSelection(deletedBreakAt + 1)
+            }
+            normalize(text)
+            return
         }
         // Backspace at the start of a list item removes the marker first.
         if (deletedBreakAt >= 0) {
@@ -661,7 +700,10 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         list.forEachIndexed { index, block ->
             val start = builder.length
             val type = block.optString("t", "body")
-            if (type == "image") {
+            if (type == "divider") {
+                builder.append(OBJECT)
+                builder.setSpan(dividerSpan(), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else if (type == "image") {
                 builder.append(OBJECT)
                 val fileId = block.optString("f")
                 val placeholder = ColorDrawable(colors.tertiary).apply { setBounds(0, 0, (240 * density).toInt(), (160 * density).toInt()) }
@@ -686,7 +728,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image") "body" else type
+            val paraType = if (type == "image" || type == "divider") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             if (paraType == "number") {
                 number = if (previousNumber) number + 1 else 1
@@ -708,9 +750,17 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val result = mutableListOf<JSONObject>()
         for (start in paragraphStarts(text)) {
             val end = paragraphEnd(text, start)
+            // Text that ended up next to a divider or photo is kept as a line of its own.
+            val extra = text.substring(start, end).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), "")
+            if (text.getSpans(start, end, DividerSpan::class.java).isNotEmpty()) {
+                result.add(JSONObject().put("t", "divider"))
+                if (extra.isNotBlank()) result.add(JSONObject().put("t", "body").put("x", extra))
+                continue
+            }
             val image = text.getSpans(start, end, ImageBlockSpan::class.java).firstOrNull()
             if (image != null) {
                 result.add(JSONObject().put("t", "image").put("f", image.fileId))
+                if (extra.isNotBlank()) result.add(JSONObject().put("t", "body").put("x", extra))
                 continue
             }
             val span = paraAt(text, start)
@@ -743,6 +793,30 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             result.removeAt(result.size - 1)
         }
         return result
+    }
+
+    // --- dividers ----------------------------------------------
+
+    private fun dividerSpan() = DividerSpan(density, colors.tertiary) {
+        (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 } ?: (300 * density).toInt()
+    }
+
+    /** A divider on a line of its own at the cursor; typing goes on below it. */
+    fun insertDivider() {
+        val text = text ?: return
+        var at = selectionStart.coerceAtLeast(0)
+        busy = true
+        if (at > 0 && text[at - 1] != '\n') {
+            at = paragraphEnd(text, at)
+            text.insert(at, "\n")
+            at += 1
+        }
+        text.insert(at, "$OBJECT\n")
+        text.setSpan(dividerSpan(), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        normalize(text)
+        busy = false
+        setSelection((at + 2).coerceAtMost(text.length))
+        onEdited?.invoke()
     }
 
     // --- images ------------------------------------------------
