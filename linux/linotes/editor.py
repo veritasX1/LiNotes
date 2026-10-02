@@ -25,6 +25,9 @@ from . import model
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
               "bullet", "dash", "number", "check")
 LISTS = ("bullet", "dash", "number", "check")
+# Headings that can be collapsed (like Apple): rank – a section ends at the next heading of the same or a higher rank.
+FOLDABLE = {"heading": 1, "subheading": 2}
+RANKS = {"title": 0, "heading": 1, "subheading": 2}
 # Highlight colors like in Apple's Notes; "h" (yellow) is the original one and stays as it is.
 HIGHLIGHTS = {
     "h": (1.0, 0.85, 0.24), "h:orange": (1.0, 0.62, 0.04), "h:pink": (1.0, 0.44, 0.66),
@@ -130,6 +133,9 @@ class NoteEditor(Gtk.TextView):
         # Web addresses: shown as links, a click opens them (not saved – found again on every change).
         tag("link", foreground_rgba=rgba(0.72, 0.49, 0.0, 1.0), underline=Pango.Underline.SINGLE)
         tag("image", pixels_above_lines=6, pixels_below_lines=6)
+        # Collapsed sections: the heading line carries "collapsed", its content is hidden by "folded".
+        tag("collapsed")
+        tag("folded", invisible=True)
         self.update_margins()
 
     def update_margins(self):
@@ -257,6 +263,7 @@ class NoteEditor(Gtk.TextView):
         if self.loading:
             return
         self.mark_links()
+        self.refold()
         if self.edit_source is not None:
             GLib.source_remove(self.edit_source)
         self.edit_source = GLib.timeout_add(700, self.emit_edited)
@@ -354,6 +361,11 @@ class NoteEditor(Gtk.TextView):
         level = self.line_level(line)
         start, end, _with_break = self.line_bounds(line)
         text = buffer.get_text(start, end, False).replace(OBJECT, "")
+
+        if self.is_collapsed(line):
+            # Like Apple: typing on into a collapsed section opens it.
+            self.toggle_fold(line)
+            start, end, _with_break = self.line_bounds(line)
 
         if style == "body" and text.strip() in ("---", "—-", "–-", "—", "___"):
             # "---" and Enter becomes a divider (Android keyboards turn "--" into a dash).
@@ -687,6 +699,81 @@ class NoteEditor(Gtk.TextView):
         self.scroll_mark_onscreen(buffer.get_insert())
         self.on_changed(buffer)
 
+    # ========================================================
+    # COLLAPSIBLE SECTIONS (like Apple: headings fold their content)
+    # ========================================================
+
+    def is_collapsed(self, line):
+        start = self.buffer.get_iter_at_line(line)[1]
+        return start.has_tag(self.buffer.get_tag_table().lookup("collapsed")) and self.line_style(line) in FOLDABLE
+
+    def section_end(self, line):
+        """Last line belonging to the section of the heading on line (line itself if empty)."""
+        rank = FOLDABLE.get(self.line_style(line))
+        if rank is None:
+            return line
+        last = line
+        for other in range(line + 1, self.buffer.get_line_count()):
+            other_rank = RANKS.get(self.line_style(other))
+            if other_rank is not None and other_rank <= rank:
+                break
+            last = other
+        # Trailing empty lines stay visible (room to type below a collapsed section).
+        while last > line and not self.buffer.get_text(*self.line_bounds(last)[:2], True).strip():
+            last -= 1
+        return last
+
+    def toggle_fold(self, line):
+        start, _end, with_break = self.line_bounds(line)
+        if self.is_collapsed(line):
+            self.buffer.remove_tag_by_name("collapsed", start, with_break)
+        else:
+            self.buffer.apply_tag_by_name("collapsed", start, with_break)
+            # The cursor must not stay hidden inside the section.
+            cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert()).get_line()
+            if line < cursor <= self.section_end(line):
+                _s, end, _w = self.line_bounds(line)
+                self.buffer.place_cursor(end)
+        self.refold()
+        self.on_changed(self.buffer)
+
+    def refold(self):
+        """Hide the content of collapsed sections: whole lines including their line break
+        (GTK lays out each buffer line on its own, a visible break would leave an empty row)."""
+        buffer = self.buffer
+        start, end = buffer.get_bounds()
+        buffer.remove_tag_by_name("folded", start, end)
+        collapsed = buffer.get_tag_table().lookup("collapsed")
+        line = 0
+        while line < buffer.get_line_count():
+            first = buffer.get_iter_at_line(line)[1]
+            if first.has_tag(collapsed) and self.line_style(line) in FOLDABLE:
+                last = self.section_end(line)
+                if last > line:
+                    hide_from = buffer.get_iter_at_line(line + 1)[1]
+                    _s, _e, hide_to = self.line_bounds(last)
+                    buffer.apply_tag_by_name("folded", hide_from, hide_to)
+                    line = last
+            line += 1
+        self.queue_draw()
+
+    def draw_chevron(self, cr, line, color):
+        start = self.buffer.get_iter_at_line(line)[1]
+        location = self.get_iter_location(start)
+        center_y = location.y + location.height / 2
+        x = self.get_left_margin() - 16
+        cr.set_source_rgba(*ACCENT, 1.0)
+        cr.set_line_width(1.8)
+        if self.is_collapsed(line):  # ›
+            cr.move_to(x - 2, center_y - 5)
+            cr.line_to(x + 3, center_y)
+            cr.line_to(x - 2, center_y + 5)
+        else:  # ⌄
+            cr.move_to(x - 5, center_y - 2)
+            cr.line_to(x, center_y + 3)
+            cr.line_to(x + 5, center_y - 2)
+        cr.stroke()
+
     def cursor_rect(self):
         """Where the cursor is, in widget coordinates (for the note choice popover)."""
         location = self.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
@@ -713,6 +800,10 @@ class NoteEditor(Gtk.TextView):
         if not found:
             over, iterator, _trailing = self.get_iter_at_position(buffer_x, buffer_y)
         line = iterator.get_line()
+        if self.line_style(line) in FOLDABLE and buffer_x < self.get_left_margin() and self.section_end(line) > line:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            self.toggle_fold(line)
+            return
         if self.line_style(line) != "check":
             return
         marker_x = self.marker_x(line)
@@ -750,7 +841,13 @@ class NoteEditor(Gtk.TextView):
                 counter = {}
 
         cr = snapshot.append_cairo(Graphene.Rect().init(visible.x, visible.y, visible.width, visible.height))
+        folded = self.buffer.get_tag_table().lookup("folded")
         for line in range(first, last + 1):
+            if self.buffer.get_iter_at_line(line)[1].has_tag(folded):
+                continue  # inside a collapsed section
+            if self.line_style(line) in FOLDABLE and self.section_end(line) > line:
+                self.draw_chevron(cr, line, color)
+                continue
             if self.is_divider(line):
                 start = self.buffer.get_iter_at_line(line)[1]
                 location = self.get_iter_location(start)
@@ -851,9 +948,13 @@ class NoteEditor(Gtk.TextView):
             if kind in ("image", "divider"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
+            if kind in FOLDABLE and block.get("z"):
+                start, _end, with_break = self.line_bounds(line)
+                buffer.apply_tag_by_name("collapsed", start, with_break)
         buffer.end_irreversible_action()
         self.loading = False
         self.mark_links()
+        self.refold()
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
         buffer.place_cursor(cursor)
         self.queue_draw()
@@ -880,6 +981,8 @@ class NoteEditor(Gtk.TextView):
                 block["l"] = level
             if block["t"] == "check":
                 block["c"] = self.line_checked(line)
+            if block["t"] in FOLDABLE and self.is_collapsed(line):
+                block["z"] = True
             spans = self.spans(start, end)
             if spans:
                 block["s"] = spans
