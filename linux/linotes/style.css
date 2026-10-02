@@ -349,3 +349,35 @@ button.font-serif { font-family: Serif; }
   min-height: 30px;
   padding: 2px 8px;
 }
+
+/* Plans */
+.plan-grid {
+  border: 1px solid alpha(currentColor, 0.18);
+  border-radius: 6px;
+}
+.plan-grid .plan-cell,
+.plan-grid .plan-row,
+.plan-grid .plan-head {
+  border-right: 1px solid alpha(currentColor, 0.12);
+  border-bottom: 1px solid alpha(currentColor, 0.12);
+  border-radius: 0;
+  min-height: 32px;
+  padding: 2px 8px;
+  margin: 0;
+}
+.plan-grid .plan-cell,
+.plan-grid .plan-row {
+  background-color: transparent;
+}
+.plan-grid .plan-head,
+.plan-grid .plan-row {
+  font-weight: 600;
+  background-color: alpha(currentColor, 0.04);
+}
+.plan-grid .plan-today {
+  background-image: linear-gradient(color-mix(in srgb, var(--accent-bg-color) 14%, transparent),
+                                    color-mix(in srgb, var(--accent-bg-color) 14%, transparent));
+}
+.plan-grid .plan-head.plan-today {
+  color: var(--accent-color);
+}

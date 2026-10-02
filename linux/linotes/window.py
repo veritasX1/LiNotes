@@ -120,6 +120,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         new_menu.append("Neuer Ordner", "win.new-folder")
         new_menu.append("Neue Liste", "win.new-list")
         new_menu.append("Neues Board", "win.new-board")
+        new_menu.append("Neuer Plan …", "win.new-plan")
         self.new_menu = new_menu
         new_button = icon_menu_button("plus", "Neu …")
         new_button.set_menu_model(new_menu)
@@ -248,6 +249,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.stack.add_named(self.list_view, "list")
         self.board_view = BoardView(self)
         self.stack.add_named(self.board_view, "board")
+        from .plan_view import PlanView
+        self.plan_view = PlanView(self)
+        self.stack.add_named(self.plan_view, "plan")
         content.set_content(self.stack)
         self.split.set_content(content)
         self.pages.add_named(self.split, "main")
@@ -534,9 +538,16 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.narrow_note = False
         self.current_key = key
         kind, _sep, object_id = key.partition(":")
-        if kind in ("list", "board") and self.sync.get(object_id):
+        if kind in ("list", "board", "plan") and self.sync.get(object_id):
             self.note_pane.editor.flush()
             self.drop_fresh_note()
+        if self.stack.get_visible_child_name() == "plan":
+            self.plan_view.flush()
+        if kind == "plan" and self.sync.get(object_id):
+            self.plan_view.show(object_id)
+            self.stack.set_visible_child_name("plan")
+            self.show_note_tools(False)
+            return
         if kind == "list" and self.sync.get(object_id):
             self.list_view.show(object_id)
             self.stack.set_visible_child_name("list")
@@ -1142,10 +1153,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             folder_id = target.partition(":")[2]
             if kind == "note":
                 self.move_note_to(object_id, folder_id)
-            elif kind in ("folder", "list", "board"):
+            elif kind in ("folder", "list", "board", "plan"):
                 self.move_object_to(object_id, folder_id)
             return True
-        section_kinds = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board"}
+        section_kinds = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board", "Pläne": "plan"}
         if section_kinds.get(target) == kind:
             self.move_object_to(object_id, None)
             return True
@@ -1606,6 +1617,44 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sidebar.select("board:" + board["id"])
         ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen")
 
+    def new_plan(self, folder_id=None):
+        """Like a list or board: a plan from a template (timetable, shifts, cleaning rota …)."""
+        from . import plans
+        folder = self.target_folder(folder_id)
+        choices = [(key, f"{title} – {hint}") for key, title, hint in plans.TEMPLATES]
+
+        def create(name, choice):
+            data = {**plans.template(choice or "leer"), "name": name, "order": time.time()}
+            if folder is not None:
+                data["folder"] = folder["id"]
+            plan = self.sync.put("plan", data, folder.get("share") if folder else None)
+            self.sidebar.refresh()
+            self.sidebar.select("plan:" + plan["id"])
+        ask_text(self, "Neuer Plan", create, placeholder="z. B. Putzplan WG", action="Erstellen", choices=choices)
+
+    def export_plan(self, plan_id):
+        """A plan as PDF (to hang up) – saved, or printed from the PDF viewer."""
+        plan = self.sync.get(plan_id)
+        if plan is None:
+            return
+        from . import report
+        name = plan["data"].get("name") or "Plan"
+        dialog = Gtk.FileDialog(title="Plan als PDF speichern", initial_name=f"{name}.pdf")
+
+        def chosen(dialog, result):
+            try:
+                file = dialog.save_finish(result)
+            except GLib.Error:
+                return
+            try:
+                report.write_plan_pdf(plan["data"], file.get_path())
+            except Exception as error:
+                self.toast(f"PDF nicht möglich: {error}")
+                return
+            self.toast("Plan als PDF gespeichert")
+            Gtk.FileLauncher.new(file).launch(self, None, None)
+        dialog.save(self, None, chosen)
+
     def object_menu(self, kind, object_id, widget, x, y):
         obj = self.sync.get(object_id)
         if obj is None:
@@ -1618,8 +1667,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Neuer Unterordner …", "win.new-subfolder")
             menu.append("Neue Liste hier …", "win.new-list-here")
             menu.append("Neues Board hier …", "win.new-board-here")
-        if kind in ("folder", "list", "board"):
+        if kind in ("folder", "list", "board", "plan"):
             menu.append("Verschieben nach …", "win.move-object")
+        if kind == "plan":
+            menu.append("Als PDF …", "win.export-plan")
         if kind == "board":
             menu.append("Bericht exportieren …", "win.export-object")
             menu.append("Entwicklungsprojekt ausschalten" if obj["data"].get("dev") else "Als Entwicklungsprojekt führen",
@@ -1733,7 +1784,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sort_action.set_state(GLib.Variant.new_string(order))
         self.sidebar.refresh()
         visible = self.stack.get_visible_child_name()
-        if visible == "list":
+        if visible == "plan":
+            if self.sync.get(self.plan_view.plan_id or "") is None:
+                self.current_key = "all"
+                self.select("all")
+            else:
+                self.plan_view.refresh()
+        elif visible == "list":
             self.list_view.refresh()
         elif visible == "board":
             self.board_view.refresh()
@@ -1784,6 +1841,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "new-folder": self.new_folder,
             "new-list": self.new_list,
             "new-board": self.new_board,
+            "new-plan": self.new_plan,
+            "export-plan": lambda: self.export_plan(getattr(self, "menu_target", "")),
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
             "new-subfolder": lambda: self.new_folder(getattr(self, "menu_target", None)),
