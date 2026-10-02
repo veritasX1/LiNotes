@@ -96,4 +96,26 @@ class HighlightTest {
         editor.text!!.delete(zwei - 1, zwei)
         assertEquals(listOf("title:T", "body:eins", "body:zwei"), kinds(editor))
     }
+
+    private fun h(type: String, text: String, collapsed: Boolean = false) =
+        JSONObject().put("t", type).put("x", text).apply { if (collapsed) put("z", true) }
+
+    @Test
+    fun collapsedSectionsKeepTheirContent() {
+        // Karte fc905de4: like Ubuntu's test_fold.py.
+        val editor = editor(h("title", "Plan"), h("heading", "Woche 1", collapsed = true), body("Montag"),
+            h("subheading", "Details"), h("check", "Einkaufen"), h("heading", "Woche 2"), body("Dienstag"))
+        // Folded content is not in the text, but saved in full.
+        assertEquals(false, editor.text.toString().contains("Montag"))
+        assertEquals(listOf("title:Plan", "heading:Woche 1", "body:Montag", "subheading:Details", "check:Einkaufen", "heading:Woche 2", "body:Dienstag"), kinds(editor))
+        assertEquals(true, editor.toBlocks()[1].optBoolean("z"))
+        // Expand, then fold only the subheading.
+        editor.toggleFold(editor.text!!.indexOf("Woche 1"))
+        assertEquals(true, editor.text.toString().contains("Montag"))
+        assertEquals(false, editor.toBlocks()[1].has("z"))
+        editor.toggleFold(editor.text!!.indexOf("Details"))
+        assertEquals(false, editor.text.toString().contains("Einkaufen"))
+        assertEquals(true, editor.text.toString().contains("Woche 2"))
+        assertEquals(listOf("title:Plan", "heading:Woche 1", "body:Montag", "subheading:Details", "check:Einkaufen", "heading:Woche 2", "body:Dienstag"), kinds(editor))
+    }
 }

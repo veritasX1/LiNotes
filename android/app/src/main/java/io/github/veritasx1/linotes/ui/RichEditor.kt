@@ -73,6 +73,8 @@ class ParaSpan(
 ) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan {
 
     var number = 1
+    /** Headings with content below: 0 not foldable, 1 open (⌄), 2 collapsed (›). */
+    var fold = 0
 
     /** Headings get some air above them (not at the very top of the note). */
     override fun chooseHeight(text: CharSequence, start: Int, end: Int, spanstartv: Int, lineHeight: Int, fm: Paint.FontMetricsInt) {
@@ -98,6 +100,7 @@ class ParaSpan(
     override fun updateDrawState(paint: TextPaint) = apply(paint)
 
     override fun getLeadingMargin(first: Boolean): Int = when {
+        fold != 0 -> (20 * density).toInt()
         type in LIST_TYPES -> ((30 + 24 * level) * density).toInt()
         type == "quote" -> (16 * density).toInt()
         else -> 0
@@ -157,6 +160,20 @@ class ParaSpan(
             }
             "quote" -> drawQuoteBar(canvas, x, top, bottom)
         }
+        if (fold != 0) {
+            // Like Apple: a chevron before headings that can be collapsed.
+            paint.color = colors.accent
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f * density
+            paint.strokeCap = Paint.Cap.ROUND
+            val cx = x + 8 * density
+            val cy = (top + bottom) / 2f
+            val path = android.graphics.Path().apply {
+                if (fold == 2) { moveTo(cx - 2.5f * density, cy - 5 * density); lineTo(cx + 2.5f * density, cy); lineTo(cx - 2.5f * density, cy + 5 * density) }
+                else { moveTo(cx - 5 * density, cy - 2.5f * density); lineTo(cx, cy + 2.5f * density); lineTo(cx + 5 * density, cy - 2.5f * density) }
+            }
+            canvas.drawPath(path, paint)
+        }
         paint.color = saved
         paint.style = style
     }
@@ -191,6 +208,27 @@ class DividerSpan(private val density: Float, private val color: Int, private va
         val middle = (top + bottom) / 2f
         canvas.drawLine(x, middle, x + width(), middle, line)
     }
+}
+
+/** The content of a collapsed section, taken out of the text while it is folded (EditText
+ *  cannot hide text); sits on the heading and is put back by toBlocks/expanding. */
+class FoldSpan(val hidden: List<JSONObject>)
+
+private val FOLDABLE = mapOf("heading" to 1, "subheading" to 2)
+private val RANKS = mapOf("title" to 0, "heading" to 1, "subheading" to 2)
+
+/** Index of the last block in the section of the heading at [index] (index itself if empty).
+ *  Trailing empty lines stay outside, as on Ubuntu. */
+fun sectionEnd(types: List<String>, texts: List<String>, index: Int): Int {
+    val rank = FOLDABLE[types[index]] ?: return index
+    var last = index
+    for (other in index + 1 until types.size) {
+        val otherRank = RANKS[types[other]]
+        if (otherRank != null && otherRank <= rank) break
+        last = other
+    }
+    while (last > index && types[last] !in setOf("image", "divider") && texts[last].isBlank()) last--
+    return last
 }
 
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
@@ -331,6 +369,20 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 return
             }
         }
+        // Enter on a collapsed heading opens the section first (like Apple), then adds the line.
+        if (enterAt >= 0 && enterStyle?.type in FOLDABLE) {
+            val headingStart = text.lastIndexOf('\n', enterAt - 1).let { if (it < 0) 0 else it + 1 }
+            if (foldAt(text, headingStart) != null) {
+                text.delete(enterAt, enterAt + 1)
+                normalize(text)
+                post {
+                    toggleFold(headingStart)
+                    val current = this.text ?: return@post
+                    current.insert(paragraphEnd(current, headingStart), "\n")
+                }
+                return
+            }
+        }
         // Enter on an empty list item ends the list instead of adding one.
         if (enterAt >= 0) {
             val style = enterStyle
@@ -458,6 +510,22 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             }
         }
         val fixedStarts = paragraphStarts(text)
+        val types = fixedStarts.mapIndexed { index, start ->
+            when {
+                text.getSpans(start, paragraphEnd(text, start), DividerSpan::class.java).isNotEmpty() -> "divider"
+                text.getSpans(start, paragraphEnd(text, start), ImageBlockSpan::class.java).isNotEmpty() -> "image"
+                else -> styles[index].type
+            }
+        }
+        val texts = fixedStarts.map { text.substring(it, paragraphEnd(text, it)).replace(PLACEHOLDER.toString(), "") }
+        fixedStarts.forEachIndexed { index, start ->
+            styles[index].fold = when {
+                styles[index].type !in FOLDABLE -> 0
+                foldAt(text, start) != null -> 2
+                sectionEnd(types, texts, index) > index -> 1
+                else -> 0
+            }
+        }
         for (old in text.getSpans(0, text.length, ParaSpan::class.java)) text.removeSpan(old)
         var number = 0
         var previousWasNumber = false
@@ -610,6 +678,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val line = layout.getLineForVertical(y)
         val offset = layout.getLineStart(line)
         val span = paraAt(text, offset) ?: return false
+        if (span.fold != 0 && event.x <= totalPaddingLeft + 24 * density) {
+            val start = text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (offset == 0 || it < 0) 0 else it + 1 }
+            if (layout.getLineForOffset(start) == line) {
+                toggleFold(start)
+                return true
+            }
+        }
         if (span.type != "check") return false
         val paragraphStart = text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (offset == 0 || it < 0) 0 else it + 1 }
         if (layout.getLineForOffset(paragraphStart) != line) return false
@@ -693,10 +768,30 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     fun load(blocks: List<JSONObject>) {
         busy = true
         val builder = SpannableStringBuilder()
-        val list = blocks.ifEmpty { listOf(JSONObject().put("t", "title").put("x", "")) }
+        val all = blocks.ifEmpty { listOf(JSONObject().put("t", "title").put("x", "")) }
+        // Collapsed headings keep their section in a FoldSpan instead of the text.
+        val list = mutableListOf<JSONObject>()
+        val folds = mutableMapOf<Int, List<JSONObject>>()
+        run {
+            val types = all.map { it.optString("t", "body") }
+            val texts = all.map { it.optString("x") }
+            var index = 0
+            while (index < all.size) {
+                val block = all[index]
+                list.add(block)
+                if (block.optString("t") in FOLDABLE && block.optBoolean("z")) {
+                    val end = sectionEnd(types, texts, index)
+                    if (end > index) folds[list.lastIndex] = all.subList(index + 1, end + 1).toList()
+                    index = end + 1
+                    continue
+                }
+                index++
+            }
+        }
         var number = 0
         var previousNumber = false
         val paragraphs = mutableListOf<Triple<ParaSpan, Int, Int>>()
+        val foldSpans = mutableListOf<Triple<FoldSpan, Int, Int>>()
         list.forEachIndexed { index, block ->
             val start = builder.length
             val type = block.optString("t", "body")
@@ -730,6 +825,10 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (index < list.size - 1) builder.append('\n')
             val paraType = if (type == "image" || type == "divider") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
+            folds[index]?.let { hidden ->
+                foldSpans.add(Triple(FoldSpan(hidden), start, builder.length))
+                span.fold = 2
+            }
             if (paraType == "number") {
                 number = if (previousNumber) number + 1 else 1
                 span.number = number
@@ -739,7 +838,14 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
         // Paragraph spans grow with text appended at their end, so they are
         // set only once the whole text exists.
+        // Open headings with content below get their chevron.
+        val types = list.map { it.optString("t", "body") }
+        val texts = list.map { it.optString("x") }
+        paragraphs.forEachIndexed { index, (span, _, _) ->
+            if (span.fold == 0 && span.type in FOLDABLE && sectionEnd(types, texts, index) > index) span.fold = 1
+        }
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
+        for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
         text?.let { markLinks(it) }
         busy = false
@@ -768,6 +874,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 .put("x", text.substring(start, end).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), ""))
             if (span != null && span.level > 0) block.put("l", span.level)
             if (span?.type == "check") block.put("c", span.checked)
+            val fold = foldAt(text, start)?.takeIf { span?.type in FOLDABLE }
             val spans = JSONArray()
             for (name in INLINE) {
                 var index = start
@@ -788,11 +895,37 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             }
             if (spans.length() > 0) block.put("s", spans)
             result.add(block)
+            if (fold != null) {
+                block.put("z", true)
+                result.addAll(fold.hidden)
+            }
         }
         while (result.size > 1 && result.last().optString("t") == "body" && result.last().optString("x").isEmpty()) {
             result.removeAt(result.size - 1)
         }
         return result
+    }
+
+    // --- collapsible sections ----------------------------------
+
+    private fun foldAt(text: Spanned, paragraphStart: Int): FoldSpan? {
+        val end = paragraphEnd(text, paragraphStart)
+        return text.getSpans(paragraphStart, end, FoldSpan::class.java).firstOrNull { text.getSpanStart(it) in paragraphStart..end }
+    }
+
+    /** Collapse or expand the section of the heading starting at [paragraphStart] (like Apple). */
+    fun toggleFold(paragraphStart: Int) {
+        val text = text ?: return
+        val index = paragraphStarts(text).indexOf(paragraphStart).takeIf { it >= 0 } ?: return
+        val blocks = toBlocks().toMutableList()
+        if (index >= blocks.size) return
+        val heading = JSONObject(blocks[index].toString())
+        if (heading.optBoolean("z")) heading.remove("z") else heading.put("z", true)
+        blocks[index] = heading
+        load(blocks)
+        val start = paragraphStarts(this.text ?: return).getOrNull(index) ?: return
+        setSelection(paragraphEnd(this.text!!, start))
+        onEdited?.invoke()
     }
 
     // --- dividers ----------------------------------------------
