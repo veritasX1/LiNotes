@@ -335,3 +335,17 @@ button.font-serif { font-family: Serif; }
   border-radius: 7px;
   background: #e01b24;
 }
+
+/* Tables in notes */
+.note-table {
+  border: 1px solid alpha(currentColor, 0.18);
+  border-radius: 6px;
+}
+.note-table .table-cell {
+  border-right: 1px solid alpha(currentColor, 0.12);
+  border-bottom: 1px solid alpha(currentColor, 0.12);
+  border-radius: 0;
+  background: none;
+  min-height: 30px;
+  padding: 2px 8px;
+}

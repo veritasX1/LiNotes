@@ -82,6 +82,18 @@ def icon_format(cr):
     _stroke(cr, 1.2)
 
 
+def icon_table(cr):
+    cr.rectangle(1.5, 2.5, 13, 11)
+    _stroke(cr, 1.2)
+    for y in (6.2, 9.8):
+        cr.move_to(1.5, y)
+        cr.line_to(14.5, y)
+    for x in (5.8, 10.2):
+        cr.move_to(x, 2.5)
+        cr.line_to(x, 13.5)
+    _stroke(cr, 1.0)
+
+
 def icon_photo(cr):
     rounded_rectangle(cr, 1.5, 2.5, 13, 11, 2)
     _stroke(cr)

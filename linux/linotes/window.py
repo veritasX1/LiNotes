@@ -186,6 +186,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         checklist = icon_button("checklist", "Checkliste (Strg+Shift+L)")
         checklist.connect("clicked", lambda _button: self.paragraph("check"))
         self.note_tools.append(checklist)
+        table = icon_button("table", "Tabelle einfügen")
+        table.set_action_name("win.insert-table")
+        self.note_tools.append(table)
         photo = icon_button("photo", "Foto einfügen")
         photo.set_action_name("win.insert-photo")
         self.note_tools.append(photo)
@@ -911,7 +914,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def update_note_actions(self):
         note = self.sync.get(self.current_note) if self.current_note else None
         has = note is not None
-        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo", "attach-file",
+        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo", "insert-table", "attach-file",
                      "export-note", "print-note"):
             self.lookup_action(name).set_enabled(has)
         if has:
@@ -1286,6 +1289,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if (target := self.format_target(editor)):
             target.apply_paragraph(style)
             target.grab_focus()
+
+    def insert_table(self, editor=None):
+        """Like Apple: a 3×3 table; Tab moves on, right-click adds rows and columns."""
+        if (target := self.format_target(editor)) and target.get_editable():
+            target.insert_table()
 
     def insert_divider(self, editor=None):
         if (target := self.format_target(editor)) and target.get_editable():
@@ -1767,6 +1775,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "lock-button": self.on_lock_button,
             "lock-all": self.lock_all,
             "insert-photo": self.insert_photo,
+            "insert-table": self.insert_table,
             "attach-file": self.attach_file,
             "record-audio": self.record_audio,
             "new-folder": self.new_folder,

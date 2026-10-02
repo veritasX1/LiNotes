@@ -247,9 +247,34 @@ def empty_note_body():
     return [{"t": "title", "x": ""}]
 
 
+# --- tables (like Apple's tables in Notes) ----------------------------
+# Block {"t": "table", "r": [["A", "B"], ["C", "D"]], "x": "A | B\nC | D"}: "r" are the rows of
+# cell texts, "x" the same as plain text so search, previews and older versions still have it.
+
+def table_rows(block):
+    """The cells as a rectangle of strings (missing cells filled in, at least 1×1)."""
+    rows = [[str(cell) for cell in row] for row in (block.get("r") or []) if isinstance(row, list)]
+    width = max((len(row) for row in rows), default=0) or 1
+    rows = [row + [""] * (width - len(row)) for row in rows] or [[""]]
+    return rows
+
+
+def table_text(rows):
+    return "\n".join(" | ".join(row) for row in rows)
+
+
+def table_block(rows):
+    rows = table_rows({"r": rows})
+    return {"t": "table", "r": rows, "x": table_text(rows)}
+
+
+def new_table(columns=3, rows=3):
+    return table_block([[""] * columns for _ in range(rows)])
+
+
 def is_empty_body(blocks):
     """Nothing typed, no picture, file or divider (whitespace does not count)."""
-    return all(b.get("t", "body") not in ("image", "file", "divider") and not b.get("x", "").strip() for b in blocks)
+    return all(b.get("t", "body") not in ("image", "file", "divider", "table") and not b.get("x", "").strip() for b in blocks)
 
 
 # --- folders ----------------------------------------------------

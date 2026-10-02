@@ -20,6 +20,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
 from . import audio, calc, model
+from .table import NoteTable
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -1054,6 +1055,8 @@ class NoteEditor(Gtk.TextView):
                 self.add_divider(buffer.create_child_anchor(end))
             elif kind == "file":
                 self.add_file(buffer.create_child_anchor(end), block)
+            elif kind == "table":
+                self.add_table(buffer.create_child_anchor(end), block)
             else:
                 block = model.refresh_note_links(block, self.note_title, self.user_name)
                 text = block.get("x", "")
@@ -1077,7 +1080,7 @@ class NoteEditor(Gtk.TextView):
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
             style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind in ("image", "divider", "file"):
+            if kind in ("image", "divider", "file", "table"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
             if block.get("a") in ALIGNMENTS:
@@ -1104,7 +1107,9 @@ class NoteEditor(Gtk.TextView):
             anchor = start.get_child_anchor()
             if anchor is not None and anchor in self.anchors:
                 image = self.anchors[anchor]
-                if image.get("attachment"):
+                if image.get("table"):
+                    blocks.append(model.table_block(image["table"].rows()))
+                elif image.get("attachment"):
                     blocks.append(dict(image["attachment"]))
                 else:
                     blocks.append({"t": "divider"} if image.get("divider")
@@ -1281,7 +1286,29 @@ class NoteEditor(Gtk.TextView):
         self.anchors[anchor] = {"attachment": dict(block), "picture": card}
         self.add_child_at_anchor(card, anchor)
 
-    def insert_image(self, file_id, divider=False, attachment=None):
+    def add_table(self, anchor, block):
+        """A table (like Apple's): cells edited in place, saved with the note."""
+        widget = NoteTable(model.table_rows(block), on_change=lambda: self.on_changed(self.buffer),
+                           on_delete=lambda: self.delete_anchor_line(anchor))
+        self.anchors[anchor] = {"table": widget, "picture": widget}
+        self.add_child_at_anchor(widget, anchor)
+        return widget
+
+    def insert_table(self, columns=3, rows=3):
+        self.insert_image(None, table=model.new_table(columns, rows))
+
+    def delete_anchor_line(self, anchor):
+        """Remove the line holding a table (or other object) and save."""
+        buffer = self.buffer
+        for line in range(buffer.get_line_count()):
+            start, _end, with_break = self.line_bounds(line)
+            if start.get_child_anchor() is anchor:
+                self.anchors.pop(anchor, None)
+                buffer.delete(start, with_break)
+                self.on_changed(buffer)
+                return
+
+    def insert_image(self, file_id, divider=False, attachment=None, table=None):
         buffer = self.buffer
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
         if not cursor.starts_line():
@@ -1295,6 +1322,8 @@ class NoteEditor(Gtk.TextView):
         self.loading = False
         if divider:
             self.add_divider(anchor)
+        elif table is not None:
+            widget = self.add_table(anchor, table)
         elif attachment:
             self.add_file(anchor, attachment)
         else:
@@ -1306,11 +1335,13 @@ class NoteEditor(Gtk.TextView):
         self.set_line_style(line, "body", 0, checked=False)
         start, _end, with_break = self.line_bounds(line)
         buffer.apply_tag_by_name("image", start, with_break)
-        if divider or attachment:
+        if divider or attachment or table is not None:
             # Typing goes on below the line.
             self.set_line_style(line + 1, "body", 0, checked=False)
             buffer.place_cursor(buffer.get_iter_at_line(line + 1)[1])
         self.on_changed(buffer)
+        if table is not None:
+            GLib.idle_add(lambda: widget.cells[0][0].grab_focus() and False)
 
 
 def file_details(block):
