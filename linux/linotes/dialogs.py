@@ -35,7 +35,8 @@ def run_async(function, done):
             result = function()
             GLib.idle_add(lambda: (done(result, None), False)[1])
         except Exception as error:
-            GLib.idle_add(lambda: (done(None, error), False)[1])
+            # Bind it now: Python deletes "error" when the except block ends (NameError later).
+            GLib.idle_add(lambda failure=error: (done(None, failure), False)[1])
     threading.Thread(target=worker, daemon=True).start()
 
 
