@@ -17,7 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import activity, security_ui, textsize, uiprefs
+from . import activity, audio, security_ui, textsize, uiprefs
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -192,6 +192,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         attach = Gtk.Button(icon_name="mail-attachment-symbolic", tooltip_text="Datei anhängen (PDF, Dokument …)")
         attach.set_action_name("win.attach-file")
         self.note_tools.append(attach)
+        record = Gtk.Button(icon_name="audio-input-microphone-symbolic", tooltip_text="Audio aufnehmen")
+        record.set_action_name("win.record-audio")
+        self.note_tools.append(record)
         self.lock_button = icon_button("lock", "Notiz sperren")
         self.lock_button.set_action_name("win.lock-button")
         self.note_tools.append(self.lock_button)
@@ -1204,6 +1207,40 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.toast(f"„{path.name}“ wird angehängt …")
         run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
 
+    def record_audio(self, editor=None, note_id=None):
+        """Like Apple: record with the microphone; the recording is attached encrypted."""
+        editor = editor or self.note_pane.editor
+        note = self.sync.get(note_id or self.current_note) if (note_id or self.current_note) else None
+        if note is None or note["data"].get("enc") or note["data"].get("trashed"):
+            return
+        folder = Path(GLib.get_user_cache_dir()) / "linotes" / "recordings"
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        name = audio.recording_name()
+
+        def recorded(path, length, error):
+            if error is not None:
+                self.toast(error)
+                return
+            content = path.read_bytes()
+            path.unlink(missing_ok=True)
+            if len(content) > MAX_ATTACHMENT:
+                self.toast(f"Die Aufnahme ist zu lang (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB, etwa 90 Minuten).")
+                return
+
+            def done(file_id, error):
+                if error is not None:
+                    self.toast(error_text(error))
+                    return
+                editor.insert_file({"t": "file", "f": file_id, "n": name, "m": audio.MIME, "b": len(content),
+                                    "d": round(length, 1)})
+            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+        try:
+            dialog = audio.RecordDialog(folder / name, recorded)
+        except Exception as error:
+            self.toast(f"Aufnahme nicht möglich: {error}")
+            return
+        dialog.present(self)
+
     def drop_file(self, file):
         note = self.sync.get(self.current_note) if self.current_note else None
         path = Path(file.get_path() or "")
@@ -1731,6 +1768,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "lock-all": self.lock_all,
             "insert-photo": self.insert_photo,
             "attach-file": self.attach_file,
+            "record-audio": self.record_audio,
             "new-folder": self.new_folder,
             "new-list": self.new_list,
             "new-board": self.new_board,

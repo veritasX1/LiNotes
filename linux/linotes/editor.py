@@ -19,7 +19,7 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import calc, model
+from . import audio, calc, model
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -77,6 +77,7 @@ class NoteEditor(Gtk.TextView):
         self.add_css_class("note-editor")
         self.image_loader = image_loader
         self.anchors = {}
+        self.player = audio.Player()  # recordings play inside the note
         self.loading = False
         self.auto_sort_checked = False
         self.typing_inline = None
@@ -1033,6 +1034,7 @@ class NoteEditor(Gtk.TextView):
     def load_blocks(self, blocks, keep_cursor=False):
         buffer = self.buffer
         offset = buffer.get_iter_at_mark(buffer.get_insert()).get_offset() if keep_cursor else 0
+        self.player.stop()
         self.loading = True
         buffer.begin_irreversible_action()
         for anchor in list(self.anchors):
@@ -1209,6 +1211,9 @@ class NoteEditor(Gtk.TextView):
 
     def add_file(self, anchor, block):
         """A file as a card like in Notes: preview (first PDF page) or type icon, name, size."""
+        if audio.is_audio(block):
+            self.add_recording(anchor, block)
+            return
         card = Gtk.Box(spacing=12, css_classes=["file-card"])
         card.set_size_request(360, -1)
         preview = Gtk.Image.new_from_gicon(Gio.content_type_get_icon(Gio.content_type_from_mime_type(block.get("m") or "")
@@ -1239,6 +1244,42 @@ class NoteEditor(Gtk.TextView):
                 if png:
                     GLib.idle_add(lambda: (preview.set_from_file(str(png)), preview.set_pixel_size(64)) and False)
             threading.Thread(target=render, daemon=True).start()
+
+    def add_recording(self, anchor, block):
+        """An audio recording as a card with a play button; plays inside the note."""
+        card = Gtk.Box(spacing=12, css_classes=["file-card", "audio-card"])
+        card.set_size_request(360, -1)
+        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "suggested-action"],
+                            valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
+        card.append(button)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
+        text.append(Gtk.Label(label="Audioaufnahme", xalign=0, css_classes=["heading"]))
+        text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
+        card.append(text)
+
+        def show(playing):
+            button.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
+            button.set_tooltip_text("Stopp" if playing else "Abspielen")
+
+        def toggle(_button):
+            if self.player.on_state is show:
+                self.player.stop()
+                return
+            if not self.image_loader or not block.get("f"):
+                return
+            button.set_sensitive(False)
+
+            def fetch():
+                try:
+                    path = self.image_loader(block["f"])
+                except Exception as error:
+                    print("LiNotes: Aufnahme nicht geladen:", error)
+                    path = None
+                GLib.idle_add(lambda: (button.set_sensitive(True), path and self.player.play(path, show)) and False)
+            threading.Thread(target=fetch, daemon=True).start()
+        button.connect("clicked", toggle)
+        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
+        self.add_child_at_anchor(card, anchor)
 
     def insert_image(self, file_id, divider=False, attachment=None):
         buffer = self.buffer
@@ -1281,6 +1322,8 @@ def file_details(block):
         amount = f"{round(size / 1024)} KB"
     else:
         amount = f"{size} Bytes"
+    if audio.is_audio(block) and block.get("d"):
+        return f"{audio.duration_text(block['d'])} · {amount}"
     kind = Gio.content_type_get_description(Gio.content_type_from_mime_type(block.get("m") or "") or "application/octet-stream")
     return f"{kind} · {amount}"
 
