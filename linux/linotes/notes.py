@@ -16,7 +16,7 @@ from .icons import Icon, drag_source
 
 class NoteRow(Gtk.ListBoxRow):
 
-    def __init__(self, note, group, sync, stamp=None):
+    def __init__(self, note, group, sync, stamp=None, unread=False):
         super().__init__()
         self.note_id = note["id"]
         self.group = group
@@ -26,6 +26,11 @@ class NoteRow(Gtk.ListBoxRow):
         box = Gtk.Box(spacing=8)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
         title_row = Gtk.Box(spacing=5)
+        if unread:
+            # Changed by someone else since I looked (like Apple's blue dot).
+            dot = Gtk.Box(css_classes=["unread-dot"], valign=Gtk.Align.CENTER)
+            dot.set_tooltip_text("Neu geändert")
+            title_row.append(dot)
         if data.get("enc"):
             title_row.append(Icon("lock", 13))
         title = Gtk.Label(label=model.note_title(note), xalign=0, ellipsize=3, hexpand=True)
@@ -91,6 +96,7 @@ class NoteList(Gtk.Box):
         self.sync = sync
         self.selected_id = None
         self.updating = False
+        self.is_unread = lambda _note: False
         self.add_css_class("note-list-pane")
 
         self.search = Gtk.SearchEntry(placeholder_text="Suchen")
@@ -203,7 +209,7 @@ class NoteList(Gtk.Box):
 
         select_row = None
         for note, group, stamp in model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")):
-            row = NoteRow(note, group, self.sync, stamp)
+            row = NoteRow(note, group, self.sync, stamp, unread=self.is_unread(note))
             self.list.append(row)
             if note["id"] == selected_id:
                 select_row = row
@@ -315,6 +321,12 @@ class NotePane(Gtk.Stack):
         self.date.set_margin_top(14)
         self.date.set_margin_bottom(6)
         column.append(self.date)
+        # "Claude hat geändert · heute 05:45 – Änderungen sind markiert" (changes by others).
+        self.activity = Gtk.Label(xalign=0, wrap=True, css_classes=["activity-note"], visible=False)
+        self.activity.set_margin_start(36)
+        self.activity.set_margin_end(36)
+        self.activity.set_margin_bottom(6)
+        column.append(self.activity)
         column.append(self.editor)
         clamp = Adw.Clamp(maximum_size=820, tightening_threshold=600, child=column)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=clamp)
@@ -338,8 +350,15 @@ class NotePane(Gtk.Stack):
         self.editor.set_editable(editable)
         self.editor.set_cursor_visible(editable)
         self.banner.set_revealed(bool(note["data"].get("trashed")))
+        self.activity.set_visible(False)
         self.update_date(note)
         self.set_visible_child_name("editor")
+
+    def show_changes(self, lines, who, when):
+        """Mark lines someone else changed and say who and when."""
+        self.editor.mark_changed(lines)
+        self.activity.set_label(f"{who} hat geändert · {model.short_date(when)} – die Änderungen sind markiert.")
+        self.activity.set_visible(True)
 
     def update_date(self, note):
         self.date.set_label(model.long_date(model.modified(note)))

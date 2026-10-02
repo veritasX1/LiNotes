@@ -137,6 +137,31 @@ def link_choices(notes, exclude=None, query="", limit=8):
     return found[:limit]
 
 
+def block_lines(blocks):
+    """One comparable string per block (text, or the kind and file for images and files)."""
+    return [f"{b.get('t')}:{b.get('x', '')}{b.get('f', '')}" for b in blocks]
+
+
+def changed_lines(old, new):
+    """Indices in `new` of lines that are new or changed compared to `old` (longest common
+    subsequence, like a diff). Mirrors Model.changedLines on Android."""
+    n, m = len(old), len(new)
+    length = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            length[i][j] = length[i + 1][j + 1] + 1 if old[i] == new[j] else max(length[i + 1][j], length[i][j + 1])
+    kept, i, j = set(), 0, 0
+    while i < n and j < m:
+        if old[i] == new[j]:
+            kept.add(j)
+            i, j = i + 1, j + 1
+        elif length[i + 1][j] >= length[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return sorted(set(range(m)) - kept)
+
+
 def note_text(note):
     return "\n".join(block.get("x", "") for block in note_blocks(note))
 
