@@ -500,7 +500,7 @@ class CardDialog(Adw.Dialog):
 
         notes_group = Adw.PreferencesGroup(title="Notizen")
         self.notes = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
-        self.notes.get_buffer().set_text(data.get("notes", ""))
+        self.notes.get_buffer().set_text(data.get("notes") or "")
         self.notes.set_size_request(-1, 110)
         self.notes.add_css_class("card")
         self.notes.set_left_margin(10)
@@ -519,9 +519,9 @@ class CardDialog(Adw.Dialog):
 
         self.dev = dev
         if dev:
-            self.impact = self.text_group(page, "Auswirkungsanalyse", card["data"].get("impact", ""),
+            self.impact = self.text_group(page, "Auswirkungsanalyse", card["data"].get("impact") or "",
                                           "Was ist betroffen, welche Risiken, was muss mitgeprüft werden?")
-            self.verification = self.text_group(page, "Verifikation", card["data"].get("verification", ""),
+            self.verification = self.text_group(page, "Verifikation", card["data"].get("verification") or "",
                                                 "Tests, Prüfungen und Nachweise")
             page.add(self.build_history(card))
 
@@ -568,7 +568,7 @@ class CardDialog(Adw.Dialog):
         copy.connect("clicked", lambda _b: self.get_clipboard().set(model.short_id(card["id"])))
         ident.add_suffix(copy)
         group.add(ident)
-        self.version_row = Adw.EntryRow(title="Umgesetzt in Version", text=card["data"].get("version", ""))
+        self.version_row = Adw.EntryRow(title="Umgesetzt in Version", text=card["data"].get("version") or "")
         group.add(self.version_row)
         commits = card["data"].get("commits") or []
         for commit in commits:
