@@ -20,6 +20,8 @@ fun SettingsScreen(state: AppState, revision: Long) {
     val scope = rememberCoroutineScope()
     var keyfile by remember { mutableStateOf(false) }
     var keepChoice by remember { mutableStateOf(false) }
+    var textChoice by remember { mutableStateOf(false) }
+    var textSize by remember { mutableStateOf(sync.textSize) }
     var changeVault by remember { mutableStateOf(false) }
     var enableBiometric by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
@@ -44,6 +46,9 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow("Personen und Einladungen", Glyph.Person, detail = if (open > 0) "$open nicht verifiziert" else null, divider = false) {
                 state.push(Route.People)
             }
+        }
+        section("text", header = "Darstellung", compact = true, footer = "Gilt für den Text in Notizen, zusätzlich zur Schriftgröße in den Android-Einstellungen.") {
+            GroupRow("Textgröße", Glyph.Format, detail = io.github.veritasx1.linotes.data.TEXT_SIZES[textSize].second, divider = false) { textChoice = true }
         }
         if (!sync.isLocal) section("keep", header = "Auf diesem Handy", compact = true, footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
             "Danach liegt er nur noch verschlüsselt auf dem Server und wird beim Öffnen geladen. Angeheftete Notizen, Listen und Boards bleiben immer hier.") {
@@ -77,6 +82,11 @@ fun SettingsScreen(state: AppState, revision: Long) {
     }
 
     if (keyfile) KeyfileDialog(state) { keyfile = false }
+    if (textChoice) {
+        ActionSheet("Textgröße in Notizen", io.github.veritasx1.linotes.data.TEXT_SIZES.mapIndexed { index, (_, label) ->
+            SheetAction(label + if (index == textSize) " ✓" else "") { sync.textSize = index; textSize = index }
+        }) { textChoice = false }
+    }
     if (keepChoice) {
         ActionSheet("Notizen auf dem Handy behalten", Keep.choices.map { (value, label) ->
             SheetAction(label + if (value == sync.keepDefault()) " ✓" else "") { sync.setKeepDefault(value); sync.evict() }

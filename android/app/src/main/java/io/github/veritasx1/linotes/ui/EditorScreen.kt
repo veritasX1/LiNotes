@@ -136,7 +136,11 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
                 done(bitmap)
             }
-        }.apply { layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
+        }.apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            // Text size from the settings (per device), on top of the system font size.
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 17f * io.github.veritasx1.linotes.data.TEXT_SIZES[sync.textSize].first)
+        }
     }
     val loadedBlocks = remember(noteId) { mutableStateOf<String?>(null) }
 
