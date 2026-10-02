@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.onSizeChanged
@@ -79,6 +80,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    // Text typed after ">>" while the note choice is shown (null: no choice open).
+    var linkQuery by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
     var viewportHeight by remember { mutableIntStateOf(0) }
     var editorTop by remember { mutableStateOf(0f) }
@@ -200,7 +203,21 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             job?.cancel()
             job = scope.launch { delay(700); save() }
         }
-        editor.onStyleChanged = { styleTick++ }
+        editor.onStyleChanged = {
+            styleTick++
+            if (linkQuery != null) {
+                val query = editor.pendingLinkQuery()
+                if (query == null) { editor.finishLink(null, null); linkQuery = null } else linkQuery = query
+            }
+        }
+        // Links between notes (">>", like Apple's Notes).
+        editor.noteTitle = { id -> sync.get(id)?.takeIf { !it.data.has("trashed") }?.let { Model.title(it) } }
+        editor.onLinkRequested = { linkQuery = editor.pendingLinkQuery() ?: "" }
+        editor.onOpenNote = { id ->
+            val target = sync.get(id)
+            if (target == null || target.data.has("trashed")) state.toastLater("Die verlinkte Notiz gibt es nicht mehr.")
+            else { save(); state.push(Route.Editor(id)) }
+        }
         onDispose {
             job?.cancel()
             save()
@@ -270,6 +287,12 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 Text(Model.longDate(Model.modified(note)), style = Type.footnote, color = colors.secondary,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
+            }
+            linkQuery?.let { query ->
+                LinkPanel(Model.linkChoices(sync.all("note"), noteId, query), onPick = { target ->
+                    linkQuery = null
+                    editor.finishLink(target.id, Model.title(target))
+                }) { linkQuery = null; editor.finishLink(null, null) }
             }
             if (showFormat) FormatPanel(editor, styleTick) { showFormat = false }
             if (!trashed) EditorToolbar(
@@ -463,6 +486,28 @@ private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onPhoto
             BarButton(Glyph.Checklist, "Checkliste", onClick = onChecklist)
             BarButton(Glyph.Photo, "Foto", onClick = onPhoto)
             BarButton(Glyph.Compose, "Neue Notiz", onClick = onCompose)
+        }
+    }
+}
+
+/** After ">>": notes to link to, above the keyboard. Typing on filters the list. */
+@Composable
+private fun LinkPanel(notes: List<SyncObject>, onPick: (SyncObject) -> Unit, onClose: () -> Unit) {
+    val colors = palette
+    Column(Modifier.fillMaxWidth().background(colors.background)) {
+        HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Mit Notiz verlinken", style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
+            Box(Modifier.size(26.dp).clip(RoundedCornerShape(13.dp)).background(colors.fill).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.Close, colors.secondary, 10.dp)
+            }
+        }
+        Column(Modifier.fillMaxWidth().heightIn(max = 200.dp).verticalScroll(rememberScrollState())) {
+            if (notes.isEmpty()) Text("Keine passende Notiz", style = Type.subheadline, color = colors.tertiary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+            notes.forEachIndexed { index, note ->
+                GroupRow(Model.title(note), glyph = Glyph.Notes, chevron = false, divider = index < notes.lastIndex) { onPick(note) }
+            }
         }
     }
 }

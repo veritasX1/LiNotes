@@ -15,6 +15,7 @@ import android.print.PrintManager
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
@@ -50,7 +51,11 @@ object NotePdf {
                 "u" -> UnderlineSpan()
                 "s" -> StrikethroughSpan()
                 "h" -> BackgroundColorSpan(Color.rgb(255, 230, 128))
-                else -> continue
+                // Links to other notes look like links (accent color, underlined).
+                else -> if (span.optString(2).startsWith("n:")) {
+                    result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    UnderlineSpan()
+                } else continue
             }
             result.setSpan(style, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }

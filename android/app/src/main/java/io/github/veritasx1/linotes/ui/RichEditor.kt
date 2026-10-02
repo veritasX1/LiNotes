@@ -53,6 +53,14 @@ class LinkSpan(private val color: Int) : android.text.style.CharacterStyle(), an
         paint.isUnderlineText = true
     }
 }
+/** A link to another note (">>"), saved as span "n:<id>". Looks like a web address. */
+class NoteLinkSpan(val noteId: String, private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.color = color
+        paint.isUnderlineText = true
+    }
+}
+
 const val MAX_INDENT = 4
 
 /** Paragraph style: size/weight of the text plus the list marker in the margin. */
@@ -185,6 +193,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     /** The cursor moved (typing, tapping, new line) – the screen keeps it above the keyboard. */
     var onCaretMoved: (() -> Unit)? = null
     var autoSortChecked = false
+    /** Title of a note by id (null if it is gone) – note links show the current title. */
+    var noteTitle: (String) -> String? = { null }
+    /** ">>" was typed: the screen offers notes to link to. */
+    var onLinkRequested: (() -> Unit)? = null
+    var onOpenNote: ((String) -> Unit)? = null
+    /** Where the pending ">>" starts, or -1. */
+    private var linkStart = -1
 
     init {
         background = ColorDrawable(0)
@@ -312,6 +327,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 normalize(text)
                 return
             }
+        }
+        // ">>" links to another note, like in Apple's Notes.
+        val insertEnd = insertStart + insertCount
+        if (linkStart < 0 && insertCount > 0 && insertEnd >= 2 && insertEnd <= text.length &&
+            text[insertEnd - 1] == '>' && text[insertEnd - 2] == '>') {
+            linkStart = insertEnd - 2
+            post { onLinkRequested?.invoke() }
         }
         // New text takes the style that was switched on for typing.
         pendingInline?.let { styles ->
@@ -465,11 +487,46 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
     }
 
-    /** A short tap on a web address opens it in the browser (like Notes). */
+    /** The text typed after ">>" while the note choice is open (null: the cursor left it). */
+    fun pendingLinkQuery(): String? {
+        val text = text ?: return null
+        val start = linkStart
+        val cursor = selectionStart
+        if (start < 0 || start + 2 > text.length || text[start] != '>' || text[start + 1] != '>' || cursor < start + 2) return null
+        val query = text.substring(start + 2, cursor)
+        return if ('\n' in query || query.length > 60) null else query
+    }
+
+    /** Replace ">>" (and what was typed after it) with a link to the note, or just
+     *  forget the pending ">>" when [noteId] is null. */
+    fun finishLink(noteId: String?, title: String?) {
+        val text = text ?: return
+        val start = linkStart
+        val query = pendingLinkQuery()
+        linkStart = -1
+        if (noteId == null || title == null || start < 0) return
+        val end = start + 2 + (query?.length ?: 0)
+        busy = true
+        text.replace(start, end, title)
+        text.setSpan(NoteLinkSpan(noteId, colors.accent), start, start + title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val after = start + title.length
+        if (after < text.length && text[after] == ' ') setSelection(after + 1)
+        else { text.insert(after, " "); setSelection(after + 1) }
+        normalize(text)
+        busy = false
+        // The keyboard may still hold ">>" as the word being typed – let it start over.
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).restartInput(this)
+        onEdited?.invoke()
+    }
+
+    /** A short tap on a web address opens it in the browser, on a note link the note (like Notes). */
     private fun openLinkAt(event: MotionEvent): Boolean {
         val text = text ?: return false
         if (event.eventTime - event.downTime > android.view.ViewConfiguration.getLongPressTimeout()) return false
         val offset = getOffsetForPosition(event.x, event.y)
+        text.getSpans(offset, offset, NoteLinkSpan::class.java).firstOrNull {
+            offset in text.getSpanStart(it) until text.getSpanEnd(it)
+        }?.let { onOpenNote?.invoke(it.noteId); return true }
         val link = text.getSpans(offset, offset, LinkSpan::class.java).firstOrNull() ?: return false
         val start = text.getSpanStart(link)
         val end = text.getSpanEnd(link)
@@ -563,16 +620,20 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 loadImage(fileId) { bitmap -> if (bitmap != null) showImage(span, bitmap) }
             } else {
-                val text = block.optString("x")
+                val fresh = io.github.veritasx1.linotes.data.Model.refreshNoteLinks(block, noteTitle)
+                val text = fresh.optString("x")
                 builder.append(text)
-                val spans = block.optJSONArray("s") ?: JSONArray()
+                val spans = fresh.optJSONArray("s") ?: JSONArray()
                 for (spanIndex in 0 until spans.length()) {
                     val item = spans.optJSONArray(spanIndex) ?: continue
                     val name = item.optString(2)
-                    if (name !in INLINE) continue
+                    val target = io.github.veritasx1.linotes.data.Model.linkTarget(name)
+                    if (name !in INLINE && target == null) continue
                     val from = (start + item.optInt(0)).coerceIn(start, start + text.length)
                     val to = (start + item.optInt(1)).coerceIn(from, start + text.length)
-                    if (to > from) builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+                    if (to <= from) continue
+                    if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    else builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
                 }
             }
             if (index < list.size - 1) builder.append('\n')
@@ -620,6 +681,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                         index++
                     }
                 }
+            }
+            for (link in text.getSpans(start, end, NoteLinkSpan::class.java).sortedBy { text.getSpanStart(it) }) {
+                val from = text.getSpanStart(link).coerceAtLeast(start)
+                val to = text.getSpanEnd(link).coerceAtMost(end)
+                if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.NOTE_LINK + link.noteId))
             }
             if (spans.length() > 0) block.put("s", spans)
             result.add(block)
