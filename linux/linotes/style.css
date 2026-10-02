@@ -327,3 +327,11 @@ button.font-serif { font-family: Serif; }
   background-color: alpha(#e6a300, 0.16);
   font-size: 9pt;
 }
+
+/* Audio recordings */
+.recording-dot {
+  min-width: 14px;
+  min-height: 14px;
+  border-radius: 7px;
+  background: #e01b24;
+}
