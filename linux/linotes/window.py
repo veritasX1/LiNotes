@@ -1506,6 +1506,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "export-note": self.export_note,
             "print-note": self.print_note,
             "note-window": lambda: self.open_note_window(),
+            "shortcuts": lambda: self.show_shortcuts(),
             "move-note": self.move_note,
             "toggle-lock": self.toggle_lock,
             "lock-button": self.on_lock_button,
@@ -1549,6 +1550,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.sort_action.connect("activate", lambda action, value: self.sort_notes(value.get_string()))
         self.add_action(self.sort_action)
 
+    def show_shortcuts(self):
+        from .shortcuts import shortcuts_dialog
+        shortcuts_dialog().present(self)
+
     def set_text_size(self, level):
         level = max(0, min(len(textsize.SIZES) - 1, level))
         textsize.save(level)
@@ -1576,6 +1581,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         text_size = text_size_step(keyval)
         if text_size is not None:
             self.change_text_size(text_size)
+            return True
+        if keyval == Gdk.KEY_question:
+            self.show_shortcuts()
+            return True
+        if key == Gdk.KEY_o and not shift:
+            self.open_note_window()
             return True
         if key == Gdk.KEY_n and shift:
             self.new_folder()

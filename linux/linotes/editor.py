@@ -299,6 +299,22 @@ class NoteEditor(Gtk.TextView):
                 return True
             return False
 
+        alt = bool(state & Gdk.ModifierType.ALT_MASK)
+        if control and alt:
+            # Like Apple (Control-Command-Up/Down): move the line or list item.
+            if keyval in (Gdk.KEY_Up, Gdk.KEY_Down):
+                self.move_line(-1 if keyval == Gdk.KEY_Up else 1)
+                return True
+            if key == Gdk.KEY_h:
+                self.set_highlight("h")
+                return True
+        if control and shift and key == Gdk.KEY_d:
+            self.insert_divider()
+            return True
+        if control and not shift and not alt and key == Gdk.KEY_k:
+            self.start_link()
+            return True
+
         if control and shift:
             shortcuts = {
                 Gdk.KEY_t: "title", Gdk.KEY_h: "heading", Gdk.KEY_j: "subheading",
@@ -640,6 +656,36 @@ class NoteEditor(Gtk.TextView):
             buffer.insert_at_cursor(" ")
         buffer.end_user_action()
         self.grab_focus()
+
+    def start_link(self):
+        """Ctrl+K: like typing ">>" – choose a note to link to."""
+        if not self.get_editable():
+            return
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        before = cursor.copy()
+        if not cursor.starts_line() and before.backward_char() and before.get_char() not in (" ", OBJECT):
+            self.buffer.insert_at_cursor(" ")
+        self.buffer.insert_at_cursor(">")
+        self.buffer.insert_at_cursor(">")
+
+    def move_line(self, direction):
+        """Swap the line with the cursor with the one above (-1) or below (+1)."""
+        buffer = self.buffer
+        cursor = buffer.get_iter_at_mark(buffer.get_insert())
+        line = cursor.get_line()
+        column = cursor.get_line_offset()
+        blocks = self.to_blocks()
+        target = line + direction
+        # The title line stays on top.
+        if line >= len(blocks) or target < 1 or target >= len(blocks) or line < 1:
+            return
+        blocks[line], blocks[target] = blocks[target], blocks[line]
+        self.load_blocks(blocks)
+        moved = buffer.get_iter_at_line(target)[1]
+        moved.set_line_offset(min(column, max(0, moved.get_chars_in_line() - 1)) if moved.get_chars_in_line() else 0)
+        buffer.place_cursor(moved)
+        self.scroll_mark_onscreen(buffer.get_insert())
+        self.on_changed(buffer)
 
     def cursor_rect(self):
         """Where the cursor is, in widget coordinates (for the note choice popover)."""
