@@ -70,9 +70,17 @@ class ParaSpan(
     val checked: Boolean,
     private val density: Float,
     private val colors: EditorColors,
-) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan {
+) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan, android.text.style.AlignmentSpan {
 
     var number = 1
+    /** Paragraph alignment like Format → Text in Notes: null (left), "center", "right". */
+    var align: String? = null
+
+    override fun getAlignment(): Layout.Alignment = when (align) {
+        "center" -> Layout.Alignment.ALIGN_CENTER
+        "right" -> Layout.Alignment.ALIGN_OPPOSITE
+        else -> Layout.Alignment.ALIGN_NORMAL
+    }
     /** Headings with content below: 0 not foldable, 1 open (⌄), 2 collapsed (›). */
     var fold = 0
 
@@ -230,6 +238,12 @@ fun sectionEnd(types: List<String>, texts: List<String>, index: Int): Int {
     while (last > index && types[last] !in setOf("image", "divider") && texts[last].isBlank()) last--
     return last
 }
+
+/** Text colors like in Apple's Notes and a choice of fonts (same names as on Ubuntu). */
+val TEXT_COLORS = linkedMapOf("c:purple" to 0x9B51E0, "c:pink" to 0xE0457F, "c:orange" to 0xE07A00, "c:mint" to 0x12A594, "c:blue" to 0x1C8CE0)
+val FONTS = linkedMapOf("f:serif" to "serif", "f:mono" to "monospace")
+class TextColorSpan(val name: String, color: Int) : android.text.style.ForegroundColorSpan(color)
+class FontSpan(val name: String, family: String) : android.text.style.TypefaceSpan(family)
 
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
@@ -459,7 +473,10 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     }
 
     private fun setPara(text: Editable, paragraphStart: Int, span: ParaSpan) {
-        spanStartingAt(text, paragraphStart)?.let { text.removeSpan(it) }
+        spanStartingAt(text, paragraphStart)?.let { old ->
+            if (span.align == null) span.align = old.align
+            text.removeSpan(old)
+        }
         val end = paragraphEnd(text, paragraphStart)
         text.setSpan(span, paragraphStart, (end + 1).coerceAtMost(text.length), Spanned.SPAN_PARAGRAPH)
     }
@@ -491,6 +508,10 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 index == 0 -> makeSpan("title")
                 else -> makeSpan("body")
             }
+        }
+        // Alignment stays with its paragraph and carries on to the one created by Enter.
+        starts.forEachIndexed { index, start ->
+            styles[index].align = if (enterAt >= 0 && start == enterAt + 1) enterStyle?.align else spanStartingAt(text, start)?.align
         }
         // Empty list items get the placeholder, everything else loses it (back to front: offsets stay valid).
         for (index in starts.indices.reversed()) {
@@ -698,7 +719,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
 
     /** Mark the selection (or the next typed text) in one color; null removes the marking.
      *  One color per character – a new one replaces the old, the same one again removes it. */
-    fun setHighlight(name: String?) {
+    fun setHighlight(name: String?, group: Collection<String> = groupOf(name) ?: HIGHLIGHTS.keys) {
         val text = text ?: return
         val start = selectionStart
         val end = selectionEnd
@@ -706,7 +727,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         if (start == end) {
             val current = (pendingInline ?: activeInline()).toMutableSet()
             val same = name != null && name in current
-            current.removeAll(HIGHLIGHTS.keys)
+            current.removeAll(group.toSet())
             if (name != null && !same) current.add(name)
             pendingInline = current
             onStyleChanged?.invoke()
@@ -716,15 +737,40 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val everything = name != null && (start until end).all { index ->
             text[index] == '\n' || text[index] == OBJECT || hasInline(text, name, index)
         }
-        for (other in HIGHLIGHTS.keys) removeInline(text, other, start, end)
+        for (other in group) removeInline(text, other, start, end)
         if (name != null && !everything) text.setSpan(inlineSpan(name), start, end, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
         busy = false
         onEdited?.invoke()
         onStyleChanged?.invoke()
     }
 
+    fun setTextColorStyle(name: String?) = setHighlight(name, TEXT_COLORS.keys)
+    fun setFont(name: String?) = setHighlight(name, FONTS.keys)
+
+    private fun groupOf(name: String?): Collection<String>? =
+        listOf(HIGHLIGHTS.keys, TEXT_COLORS.keys, FONTS.keys).firstOrNull { name in it }
+
+    /** Align the selected paragraphs: null (left), "center", "right". */
+    fun setAlignment(name: String?) {
+        val text = text ?: return
+        busy = true
+        for (start in selectedParagraphs()) {
+            val span = spanStartingAt(text, start) ?: continue
+            val from = text.getSpanStart(span)
+            val to = text.getSpanEnd(span)
+            text.removeSpan(span)
+            span.align = name
+            text.setSpan(span, from, to, Spanned.SPAN_PARAGRAPH)
+        }
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
+    fun currentAlignment(): String? = text?.let { paraAt(it, selectionStart.coerceAtLeast(0))?.align }
+
     fun toggleInline(name: String) {
-        if (name in HIGHLIGHTS) return setHighlight(name)
+        if (groupOf(name) != null) return setHighlight(name)
         val text = text ?: return
         val start = selectionStart
         val end = selectionEnd
@@ -825,6 +871,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (index < list.size - 1) builder.append('\n')
             val paraType = if (type == "image" || type == "divider") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
+            span.align = block.optString("a").takeIf { it == "center" || it == "right" }
             folds[index]?.let { hidden ->
                 foldSpans.add(Triple(FoldSpan(hidden), start, builder.length))
                 span.fold = 2
@@ -874,6 +921,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 .put("x", text.substring(start, end).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), ""))
             if (span != null && span.level > 0) block.put("l", span.level)
             if (span?.type == "check") block.put("c", span.checked)
+            span?.align?.let { block.put("a", it) }
             val fold = foldAt(text, start)?.takeIf { span?.type in FOLDABLE }
             val spans = JSONArray()
             for (name in INLINE) {
@@ -996,7 +1044,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     }
 
     companion object {
-        val INLINE = listOf("b", "i", "u", "s") + HIGHLIGHTS.keys
+        val INLINE = listOf("b", "i", "u", "s") + HIGHLIGHTS.keys + TEXT_COLORS.keys + FONTS.keys
 
         fun decodeImage(bytes: ByteArray, maxSize: Int = 1600): Bitmap? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -1037,6 +1085,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         "u" -> UnderlineSpan()
         "s" -> StrikethroughSpan()
         "h" -> HighlightSpan(name, colors.highlight)
+        in TEXT_COLORS -> TextColorSpan(name, (0xFF shl 24) or TEXT_COLORS.getValue(name))
+        in FONTS -> FontSpan(name, FONTS.getValue(name))
         else -> HighlightSpan(name, (0x73 shl 24) or (HIGHLIGHTS[name] ?: 0xFFD83D))
     }
 
@@ -1045,6 +1095,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         "i" -> span is StyleSpan && span.style == Typeface.ITALIC
         "u" -> span is UnderlineSpan
         "s" -> span is StrikethroughSpan
+        in TEXT_COLORS -> span is TextColorSpan && span.name == name
+        in FONTS -> span is FontSpan && span.name == name
         else -> span is HighlightSpan && span.name == name
     }
 

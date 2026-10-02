@@ -572,6 +572,40 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
+        // Text color (like Apple: purple, pink, orange, mint, blue).
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Textfarbe", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            for ((name, rgb) in TEXT_COLORS) {
+                val active = name in inline
+                Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(if (active) colors.fill else colors.surface)
+                    .clickable { editor.setTextColorStyle(name) }, contentAlignment = Alignment.Center) {
+                    Text("A", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF000000 or rgb.toLong()))
+                }
+            }
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.surface).clickable { editor.setTextColorStyle(null) },
+                contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.Close, colors.secondary, 10.dp)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        // Font and paragraph alignment.
+        val align = remember(tick) { editor.currentAlignment() }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((name, label, family) in listOf(Triple(null, "Standard", FontFamily.Default), Triple("f:serif", "Serif", FontFamily.Serif),
+                Triple("f:mono", "Mono", FontFamily.Monospace))) {
+                val active = if (name == null) FONTS.keys.none { it in inline } else name in inline
+                Text(label, fontSize = 14.sp, fontFamily = family, color = if (active) Color.White else colors.label,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
+                        .clickable { editor.setFont(name) }.padding(horizontal = 9.dp, vertical = 8.dp))
+            }
+            for ((name, label) in listOf(null to "Links", "center" to "Mitte", "right" to "Rechts")) {
+                val active = align == name
+                Text(label, fontSize = 14.sp, color = if (active) Color.White else colors.label,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
+                        .clickable { editor.setAlignment(name) }.padding(horizontal = 9.dp, vertical = 8.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((type, label) in listOf("bullet" to "• Liste", "dash" to "– Liste", "number" to "1. Liste", "mono" to "Mono", "quote" to "Zitat")) {
                 val active = current == type

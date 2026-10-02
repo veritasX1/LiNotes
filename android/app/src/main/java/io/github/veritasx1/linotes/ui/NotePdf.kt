@@ -35,9 +35,16 @@ object NotePdf {
     private val marks = mapOf("bullet" to "•", "dash" to "–", "number" to "", "check" to "○")
 
     /** The line's text with its bold/italic/underline/strike/highlight spans. */
+    private fun alignment(block: JSONObject) = when (block.optString("a")) {
+        "center" -> android.text.style.AlignmentSpan.Standard(android.text.Layout.Alignment.ALIGN_CENTER)
+        "right" -> android.text.style.AlignmentSpan.Standard(android.text.Layout.Alignment.ALIGN_OPPOSITE)
+        else -> null
+    }
+
     fun styledText(block: JSONObject): CharSequence {
         val text = block.optString("x")
-        val spans = block.optJSONArray("s") ?: return text
+        val spans = block.optJSONArray("s")
+            ?: return alignment(block)?.let { SpannableString(text).apply { setSpan(it, 0, length, Spanned.SPAN_INCLUSIVE_INCLUSIVE) } } ?: text
         val result = SpannableString(text)
         for (index in 0 until spans.length()) {
             val span = spans.optJSONArray(index) ?: continue
@@ -56,6 +63,9 @@ object NotePdf {
                 "h:purple" -> BackgroundColorSpan(Color.rgb(223, 188, 247))
                 "h:mint" -> BackgroundColorSpan(Color.rgb(165, 236, 224))
                 "h:blue" -> BackgroundColorSpan(Color.rgb(172, 227, 252))
+                in TEXT_COLORS -> ForegroundColorSpan(Color.rgb(TEXT_COLORS.getValue(span.optString(2)) shr 16 and 0xFF,
+                    TEXT_COLORS.getValue(span.optString(2)) shr 8 and 0xFF, TEXT_COLORS.getValue(span.optString(2)) and 0xFF))
+                in FONTS -> android.text.style.TypefaceSpan(FONTS.getValue(span.optString(2)))
                 // Links to other notes look like links (accent color, underlined).
                 else -> if (span.optString(2).startsWith("n:")) {
                     result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -64,6 +74,7 @@ object NotePdf {
             }
             result.setSpan(style, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
+        alignment(block)?.let { result.setSpan(it, 0, result.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE) }
         return result
     }
 
