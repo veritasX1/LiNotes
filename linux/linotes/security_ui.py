@@ -758,7 +758,7 @@ HELP = [
         ("Entwicklungsprojekt", "Rechtsklick auf ein Board → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten "
          "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche "
          "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt."),
-        ("Bericht", "Teilen-Symbol oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand "
+        ("Bericht", "Export-Symbol (Kasten mit Pfeil) oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand "
          "als PDF (z. B. als Nachweis für Kunden) oder als CSV für Excel. Bei Entwicklungsprojekten mit "
          "Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme)."),
     ]),
