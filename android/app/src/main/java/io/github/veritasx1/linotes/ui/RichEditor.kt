@@ -352,6 +352,18 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 for (name in styles) text.setSpan(inlineSpan(name), insertStart, end, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
             }
         }
+        // Enter ends bold, highlight, …: the new line starts plain (like on Ubuntu); text that
+        // was already behind the cursor keeps its style.
+        if (enterAt >= 0) {
+            for (name in INLINE) {
+                if (hasInline(text, name, enterAt) || (enterAt > 0 && hasInline(text, name, enterAt - 1))) {
+                    val after = (enterAt + 1 until text.length).takeWhile { hasInline(text, name, it) && text[it] != '\n' }
+                    val keep = after.drop(insertStart + insertCount - enterAt - 1)
+                    removeInline(text, name, enterAt, (enterAt + 1 + after.size).coerceAtMost(text.length))
+                    if (keep.isNotEmpty()) text.setSpan(inlineSpan(name), keep.first(), keep.last() + 1, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+                }
+            }
+        }
         normalize(text)
     }
 
