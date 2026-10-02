@@ -5,10 +5,11 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Gdk, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from . import model
 from . import smoothscroll
+from . import uiprefs
 from .icons import Icon, drag_source, drop_target
 
 
@@ -78,17 +79,43 @@ class Sidebar(Gtk.Box):
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
 
-        self.tags_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
-        self.tags_box.set_max_children_per_line(6)
-        self.tags_box.set_row_spacing(4)
-        self.tags_box.set_column_spacing(4)
-        self.tags_box.set_margin_start(10)
-        self.tags_box.set_margin_end(10)
-        self.tags_box.set_margin_bottom(8)
-        self.tags_heading = Gtk.Label(label="Tags", xalign=0)
-        self.tags_heading.add_css_class("sidebar-heading")
-        self.append(self.tags_heading)
-        self.append(self.tags_box)
+        # Tags: a small, collapsible section (like Apple's sidebar sections). Collapsed it shows
+        # only the tags you filter by; hovering opens it gently, a click keeps it open or closed.
+        self.tags_box = self.tag_flow()
+        self.active_box = self.tag_flow()
+        self.active_box.set_margin_bottom(6)
+        heading = Gtk.Box(spacing=6)
+        heading.add_css_class("tags-heading")
+        self.tags_heading_label = Gtk.Label(label="Tags", xalign=0)
+        self.tags_heading_label.add_css_class("sidebar-heading-text")
+        self.tags_count = Gtk.Label(xalign=0)
+        self.tags_count.add_css_class("tags-count")
+        self.tags_chevron = Gtk.Image(icon_name="pan-end-symbolic", pixel_size=12)
+        self.tags_chevron.add_css_class("tags-chevron")
+        heading.append(self.tags_heading_label)
+        heading.append(self.tags_count)
+        heading.append(Gtk.Box(hexpand=True))
+        heading.append(self.tags_chevron)
+        self.tags_heading = Gtk.Button(child=heading, css_classes=["flat", "tags-toggle"])
+        self.tags_heading.connect("clicked", lambda _b: self.pin_tags(not self.tags_revealer.get_reveal_child()))
+        tags_scroller = Gtk.ScrolledWindow(child=self.tags_box, propagate_natural_height=True, max_content_height=140)
+        tags_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        smoothscroll.enable(tags_scroller)
+        self.tags_revealer = Gtk.Revealer(child=tags_scroller, transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
+                                          transition_duration=180)
+        self.tags_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.tags_section.append(self.tags_heading)
+        self.tags_section.append(self.active_box)
+        self.tags_section.append(self.tags_revealer)
+        self.append(self.tags_section)
+        self.tags_pinned = bool(uiprefs.get("tags_open", False))
+        self.tags_hover_source = None
+        self.tags_revealer.set_reveal_child(self.tags_pinned)
+        hover = Gtk.EventControllerMotion()
+        hover.connect("enter", lambda *_args: self.hover_tags(True))
+        hover.connect("leave", lambda *_args: self.hover_tags(False))
+        self.tags_section.add_controller(hover)
+        self.update_tags_heading()
 
         # Account and connection status at the bottom.
         account = Gtk.Box(spacing=8)
@@ -228,12 +255,62 @@ class Sidebar(Gtk.Box):
         else:
             row.set_header(None)
 
+    @staticmethod
+    def tag_flow():
+        """Chips that wrap like words (libadwaita ≥ 1.7); older systems get a FlowBox."""
+        if hasattr(Adw, "WrapBox"):
+            box = Adw.WrapBox(child_spacing=4, line_spacing=4)
+            box.set_margin_start(10)
+            box.set_margin_end(10)
+            box.set_margin_bottom(8)
+            return box
+        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=False)
+        flow.set_max_children_per_line(8)
+        flow.set_row_spacing(4)
+        flow.set_column_spacing(4)
+        flow.set_margin_start(10)
+        flow.set_margin_end(10)
+        flow.set_margin_bottom(8)
+        return flow
+
+    def update_tags_heading(self):
+        open_ = self.tags_revealer.get_reveal_child()
+        self.tags_chevron.set_from_icon_name("pan-down-symbolic" if open_ else "pan-end-symbolic")
+        self.tags_heading.set_tooltip_text("Tags ausblenden" if open_ and self.tags_pinned else
+                                           "Tags immer zeigen" if open_ else "Tags zeigen")
+        # Collapsed, the tags you filter by stay visible.
+        self.active_box.set_visible(not open_ and bool(self.active_tags))
+
+    def show_tags(self, show):
+        self.tags_revealer.set_reveal_child(show)
+        self.update_tags_heading()
+
+    def pin_tags(self, show):
+        self.tags_pinned = show
+        uiprefs.put("tags_open", show)
+        self.show_tags(show)
+
+    def hover_tags(self, inside):
+        if self.tags_hover_source:
+            GLib.source_remove(self.tags_hover_source)
+            self.tags_hover_source = None
+        if self.tags_pinned:
+            return
+
+        def apply():
+            self.tags_hover_source = None
+            self.show_tags(inside)
+            return False
+        # A short pause: passing by with the mouse does not make the list jump.
+        self.tags_hover_source = GLib.timeout_add(250 if inside else 450, apply)
+
     def refresh_tags(self, notes):
         tags = {}
         for note in notes:
             for tag in model.note_tags(note):
                 tags[tag] = tags.get(tag, 0) + 1
         self.active_tags &= set(tags)
+        self.fill_active_tags()
         child = self.tags_box.get_first_child()
         while child is not None:
             following = child.get_next_sibling()
@@ -245,14 +322,39 @@ class Sidebar(Gtk.Box):
             button.set_active(tag in self.active_tags)
             button.connect("toggled", self.on_tag_toggled, tag)
             self.tags_box.append(button)
-        self.tags_heading.set_visible(bool(tags))
-        self.tags_box.set_visible(bool(tags))
+        self.tags_section.set_visible(bool(tags))
+        self.tags_count.set_label(str(len(tags)))
+        self.update_tags_heading()
+
+    def fill_active_tags(self):
+        while (child := self.active_box.get_first_child()) is not None:
+            self.active_box.remove(child)
+        for tag in sorted(self.active_tags):
+            button = Gtk.ToggleButton(label="#" + tag, active=True, tooltip_text="Filter aufheben")
+            button.add_css_class("tag-chip")
+            button.connect("toggled", self.on_active_chip, tag)
+            self.active_box.append(button)
+        self.update_tags_heading()
+
+    def on_active_chip(self, button, tag):
+        if not button.get_active():
+            self.active_tags.discard(tag)
+            child = self.tags_box.get_first_child()
+            while child is not None:
+                chip = child.get_child() if isinstance(child, Gtk.FlowBoxChild) else child
+                if isinstance(chip, Gtk.ToggleButton) and chip.get_label() == "#" + tag:
+                    chip.set_active(False)          # emits tags-changed through on_tag_toggled
+                    return
+                child = child.get_next_sibling()
+            GLib.idle_add(lambda: self.fill_active_tags() and False)
+            self.emit("tags-changed")
 
     def on_tag_toggled(self, button, tag):
         if button.get_active():
             self.active_tags.add(tag)
         else:
             self.active_tags.discard(tag)
+        GLib.idle_add(lambda: self.fill_active_tags() and False)
         self.emit("tags-changed")
 
     def select(self, key, emit=True):
