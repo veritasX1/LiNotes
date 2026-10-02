@@ -83,6 +83,10 @@ class NoteEditor(Gtk.TextView):
         # Title of a note by id (None if it is gone) – note links show the current title.
         self.note_title = lambda _note_id: None
         self.link_start = None
+        self.link_kind = "note"  # or "mention" after "@"
+        # People who can be @-mentioned here [(user id, name)] – only in shared notes, like Apple.
+        self.mention_people = lambda: []
+        self.user_name = lambda _user_id: None
         # While the note choice after ">>" is open, it gets ↑/↓/Enter/Esc first.
         self.link_keys = None
 
@@ -284,6 +288,17 @@ class NoteEditor(Gtk.TextView):
             before = location.copy()
             if before.backward_chars(2) and buffer.get_text(before, location, False) == ">>":
                 self.link_start = buffer.create_mark(None, before, True)
+                self.link_kind = "note"
+                GLib.idle_add(lambda: self.emit("link-requested") and False)
+        if text == "@" and not self.link_start:
+            # "@" mentions someone the note is shared with (not in e-mail addresses).
+            at = location.copy()
+            at.backward_char()
+            previous = at.copy()
+            word_start = at.starts_line() or (previous.backward_char() and previous.get_char() in (" ", "\t", "(", OBJECT))
+            if word_start and self.mention_people():
+                self.link_start = buffer.create_mark(None, at, True)
+                self.link_kind = "mention"
                 GLib.idle_add(lambda: self.emit("link-requested") and False)
 
     def on_changed(self, buffer):
@@ -672,6 +687,23 @@ class NoteEditor(Gtk.TextView):
             table.add(tag)
         return tag
 
+    def mention_tag(self, user_id):
+        """@-mentions: accent color, bold – named like the saved span ("m:<user id>")."""
+        table = self.buffer.get_tag_table()
+        tag = table.lookup(f"{model.MENTION}{user_id}")
+        if tag is None:
+            tag = Gtk.TextTag(name=f"{model.MENTION}{user_id}")
+            tag.set_property("foreground-rgba", rgba(*ACCENT))
+            tag.set_property("weight", Pango.Weight.BOLD)
+            table.add(tag)
+        return tag
+
+    def span_tag(self, name):
+        """The tag for a saved link span: note link or mention."""
+        if model.link_target(name):
+            return self.note_link_tag(model.link_target(name))
+        return self.mention_tag(model.mention_target(name))
+
     def trim_note_links(self, start, end):
         """Typed text belongs to a note link only inside it, not at its edges."""
         names = set()
@@ -680,7 +712,7 @@ class NoteEditor(Gtk.TextView):
             names.update(tag.get_property("name") for tag in probe.get_tags())
             probe.forward_char()
         for name in names:
-            if not model.link_target(name):
+            if not model.link_target(name) and model.mention_target(name) is None:
                 continue
             tag = self.buffer.get_tag_table().lookup(name)
             before = start.copy()
@@ -693,7 +725,7 @@ class NoteEditor(Gtk.TextView):
         if not self.link_start:
             return None
         start = self.buffer.get_iter_at_mark(self.link_start)
-        start.forward_chars(2)
+        start.forward_chars(2 if self.link_kind == "note" else 1)
         cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
         if cursor.compare(start) < 0 or cursor.get_line() != start.get_line():
             return None
@@ -714,12 +746,15 @@ class NoteEditor(Gtk.TextView):
         end = buffer.get_iter_at_mark(buffer.get_insert())
         if end.compare(start) < 0 or end.get_line() != start.get_line():
             end = start.copy()
-            end.forward_chars(2)
+            end.forward_chars(2 if self.link_kind == "note" else 1)
         offset = start.get_offset()
+        if self.link_kind == "mention":
+            title = "@" + title
+        tag = self.note_link_tag(note_id) if self.link_kind == "note" else self.mention_tag(note_id)
         buffer.begin_user_action()
         buffer.delete(start, end)
         buffer.insert(buffer.get_iter_at_offset(offset), title)
-        buffer.apply_tag(self.note_link_tag(note_id), buffer.get_iter_at_offset(offset),
+        buffer.apply_tag(tag, buffer.get_iter_at_offset(offset),
                          buffer.get_iter_at_offset(offset + len(title)))
         after = buffer.get_iter_at_offset(offset + len(title))
         if after.get_char() == " ":
@@ -1008,7 +1043,7 @@ class NoteEditor(Gtk.TextView):
             elif kind == "file":
                 self.add_file(buffer.create_child_anchor(end), block)
             else:
-                block = model.refresh_note_links(block, self.note_title)
+                block = model.refresh_note_links(block, self.note_title, self.user_name)
                 text = block.get("x", "")
                 buffer.insert(end, text)
                 base = line_start_offset
@@ -1017,9 +1052,9 @@ class NoteEditor(Gtk.TextView):
                         start_offset, end_offset, name = span
                     except ValueError:
                         continue
-                    if name in INLINE or model.link_target(name):
-                        if model.link_target(name):
-                            self.note_link_tag(model.link_target(name))
+                    if name in INLINE or model.link_target(name) or model.mention_target(name) is not None:
+                        if name not in INLINE:
+                            self.span_tag(name)
                         buffer.apply_tag_by_name(
                             name,
                             buffer.get_iter_at_offset(base + int(start_offset)),
@@ -1089,7 +1124,9 @@ class NoteEditor(Gtk.TextView):
         base = start.get_offset()
         table = self.buffer.get_tag_table()
         links = []
-        table.foreach(lambda tag: links.append(tag.get_property("name")) if model.link_target(tag.get_property("name")) else None)
+        table.foreach(lambda tag: links.append(tag.get_property("name"))
+                      if model.link_target(tag.get_property("name")) or model.mention_target(tag.get_property("name")) is not None
+                      else None)
         for name in INLINE + tuple(links):
             tag = table.lookup(name)
             probe = start.copy()

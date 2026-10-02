@@ -48,6 +48,10 @@ class LiNotesApplication(Adw.Application):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, function=callback: function())
             self.add_action(action)
+        # Clicking a notification (e.g. an @-mention) opens the note.
+        open_note = Gio.SimpleAction.new("open-note", GLib.VariantType.new("s"))
+        open_note.connect("activate", lambda _a, note_id: self.open_note(note_id.get_string()))
+        self.add_action(open_note)
         self.set_accels_for_action("app.quit", ["<Control>q"])
         self.set_accels_for_action("win.lock-all", ["<Control><Alt>l"])
         self.set_accels_for_action("win.print-note", ["<Control>p"])
@@ -62,6 +66,16 @@ class LiNotesApplication(Adw.Application):
         if self.start_with_new_note:
             self.start_with_new_note = False
             GLib.idle_add(lambda: (self.new_note(), False)[1])
+
+    def open_note(self, note_id):
+        if self.sync is None:
+            self.activate()
+        window = self.get_active_window() or LiNotesWindow(self, self.sync)
+        if isinstance(window, LiNotesWindow) is False:
+            window = next((w for w in self.get_windows() if isinstance(w, LiNotesWindow)), window)
+        window.present()
+        if window.pages.get_visible_child_name() == "main":
+            window.open_linked_note(note_id)
 
     def new_note(self):
         if self.sync is None:

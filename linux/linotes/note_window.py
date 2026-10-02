@@ -29,6 +29,8 @@ class NoteWindow(Adw.ApplicationWindow):
 
         self.editor = NoteEditor(image_loader=lambda reference: main.sync.fetch_file(reference, self.share))
         self.editor.note_title = main.link_title
+        self.editor.user_name = main.mention_name
+        self.editor.mention_people = lambda: main.mention_people(self.note_id)
         self.editor.connect("edited", lambda _editor: self.save())
         self.editor.connect("open-note", lambda _editor, target: (main.open_linked_note(target), main.present()))
         self.editor.connect("link-requested", lambda editor: main.show_link_choice(editor, exclude=self.note_id))

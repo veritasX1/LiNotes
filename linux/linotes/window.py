@@ -17,7 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import security_ui, textsize
+from . import security_ui, textsize, uiprefs
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -217,6 +217,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_pane = NotePane(self.sync)
         self.note_pane.editor.connect("edited", lambda _editor: self.save_current())
         self.note_pane.editor.note_title = self.link_title
+        self.note_pane.editor.user_name = self.mention_name
+        self.note_pane.editor.mention_people = lambda: self.mention_people(self.current_note)
         self.note_pane.editor.connect("link-requested", lambda _editor: self.show_link_choice())
         self.note_pane.editor.connect("open-note", lambda _editor, note_id: self.open_linked_note(note_id))
         self.note_pane.editor.connect("open-file", lambda _editor, block: self.open_attachment(block, self.note_pane.image_share))
@@ -716,33 +718,40 @@ class LiNotesWindow(Adw.ApplicationWindow):
         popover.set_parent(editor)
         found = []
 
-        def close(note=None):
+        mention = editor.link_kind == "mention"
+
+        def close(choice=None):
             editor.link_keys = None
             editor.buffer.disconnect(handler)
             popover.popdown()
             popover.unparent()
-            editor.finish_link(note["id"] if note else None, model.note_title(note) if note else None)
+            editor.finish_link(choice[0] if choice else None, choice[1] if choice else None)
 
         def fill():
             query = editor.pending_link_query()
             if query is None or len(query) > 60:
                 GLib.idle_add(lambda: close() and False)
                 return
-            found[:] = model.link_choices(self.sync.objects("note"), exclude=exclude, query=query)
+            if mention:
+                found[:] = [(uid, name, "") for uid, name in editor.mention_people() if query.lower() in name.lower()]
+            else:
+                found[:] = [(note["id"], model.note_title(note),
+                             (self.sync.get(note["data"].get("folder") or "") or {}).get("data", {}).get("name", ""))
+                            for note in model.link_choices(self.sync.objects("note"), exclude=exclude, query=query)]
             while (row := listbox.get_row_at_index(0)) is not None:
                 listbox.remove(row)
-            for note in found:
+            for _id, title, place_name in found:
                 box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
-                box.append(Gtk.Label(label=model.note_title(note), xalign=0, ellipsize=Pango.EllipsizeMode.END))
-                folder = self.sync.get(note["data"].get("folder") or "")
-                if folder:
-                    place = Gtk.Label(label=folder["data"].get("name", "Ordner"), xalign=0)
+                box.append(Gtk.Label(label=("@" if mention else "") + title, xalign=0, ellipsize=Pango.EllipsizeMode.END))
+                if place_name:
+                    place = Gtk.Label(label=place_name, xalign=0)
                     place.add_css_class("dim-label")
                     place.add_css_class("caption")
                     box.append(place)
                 listbox.append(box)
             if not found:
-                listbox.append(Gtk.Label(label="Keine passende Notiz", margin_top=6, margin_bottom=6, sensitive=False))
+                listbox.append(Gtk.Label(label="Keine passende Person" if mention else "Keine passende Notiz",
+                                         margin_top=6, margin_bottom=6, sensitive=False))
             else:
                 listbox.select_row(listbox.get_row_at_index(0))
             popover.set_pointing_to(editor.cursor_rect())
@@ -767,6 +776,40 @@ class LiNotesWindow(Adw.ApplicationWindow):
         editor.link_keys = keys
         fill()
         popover.popup()
+
+    def notify_mentions(self, ids):
+        """Someone @-mentioned me in a shared note: a system notification (once per mention),
+        a click opens the note."""
+        me = self.sync.user_id
+        seen = uiprefs.get("mentions_seen", {})
+        changed = False
+        for note_id in ids:
+            note = self.sync.get(note_id)
+            if note is None or not note.get("share") or note["data"].get("enc") or note["data"].get("trashed"):
+                continue
+            count = model.mentions_of(model.note_blocks(note), me)
+            known = seen.get(note_id, 0)
+            if count != known:
+                seen[note_id] = count
+                changed = True
+            if count > known and note.get("updated_by") not in (None, 0, me):
+                notification = Gio.Notification.new(f"{self.sync.user_name(note['updated_by'])} hat dich erwähnt")
+                notification.set_body(f"in „{model.note_title(note)}“")
+                notification.set_default_action_and_target("app.open-note", GLib.Variant.new_string(note_id))
+                self.get_application().send_notification(f"mention-{note_id}", notification)
+        if changed:
+            uiprefs.put("mentions_seen", seen)
+
+    def mention_name(self, user_id):
+        name = self.sync.user_name(user_id)
+        return None if name == "?" else name
+
+    def mention_people(self, note_id):
+        """Whom one can @-mention in a note: the people it is shared with (like Apple)."""
+        note = self.sync.get(note_id) if note_id else None
+        if note is None or not note.get("share"):
+            return []
+        return [(uid, self.sync.user_name(uid)) for uid in self.sync.share_members(note["share"]) if uid != self.sync.user_id]
 
     def open_linked_note(self, note_id):
         note = self.sync.get(note_id)
@@ -1596,6 +1639,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def on_sync_changed(self, ids):
         if self.pages.get_visible_child_name() != "main":
             return
+        self.notify_mentions(ids)
         for window in list(self.note_windows):
             window.on_sync_changed(ids)
         order = self.sync.settings().get("note_sort", "modified")
