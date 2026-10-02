@@ -11,6 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gtk
 
 from . import model
+from . import smoothscroll
 from .icons import icon_menu_button
 
 
@@ -193,6 +194,7 @@ class ShoppingListView(Gtk.Box):
 
         clamp.set_child(column)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=clamp)
+        smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
         self.updating = False

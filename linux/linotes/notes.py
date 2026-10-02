@@ -11,6 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GdkPixbuf, GLib, GObject, Gtk
 
 from . import model
+from . import smoothscroll
 from .editor import NoteEditor
 from .icons import Icon, drag_source
 
@@ -173,8 +174,10 @@ class NoteList(Gtk.Box):
 
         self.stack = Gtk.Stack()
         list_scroller = Gtk.ScrolledWindow(vexpand=True, child=self.list)
+        smoothscroll.enable(list_scroller)
         list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         gallery_scroller = Gtk.ScrolledWindow(vexpand=True, child=self.gallery)
+        smoothscroll.enable(gallery_scroller)
         gallery_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.empty = Adw.StatusPage(title="Keine Notizen", vexpand=True)
         self.empty.add_css_class("compact")
@@ -352,6 +355,7 @@ class NotePane(Gtk.Stack):
         column.append(self.editor)
         clamp = Adw.Clamp(maximum_size=820, tightening_threshold=600, child=column)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=clamp)
+        smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         editing.append(scroller)
         self.add_named(editing, "editor")

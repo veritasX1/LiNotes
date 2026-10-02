@@ -12,6 +12,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gtk
 
 from . import model
+from . import smoothscroll
 from .editor import NoteEditor
 from .icons import icon_menu_button
 
@@ -49,6 +50,7 @@ class NoteWindow(Adw.ApplicationWindow):
         column.append(self.date)
         column.append(self.editor)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=Adw.Clamp(maximum_size=820, child=column))
+        smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.add_css_class("note-pane")
 

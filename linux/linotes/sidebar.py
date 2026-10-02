@@ -8,6 +8,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk
 
 from . import model
+from . import smoothscroll
 from .icons import Icon, drag_source, drop_target
 
 
@@ -73,6 +74,7 @@ class Sidebar(Gtk.Box):
         self.list.add_controller(click)
 
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.list)
+        smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
 
