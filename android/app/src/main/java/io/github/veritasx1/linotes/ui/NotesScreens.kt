@@ -3,6 +3,9 @@ package io.github.veritasx1.linotes.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -256,6 +259,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
 
     val shown = notes.filter { query.isBlank() || Model.text(it).contains(query, true) }
     var sortMenu by remember { mutableStateOf(false) }
+    var gallery by remember { mutableStateOf(sync.noteGallery) }
     val sorted = Model.sortNotes(shown, sync.noteSort(), pinnedFirst = key != "trash")
     val groups = sorted.groupBy { it.group }
 
@@ -268,7 +272,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
             if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
             // Inside a folder: create a subfolder, list or board here – the folder as a project's filing place.
             if (folderId != null) BarButton(Glyph.FolderPlus, "Neu in diesem Ordner") { createMenu = true }
-            BarButton(Glyph.More, "Sortieren") { sortMenu = true }
+            BarButton(Glyph.More, "Ansicht und Sortierung") { sortMenu = true }
             if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) }
         },
     ) {
@@ -298,7 +302,11 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         }
         val folderHasMore = subfolders.isNotEmpty() || folderLists.isNotEmpty() || folderBoards.isNotEmpty()
         if (shown.isEmpty() && (!folderHasMore || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
-        groups.forEach { (group, items) ->
+        if (gallery) groups.forEach { (group, items) ->
+            item(key = "gallery-$group") {
+                GalleryGroup(state, group.ifEmpty { null }, items) { menu = it }
+            }
+        } else groups.forEach { (group, items) ->
             section("group-$group", header = group.ifEmpty { null }) {
                 items.forEachIndexed { index, item ->
                     SwipeNoteRow(state, item.note, index < items.lastIndex, key, stamp = item.stamp, onMenu = { menu = item.note })
@@ -322,8 +330,11 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         )) { menu = null }
     }
     moving?.let { note -> MoveSheet(state, note) { moving = null } }
-    if (sortMenu) ActionSheet("Notizen sortieren nach", Model.NOTE_SORTS.map { (order, label) ->
-        SheetAction(label + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
+    // Like Apple: "View as Gallery / List" and the sort order in one menu.
+    if (sortMenu) ActionSheet(null, listOf(
+        SheetAction(if (gallery) "Als Liste anzeigen" else "Als Galerie anzeigen") { gallery = !gallery; sync.noteGallery = gallery },
+    ) + Model.NOTE_SORTS.map { (order, label) ->
+        SheetAction("Sortieren nach $label" + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
     }) { sortMenu = false }
     if (createMenu) ActionSheet("Neu in diesem Ordner", listOf(
         SheetAction("Neuer Unterordner") { creating = "folder" },
@@ -425,19 +436,57 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? 
     }
 }
 
+/** One date group of the gallery: two cards per row (photo or the start of the text, title, date). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int) {
+private fun GalleryGroup(state: AppState, header: String?, items: List<Model.Sorted>, onMenu: (SyncObject) -> Unit) {
+    val colors = palette
+    Column(Modifier.padding(horizontal = 16.dp).padding(top = if (header != null) 18.dp else 10.dp)) {
+        if (header != null) Text(header, style = Type.title3.copy(fontWeight = FontWeight.Bold), color = colors.label,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+        for (row in items.chunked(2)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (item in row) {
+                    val note = item.note
+                    Column(Modifier.weight(1f).combinedClickable(onLongClick = { onMenu(note) }) { state.push(Route.Editor(note.id)) },
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        val image = Model.image(note)
+                        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(colors.surface)
+                            .border(0.5.dp, colors.separator, RoundedCornerShape(10.dp))) {
+                            when {
+                                image != null -> Thumbnail(state.sync, image, note.share, 0, Modifier.fillMaxSize())
+                                Model.isLocked(note) -> GlyphIcon(Glyph.Lock, colors.secondary, 28.dp, Modifier.align(Alignment.Center))
+                                else -> Text(Model.preview(note).take(160), style = Type.footnote, color = colors.secondary,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(10.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(Model.title(note), style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = colors.label,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(Model.shortDate(item.stamp), style = Type.footnote, color = colors.secondary)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int, modifier: Modifier = Modifier.size(size.dp)) {
     val bitmap by produceState<ImageBitmap?>(null, fileId) {
         value = withContext(Dispatchers.IO) {
             try {
                 val bytes = sync.fetchFile(fileId, share).readBytes()
                 RichEditor.decodeImage(bytes, maxSize = 480)?.asImageBitmap()
+                    .also { if (it == null) android.util.Log.w("LiNotes", "Vorschaubild nicht lesbar: $fileId (${bytes.size} Bytes)") }
             } catch (error: Exception) {
+                android.util.Log.w("LiNotes", "Vorschaubild nicht geladen: $fileId", error)
                 null
             }
         }
     }
-    Box(Modifier.size(size.dp).clip(RoundedCornerShape(6.dp)).background(palette.fill)) {
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(palette.fill)) {
         bitmap?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
     }
 }
