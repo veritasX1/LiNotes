@@ -99,6 +99,10 @@ class MainActivity : FragmentActivity() {
         done(uri?.let { try { contentResolver.openInputStream(it)?.use { input -> input.readBytes() } } catch (error: Exception) { null } })
     }
 
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) io.github.veritasx1.linotes.ui.Mentions.check(this, state)
+    }
+
     private val camera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         pendingCamera?.invoke(granted)
         pendingCamera = null
@@ -199,13 +203,31 @@ class MainActivity : FragmentActivity() {
         })
         handleShare(intent)
         handleNewNote(intent)
+        handleOpenNote(intent)
         setContent { LiNotesApp(state) }
+        // @-mentions arrive as notifications (Android 13+ asks once, only if something is shared).
+        if (Build.VERSION.SDK_INT >= 33 && state.signedIn &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            state.sync.all("note").any { it.share != null }) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleShare(intent)
         handleNewNote(intent)
+        handleOpenNote(intent)
+    }
+
+    /** A tapped notification (e.g. an @-mention) opens its note. */
+    private fun handleOpenNote(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_NOTE || !state.signedIn) return
+        val noteId = intent.getStringExtra(EXTRA_NOTE) ?: return
+        intent.action = null
+        if (state.sync.get(noteId) == null) return
+        state.tab = 0
+        state.push(io.github.veritasx1.linotes.ui.Route.Editor(noteId))
     }
 
     /** Quick note from the tile in the quick settings or the app shortcut. */
@@ -218,6 +240,8 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         const val ACTION_NEW_NOTE = "io.github.veritasx1.linotes.NEW_NOTE"
+        const val ACTION_OPEN_NOTE = "io.github.veritasx1.linotes.OPEN_NOTE"
+        const val EXTRA_NOTE = "note"
     }
 
     /** Text shared from another app becomes a new note. */

@@ -80,6 +80,11 @@ class SyncEngine(private val context: Context) {
         get() = uiPrefs.getInt("text-size", 1).coerceIn(0, TEXT_SIZES.lastIndex)
         set(value) = uiPrefs.edit().putInt("text-size", value.coerceIn(0, TEXT_SIZES.lastIndex)).apply()
 
+    /** How many @-mentions of me each shared note had when last looked at (notify only new ones). */
+    var mentionsSeen: org.json.JSONObject
+        get() = try { org.json.JSONObject(uiPrefs.getString("mentions-seen", "{}") ?: "{}") } catch (error: Exception) { org.json.JSONObject() }
+        set(value) = uiPrefs.edit().putString("mentions-seen", value.toString()).apply()
+
     /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
     var noteGallery: Boolean
         get() = uiPrefs.getBoolean("note-gallery", false)

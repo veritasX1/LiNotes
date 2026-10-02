@@ -40,6 +40,9 @@ fun LiNotesApp(state: AppState) {
         LaunchedEffect(Unit) {
             while (true) { kotlinx.coroutines.delay(30_000); state.checkAutoLock() }
         }
+        // @-mentions by others in shared notes become notifications.
+        val context = androidx.compose.ui.platform.LocalContext.current
+        LaunchedEffect(revision) { if (state.signedIn) Mentions.check(context, state) }
         LaunchedEffect(Unit) {
             state.sync.requests.collect { request -> if (state.incoming.none { it.optString("channel") == request.optString("channel") }) state.incoming.add(request) }
         }
