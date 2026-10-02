@@ -61,6 +61,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.current_key = "all"
         self.current_note = None
         self.editing_blocks = None
+        self.note_windows = set()
 
         self.toasts = Adw.ToastOverlay()
         self.set_content(self.toasts)
@@ -186,6 +187,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_list.set_size_request(280, -1)
         self.note_list.connect("note-selected", lambda _list, note_id: (self.open_note(note_id), self.show_note_narrow()))
         self.note_list.connect("context", self.on_note_context)
+        self.note_list.connect("open-window", lambda _list, note_id: self.open_note_window(note_id))
         self.note_list.connect("open-key", lambda _list, key: self.sidebar.select(key) or self.select(key))
         self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
         self.note_pane = NotePane(self.sync)
@@ -251,7 +253,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_pane.set_visible(not self.narrow or note)
         self.back_button.set_visible(note and self.stack.get_visible_child_name() == "notes")
 
-    def build_format_popover(self):
+    def build_format_popover(self, editor=None):
+        """The format menu – of the main editor, or of a note in its own window (editor)."""
         popover = Gtk.Popover()
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         box.set_margin_start(6)
@@ -265,7 +268,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             button = Gtk.Button(label=label)
             button.add_css_class(css)
             button.set_tooltip_text({"b": "Fett", "i": "Kursiv", "u": "Unterstrichen", "s": "Durchgestrichen"}[key])
-            button.connect("clicked", lambda _button, name=key: self.inline(name))
+            button.connect("clicked", lambda _button, name=key: self.inline(name, editor))
             inline.append(button)
         box.append(inline)
         # Highlight colors like in Apple's Notes; a click on the active color removes it again.
@@ -277,7 +280,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             swatch.add_css_class("swatch-" + (name.partition(":")[2] or "yellow") if name else "swatch-none")
             if not name:
                 swatch.set_label("✕")
-            swatch.connect("clicked", lambda _button, color=name: self.highlight(color))
+            swatch.connect("clicked", lambda _button, color=name: self.highlight(color, editor))
             colors.append(swatch)
         box.append(colors)
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
@@ -295,7 +298,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             hint.add_css_class("dim-label")
             line.append(hint)
             row.set_child(line)
-            row.connect("clicked", lambda _button, name=style: (popover.popdown(), self.paragraph(name)))
+            row.connect("clicked", lambda _button, name=style: (popover.popdown(), self.paragraph(name, editor)))
             box.append(row)
         divider = Gtk.Button()
         divider.add_css_class("flat")
@@ -306,12 +309,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         line.append(hint)
         divider.set_child(line)
         divider.set_tooltip_text("Oder auf einer leeren Zeile --- tippen und Enter drücken")
-        divider.connect("clicked", lambda _button: (popover.popdown(), self.insert_divider()))
+        divider.connect("clicked", lambda _button: (popover.popdown(), self.insert_divider(editor)))
         box.append(divider)
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
-        self.sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
-        self.sort_checked.connect("toggled", lambda button: setattr(self.note_pane.editor, "auto_sort_checked", button.get_active()))
-        box.append(self.sort_checked)
+        sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
+        sort_checked.connect("toggled", lambda button: setattr(editor or self.note_pane.editor, "auto_sort_checked", button.get_active()))
+        box.append(sort_checked)
+        if editor is None:
+            self.sort_checked = sort_checked
         popover.set_child(box)
         return popover
 
@@ -582,26 +587,53 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if note is None:
             self.note_pane.show_empty()
             return
-        if note["data"].get("enc"):
-            if self.vault_key is None:
-                self.note_pane.show_locked(note_id)
-                self.update_note_actions()
-                return
-            try:
-                blocks = vault.open_box(self.vault_key, note["data"]["enc"])["body"]
-            except Exception:
-                self.toast("Diese Notiz konnte nicht entschlüsselt werden.")
-                self.note_pane.show_locked(note_id)
-                return
-            self.touch_vault()
-            if not note["data"].get("title") and model.blocks_title(blocks):
-                # Notes locked before titles stayed visible get theirs now.
-                self.sync.update(note_id, title=model.blocks_title(blocks))
-        else:
-            blocks = model.note_blocks(note)
+        if note["data"].get("enc") and self.vault_key is None:
+            self.note_pane.show_locked(note_id)
+            self.update_note_actions()
+            return
+        blocks = self.note_body(note)
+        if blocks is None:
+            self.toast("Diese Notiz konnte nicht entschlüsselt werden.")
+            self.note_pane.show_locked(note_id)
+            return
         self.editing_blocks = blocks
         self.note_pane.show_note(note, blocks, editable=not note["data"].get("trashed"))
         self.update_note_actions()
+
+    def note_body(self, note):
+        """The blocks of a note, decrypted if it is locked; None while locked."""
+        if not note["data"].get("enc"):
+            return model.note_blocks(note)
+        if self.vault_key is None:
+            return None
+        try:
+            blocks = vault.open_box(self.vault_key, note["data"]["enc"])["body"]
+        except Exception:
+            return None
+        self.touch_vault()
+        if not note["data"].get("title") and model.blocks_title(blocks):
+            # Notes locked before titles stayed visible get theirs now.
+            self.sync.update(note["id"], title=model.blocks_title(blocks))
+        return blocks
+
+    # --- notes in their own window (like Apple: double-click) ---
+
+    def open_note_window(self, note_id=None):
+        from .note_window import NoteWindow
+        note_id = note_id or self.current_note
+        note = self.sync.get(note_id) if note_id else None
+        if note is None or note["data"].get("trashed"):
+            return
+        for window in self.note_windows:
+            if window.note_id == note_id:
+                window.present()
+                return
+        if note["data"].get("enc") and self.vault_key is None:
+            self.with_vault(lambda: self.open_note_window(note_id))
+            return
+        if note_id == self.current_note:
+            self.note_pane.editor.flush()
+        NoteWindow(self, note_id).present()
 
     # --- links between notes (">>", like Apple's Notes) ---
 
@@ -609,10 +641,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(note_id)
         return model.note_title(note) if note and not note["data"].get("trashed") else None
 
-    def show_link_choice(self):
+    def show_link_choice(self, editor=None, exclude=None):
         """After ">>": a list of notes at the cursor. Typing on filters it, ↑/↓ and
         Enter pick one, Esc (or leaving the line) keeps the ">>" as text."""
-        editor = self.note_pane.editor
+        editor = editor or self.note_pane.editor
+        exclude = exclude or self.current_note
         listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.BROWSE)
         listbox.add_css_class("navigation-sidebar")
         popover = Gtk.Popover(autohide=False, has_arrow=True, position=Gtk.PositionType.BOTTOM, can_focus=False)
@@ -634,7 +667,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if query is None or len(query) > 60:
                 GLib.idle_add(lambda: close() and False)
                 return
-            found[:] = model.link_choices(self.sync.objects("note"), exclude=self.current_note, query=query)
+            found[:] = model.link_choices(self.sync.objects("note"), exclude=exclude, query=query)
             while (row := listbox.get_row_at_index(0)) is not None:
                 listbox.remove(row)
             for note in found:
@@ -697,6 +730,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if blocks == self.editing_blocks:
             return
         self.editing_blocks = blocks
+        self.store_note(note["id"], blocks, self.note_pane.editor)
+
+    def store_note(self, note_id, blocks, source):
+        """Save edited blocks (from the main editor or a note window) and show them in
+        the other places the note is open."""
+        note = self.sync.get(note_id)
+        if note is None or note["data"].get("trashed"):
+            return
         data = dict(note["data"])
         data["modified"] = time.time()
         if data.get("enc"):
@@ -708,7 +749,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         else:
             data["body"] = blocks
         self.sync.put("note", data, note.get("share"), note["id"], notify=False)
-        self.note_pane.update_date(self.sync.get(note["id"]))
+        if note_id == self.current_note and self.note_pane.get_visible_child_name() == "editor":
+            if source is not self.note_pane.editor:
+                self.editing_blocks = blocks
+                self.note_pane.editor.load_blocks(blocks, keep_cursor=True)
+            self.note_pane.update_date(self.sync.get(note_id))
+        for window in list(self.note_windows):
+            if window.note_id == note_id and window.editor is not source:
+                window.load(keep_cursor=True)
         self.refresh_list_only()
 
     def refresh_list_only(self):
@@ -980,24 +1028,30 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
         dialog.open(self, None, chosen)
 
-    def paragraph(self, style):
-        if self.note_pane.get_visible_child_name() == "editor":
-            self.note_pane.editor.apply_paragraph(style)
-            self.note_pane.editor.grab_focus()
+    def format_target(self, editor):
+        """The editor a format command goes to (None: the main editor, if a note is open)."""
+        if editor is not None:
+            return editor
+        return self.note_pane.editor if self.note_pane.get_visible_child_name() == "editor" else None
 
-    def insert_divider(self):
-        if self.note_pane.get_visible_child_name() == "editor" and self.note_pane.editor.get_editable():
-            self.note_pane.editor.insert_divider()
-            self.note_pane.editor.grab_focus()
+    def paragraph(self, style, editor=None):
+        if (target := self.format_target(editor)):
+            target.apply_paragraph(style)
+            target.grab_focus()
 
-    def highlight(self, name):
-        if self.note_pane.get_visible_child_name() == "editor":
-            self.note_pane.editor.set_highlight(name)
-            self.note_pane.editor.grab_focus()
+    def insert_divider(self, editor=None):
+        if (target := self.format_target(editor)) and target.get_editable():
+            target.insert_divider()
+            target.grab_focus()
 
-    def inline(self, name):
-        if self.note_pane.get_visible_child_name() == "editor":
-            self.note_pane.editor.toggle_inline(name)
+    def highlight(self, name, editor=None):
+        if (target := self.format_target(editor)):
+            target.set_highlight(name)
+            target.grab_focus()
+
+    def inline(self, name, editor=None):
+        if (target := self.format_target(editor)):
+            target.toggle_inline(name)
 
     def on_note_context(self, _list, note_id, widget, x, y):
         note = self.sync.get(note_id)
@@ -1009,6 +1063,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Wiederherstellen", "win.restore-note")
             menu.append("Endgültig löschen", "win.delete-note")
         else:
+            menu.append("In eigenem Fenster öffnen", "win.note-window")
             menu.append("Lösen" if note["data"].get("pinned") else "Anheften", "win.pin-note")
             menu.append("Teilen …", "win.share-note")
             menu.append("Verschieben nach …", "win.move-note")
@@ -1049,6 +1104,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if self.vault_key is None:
             return
         self.note_pane.editor.flush()
+        for window in list(self.note_windows):
+            if window.locked:
+                window.close()
         self.vault_key = None
         note = self.sync.get(self.current_note) if self.current_note else None
         if note is not None and note["data"].get("enc"):
@@ -1393,6 +1451,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def on_sync_changed(self, ids):
         if self.pages.get_visible_child_name() != "main":
             return
+        for window in list(self.note_windows):
+            window.on_sync_changed(ids)
         order = self.sync.settings().get("note_sort", "modified")
         if self.sort_action.get_state().get_string() != order:
             self.sort_action.set_state(GLib.Variant.new_string(order))
@@ -1429,6 +1489,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "duplicate-note": self.duplicate,
             "export-note": self.export_note,
             "print-note": self.print_note,
+            "note-window": lambda: self.open_note_window(),
             "move-note": self.move_note,
             "toggle-lock": self.toggle_lock,
             "lock-button": self.on_lock_button,
