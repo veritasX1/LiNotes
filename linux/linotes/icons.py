@@ -139,6 +139,23 @@ def icon_share(cr):
     _stroke(cr)
 
 
+def icon_export(cr):
+    """Apple's export symbol: a tray with an arrow leaving upwards."""
+    cr.move_to(5.5, 6.5)
+    cr.line_to(3.5, 6.5)
+    cr.line_to(3.5, 14.5)
+    cr.line_to(12.5, 14.5)
+    cr.line_to(12.5, 6.5)
+    cr.line_to(10.5, 6.5)
+    _stroke(cr)
+    cr.move_to(8, 10)
+    cr.line_to(8, 1.8)
+    cr.move_to(5.3, 4.3)
+    cr.line_to(8, 1.6)
+    cr.line_to(10.7, 4.3)
+    _stroke(cr)
+
+
 def icon_trash(cr):
     cr.move_to(2, 4)
     cr.line_to(14, 4)

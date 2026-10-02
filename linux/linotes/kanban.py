@@ -223,7 +223,12 @@ class BoardView(Gtk.Box):
         self.subtitle.add_css_class("dim-label")
         titles.append(self.subtitle)
         header.append(titles)
-        export = icon_button("share", "Bericht exportieren (PDF oder CSV) …")
+        # Person with plus = invite people (as in Apple's apps); the tray with the arrow exports.
+        people = icon_button("share", "Personen hinzufügen …")
+        people.set_valign(Gtk.Align.CENTER)
+        people.connect("clicked", lambda _button: self.window.share(self.board_id))
+        header.append(people)
+        export = icon_button("export", "Bericht exportieren (PDF oder CSV) …")
         export.set_valign(Gtk.Align.CENTER)
         export.connect("clicked", lambda _button: self.window.export_board(self.board_id))
         header.append(export)
