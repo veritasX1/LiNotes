@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 /** LiNotes' own symbols (same shapes as on Linux), drawn on a 16×16 grid. */
 enum class Glyph { Folder, FolderShared, Notes, Lock, LockOpen, Trash, Compose, Checklist, Format, Photo, Share, Cart,
     Board, Tag, Pin, Plus, More, Back, Chevron, Search, Person, Cloud, CloudOff, Close, Gear, Grid, ListLines,
-    FolderPlus, Key, Fingerprint, Password, UpDown, Mic }
+    FolderPlus, Key, Fingerprint, Password, UpDown, Mic, Table }
 
 @Composable
 fun GlyphIcon(glyph: Glyph, tint: Color, size: Dp = 22.dp, modifier: Modifier = Modifier) {
@@ -118,6 +118,11 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
             drawPath(path { m(1f, 13f); l(5f, 3f); l(9f, 13f); m(2.4f, 9.6f); l(7.6f, 9.6f) }, color, style = line(1.3f))
             drawCircle(color, 2.3f * s, p(12.2f, 10.6f), style = line(1.2f))
             drawLine(color, p(14.5f, 7.8f), p(14.5f, 13f), 1.2f * s, StrokeCap.Round)
+        }
+        Glyph.Table -> {
+            rrect(1.5f, 2.5f, 13f, 11f, 1.5f)
+            for (y in listOf(6.2f, 9.8f)) drawLine(color, p(1.5f, y), p(14.5f, y), 1.1f * s)
+            for (x in listOf(5.8f, 10.2f)) drawLine(color, p(x, 2.5f), p(x, 13.5f), 1.1f * s)
         }
         Glyph.Mic -> {
             rrect(5.5f, 1.5f, 5f, 8.5f, 2.5f)

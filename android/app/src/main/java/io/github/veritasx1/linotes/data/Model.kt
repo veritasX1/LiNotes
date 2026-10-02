@@ -130,10 +130,30 @@ object Model {
         return tagPattern.findAll(text(note)).map { it.groupValues[1].lowercase() }.toSet()
     }
 
+    // --- tables (like Apple's): {"t": "table", "r": [["A", "B"], ["C", "D"]], "x": "A | B\nC | D"} ---
+    // "x" is the same as plain text for search, previews and older versions. Same as Ubuntu's model.py.
+
+    /** The cells as a rectangle of strings (missing cells filled in, at least 1×1). */
+    fun tableRows(block: JSONObject): List<List<String>> {
+        val array = block.optJSONArray("r") ?: JSONArray()
+        val rows = (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { row -> (0 until row.length()).map { row.optString(it) } } }
+        val width = rows.maxOfOrNull { it.size }?.takeIf { it > 0 } ?: 1
+        return rows.map { it + List(width - it.size) { "" } }.ifEmpty { listOf(listOf("")) }
+    }
+
+    fun tableText(rows: List<List<String>>) = rows.joinToString("\n") { it.joinToString(" | ") }
+
+    fun tableBlock(rows: List<List<String>>): JSONObject {
+        val clean = tableRows(JSONObject().put("r", JSONArray(rows.map { JSONArray(it) })))
+        return JSONObject().put("t", "table").put("r", JSONArray(clean.map { JSONArray(it) })).put("x", tableText(clean))
+    }
+
+    fun newTable(columns: Int = 3, rows: Int = 3) = tableBlock(List(rows) { List(columns) { "" } })
+
     /** Nothing typed, no picture, file or divider (whitespace does not count). */
     fun isEmptyBody(blocks: JSONArray): Boolean = (0 until blocks.length()).all { index ->
         val block = blocks.optJSONObject(index) ?: return@all true
-        block.optString("t", "body") !in setOf("image", "file", "divider") && block.optString("x").isBlank()
+        block.optString("t", "body") !in setOf("image", "file", "divider", "table") && block.optString("x").isBlank()
     }
 
     /** One comparable string per block (text, or the kind and file for images and files). */

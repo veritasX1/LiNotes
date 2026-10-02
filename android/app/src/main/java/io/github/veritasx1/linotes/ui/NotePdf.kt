@@ -96,6 +96,30 @@ object NotePdf {
                 numbers.clear()
                 continue
             }
+            if (kind == "table") {
+                // Rows with thin lines, each row kept on one page (same as Ubuntu).
+                val rows = io.github.veritasx1.linotes.data.Model.tableRows(block)
+                val columnWidth = (pdf.width - 2 * pdf.margin) / rows[0].size
+                val line = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    style = android.graphics.Paint.Style.STROKE; strokeWidth = 0.8f; color = Color.rgb(217, 217, 222) }
+                for (row in rows) {
+                    val cells = row.map { pdf.layout(it, pdf.paint(10.5f), columnWidth - 10f) }
+                    val height = cells.maxOf { it.height } + 10f
+                    pdf.need(height)
+                    cells.forEachIndexed { index, cell ->
+                        val left = pdf.margin + index * columnWidth
+                        pdf.canvas.drawRect(left, pdf.y, left + columnWidth, pdf.y + height, line)
+                        pdf.canvas.save()
+                        pdf.canvas.translate(left + 5f, pdf.y + 5f)
+                        cell.draw(pdf.canvas)
+                        pdf.canvas.restore()
+                    }
+                    pdf.y += height
+                }
+                pdf.y += 8f
+                numbers.clear()
+                continue
+            }
             if (kind == "divider") {
                 pdf.need(16f)
                 pdf.y += 7f

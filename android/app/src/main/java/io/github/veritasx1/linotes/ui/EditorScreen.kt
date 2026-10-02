@@ -81,6 +81,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
+    // The table being edited (its block as it is in the note).
+    var tableEditing by remember { mutableStateOf<JSONObject?>(null) }
     val player = remember(noteId) { AudioPlayer() }
     DisposableEffect(noteId) { onDispose { player.stop() } }
     // Text typed after ">>" while the note choice is shown (null: no choice open).
@@ -246,7 +248,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         // Attachments: decrypt under their own name and open with the app for the type.
         editor.onOpenFile = { block ->
             // Recordings play inside the note (like Apple), other files open in their app.
-            if (AudioNotes.isAudio(block)) {
+            if (block.optString("t") == "table") {
+                if (!trashed) tableEditing = block
+            } else if (AudioNotes.isAudio(block)) {
                 val fileId = block.getString("f")
                 if (player.playing == fileId) player.stop()
                 else scope.launch {
@@ -395,6 +399,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             if (!trashed) EditorToolbar(
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
+                // Like Apple: a 3×3 table, editing starts right away.
+                onTable = { Model.newTable().let { block -> editor.insertTable(block); tableEditing = block } },
                 onPhoto = {
                     if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos und Anhänge möglich.")
                     else photoMenu = true
@@ -486,6 +492,12 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
             },
         )) { photoMenu = false }
+    }
+    tableEditing?.let { block ->
+        TableEditor(block) { changed ->
+            editor.replaceTable(block, changed)
+            tableEditing = null
+        }
     }
     if (recording) {
         RecordDialog(
@@ -610,7 +622,7 @@ fun VaultUnlock(state: AppState, onDismiss: () -> Unit, onUnlocked: () -> Unit) 
 }
 
 @Composable
-private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit, onCompose: () -> Unit) {
+private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onTable: () -> Unit, onPhoto: () -> Unit, onRecord: () -> Unit, onCompose: () -> Unit) {
     val colors = palette
     Column(Modifier.fillMaxWidth().background(colors.bar)) {
         HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
@@ -618,6 +630,7 @@ private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onPhoto
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             BarButton(Glyph.Format, "Format", onClick = onFormat)
             BarButton(Glyph.Checklist, "Checkliste", onClick = onChecklist)
+            BarButton(Glyph.Table, "Tabelle", onClick = onTable)
             BarButton(Glyph.Photo, "Foto", onClick = onPhoto)
             BarButton(Glyph.Mic, "Audio aufnehmen", onClick = onRecord)
             BarButton(Glyph.Compose, "Neue Notiz", onClick = onCompose)
