@@ -62,7 +62,22 @@ def test_editor():
     assert editor.to_blocks()[1]["x"].endswith(" >>")
 
 
+def test_web_address_after_image():
+    """Olafs Finding 02.10.: with a photo above, the last letter was not part of the link."""
+    editor = NoteEditor()
+    editor.load_blocks([{"t": "title", "x": "Kameratest"}, {"t": "image", "f": None},
+                        {"t": "divider"}, {"t": "body", "x": "http://linotes.goip.de"}])
+    buffer = editor.buffer
+    tag = buffer.get_tag_table().lookup("link")
+    start = buffer.get_iter_at_line(3)[1]
+    assert start.starts_tag(tag)
+    end = start.copy()
+    end.forward_to_tag_toggle(tag)
+    assert buffer.get_text(start, end, False) == "http://linotes.goip.de"
+
+
 if __name__ == "__main__":
     test_model()
     test_editor()
+    test_web_address_after_image()
     print("ok – Notizen verlinken")
