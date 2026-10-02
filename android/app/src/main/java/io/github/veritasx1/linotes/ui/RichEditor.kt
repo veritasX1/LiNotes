@@ -228,6 +228,17 @@ class DividerSpan(private val density: Float, private val color: Int, private va
 
 /** The content of a collapsed section, taken out of the text while it is folded (EditText
  *  cannot hide text); sits on the heading and is put back by toBlocks/expanding. */
+/** Background of a line someone else changed since my last view (not saved). */
+class ChangedSpan(private val color: Int) : android.text.style.LineBackgroundSpan {
+    override fun drawBackground(canvas: Canvas, paint: Paint, left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
+                                text: CharSequence, start: Int, end: Int, lineNumber: Int) {
+        val previous = paint.color
+        paint.color = color
+        canvas.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+        paint.color = previous
+    }
+}
+
 class FoldSpan(val hidden: List<JSONObject>)
 
 private val FOLDABLE = mapOf("heading" to 1, "subheading" to 2)
@@ -893,6 +904,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val all = blocks.ifEmpty { listOf(JSONObject().put("t", "title").put("x", "")) }
         // Collapsed headings keep their section in a FoldSpan instead of the text.
         val list = mutableListOf<JSONObject>()
+        val origins = mutableListOf<Int>()
         val folds = mutableMapOf<Int, List<JSONObject>>()
         run {
             val types = all.map { it.optString("t", "body") }
@@ -901,6 +913,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             while (index < all.size) {
                 val block = all[index]
                 list.add(block)
+                origins.add(index)
                 if (block.optString("t") in FOLDABLE && block.optBoolean("z")) {
                     val end = sectionEnd(types, texts, index)
                     if (end > index) folds[list.lastIndex] = all.subList(index + 1, end + 1).toList()
@@ -978,7 +991,25 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
         text?.let { markLinks(it) }
+        lineBlocks = origins
         busy = false
+    }
+
+    /** Index of the loaded block shown in each line (folded blocks have no line). */
+    private var lineBlocks: List<Int> = emptyList()
+
+    /** Highlight the lines of the given blocks (changes by someone else) until the next load. */
+    fun markChanged(blockIndices: Collection<Int>) {
+        val editable = text ?: return
+        val color = (colors.accent and 0x00FFFFFF) or (0x29 shl 24)
+        var start = 0
+        lineBlocks.forEachIndexed { line, block ->
+            // A paragraph span runs up to and including the line break.
+            val end = editable.indexOf('\n', start).let { if (it < 0) editable.length else it + 1 }
+            if (block in blockIndices) editable.setSpan(ChangedSpan(color), start, end, Spanned.SPAN_PARAGRAPH)
+            if (end >= editable.length) return
+            start = end
+        }
     }
 
     fun toBlocks(): List<JSONObject> {

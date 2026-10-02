@@ -130,6 +130,34 @@ object Model {
         return tagPattern.findAll(text(note)).map { it.groupValues[1].lowercase() }.toSet()
     }
 
+    /** One comparable string per block (text, or the kind and file for images and files). */
+    fun blockLines(blocks: JSONArray): List<String> = (0 until blocks.length()).map { index ->
+        val block = blocks.optJSONObject(index) ?: JSONObject()
+        "${block.optString("t")}:${block.optString("x")}${block.optString("f")}"
+    }
+
+    /** Indices in [new] of lines that are new or changed compared to [old] (longest common
+     *  subsequence, like a diff). Mirrors model.changed_lines on Ubuntu. */
+    fun changedLines(old: List<String>, new: List<String>): List<Int> {
+        val n = old.size
+        val m = new.size
+        val length = Array(n + 1) { IntArray(m + 1) }
+        for (i in n - 1 downTo 0) for (j in m - 1 downTo 0) {
+            length[i][j] = if (old[i] == new[j]) length[i + 1][j + 1] + 1 else maxOf(length[i + 1][j], length[i][j + 1])
+        }
+        val kept = mutableSetOf<Int>()
+        var i = 0
+        var j = 0
+        while (i < n && j < m) {
+            when {
+                old[i] == new[j] -> { kept.add(j); i++; j++ }
+                length[i + 1][j] >= length[i][j + 1] -> i++
+                else -> j++
+            }
+        }
+        return (0 until m).filter { it !in kept }
+    }
+
     fun modified(obj: SyncObject): Double = obj.data.optDouble("modified", obj.updated).let { if (it.isNaN()) obj.updated else it }
 
     private val months = listOf("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",

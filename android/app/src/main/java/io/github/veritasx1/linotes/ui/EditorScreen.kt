@@ -143,6 +143,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
     }
     val loadedBlocks = remember(noteId) { mutableStateOf<String?>(null) }
+    // "Claude hat geändert · 05:45 – die Änderungen sind markiert." (changes by others)
+    var activityNote by remember(noteId) { mutableStateOf<String?>(null) }
 
     fun currentBody(): JSONArray? {
         val current = sync.get(noteId) ?: return null
@@ -171,6 +173,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             data.put("body", blocks)
         }
         sync.put("note", data, current.share, current.id)
+        sync.get(noteId)?.let { sync.rememberSeen(it, blocks) }
     }
 
     // Locking (timeout, app in background, "lock now") saves the open note first.
@@ -189,8 +192,23 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         if (text != loadedBlocks.value) {
             val firstLoad = loadedBlocks.value == null
+            val before = loadedBlocks.value
             loadedBlocks.value = text
             editor.load((0 until body.length()).map { body.getJSONObject(it) })
+            // Someone else's changes: since my last view when opening, right away while open.
+            sync.get(noteId)?.let { current ->
+                val changes = when {
+                    firstLoad -> sync.changesSinceSeen(current, body)
+                    before != null && sync.changedByOther(current) ->
+                        Model.changedLines(Model.blockLines(JSONArray(before)), Model.blockLines(body)).ifEmpty { null }
+                    else -> null
+                }
+                if (changes != null) {
+                    editor.markChanged(changes)
+                    activityNote = "${sync.userName(current.updatedBy)} hat geändert · ${Model.shortDate(Model.modified(current))} – die Änderungen sind markiert."
+                }
+                sync.rememberSeen(current, body)
+            }
             // A new, empty note starts with the keyboard open, like in Notes.
             if (firstLoad && body.length() <= 1 && body.optJSONObject(0)?.optString("x").isNullOrEmpty() && !trashed) {
                 editor.post {
@@ -331,6 +349,12 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             Column(Modifier.weight(1f).onSizeChanged { viewportHeight = it.height }.verticalScroll(scrollState)) {
                 Text(Model.longDate(Model.modified(note)), style = Type.footnote, color = colors.secondary,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                activityNote?.let { message ->
+                    Text(message, style = Type.footnote, color = colors.label,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 6.dp)
+                            .background(colors.accent.copy(alpha = 0.16f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp))
+                }
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
             }
             linkQuery?.let { query ->
