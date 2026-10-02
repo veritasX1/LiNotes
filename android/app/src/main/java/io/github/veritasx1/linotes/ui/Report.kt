@@ -25,6 +25,7 @@ object Report {
         val assignee: String, val due: String, val created: String, val done: String, val commits: List<Pair<String, String>>,
         val impact: String, val verification: String, val version: String, val accepted: String,
         val history: List<Triple<String, String, String>>, val columnId: String,
+        val files: String = "",
     )
 
     class Data(val title: String, val dev: Boolean, val generated: String, val columns: List<Pair<String, List<Row>>>, val rows: List<Row>)
@@ -62,6 +63,7 @@ object Report {
                 accepted = accepted?.let { "${sync.userName(it.optInt("by"))}, ${stamp(it.optDouble("at", 0.0))}" }.orEmpty(),
                 history = steps.map { Triple(it.optString("n"), stamp(it.optDouble("at", 0.0)), sync.userName(it.optInt("by"))) },
                 columnId = card.data.optString("column"),
+                files = cardFiles(card.data).joinToString(", ") { it.optString("n") },
             )
         }
         val now = LocalDateTime.now()
@@ -203,6 +205,10 @@ object Report {
                 pdf.text(facts.joinToString(" · "), 8.5f, color = pdf.grey, space = 6f)
                 for ((label, value) in listOf("Beschreibung" to row.notes, "Auswirkungsanalyse" to row.impact, "Verifikation" to row.verification)) {
                     if (value.isNotBlank()) { pdf.text(label, 9f, true, space = 1f); pdf.text(value.trim(), 9f, space = 5f) }
+                }
+                if (row.files.isNotEmpty()) {
+                    pdf.text("Anhänge", 9f, true, space = 1f)
+                    pdf.text(row.files, 8.5f, space = 5f)
                 }
                 if (row.commits.isNotEmpty()) {
                     pdf.text("Commits", 9f, true, space = 1f)
