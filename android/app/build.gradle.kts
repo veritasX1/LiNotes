@@ -20,8 +20,8 @@ android {
         applicationId = "io.github.veritasx1.linotes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.0.2"
+        versionCode = 5
+        versionName = "2.1.0"
     }
 
     signingConfigs {
@@ -53,7 +53,11 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.systemProperty("robolectric.pixelCopyRenderMode", "hardware") }
+        unitTests.all {
+            it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            // Homepage/help pictures: ./gradlew testDebugUnitTest --tests '*MarketingShots*' -Pshots=/folder
+            (project.findProperty("shots") as String?)?.let { folder -> it.systemProperty("linotes.shots", folder) }
+        }
     }
 
     packaging {

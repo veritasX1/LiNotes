@@ -381,3 +381,8 @@ button.font-serif { font-family: Serif; }
 .plan-grid .plan-head.plan-today {
   color: var(--accent-color);
 }
+/* Names from the rotation: italic, readable (they are real assignments, not hints) */
+.plan-grid .plan-cell text placeholder {
+  color: alpha(currentColor, 0.72);
+  font-style: italic;
+}
