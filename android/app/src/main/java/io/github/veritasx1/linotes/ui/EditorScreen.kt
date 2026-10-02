@@ -80,6 +80,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(false) }
+    val player = remember(noteId) { AudioPlayer() }
+    DisposableEffect(noteId) { onDispose { player.stop() } }
     // Text typed after ">>" while the note choice is shown (null: no choice open).
     var linkQuery by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
@@ -242,7 +245,19 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         editor.onLinkRequested = { linkQuery = editor.pendingLinkQuery() ?: "" }
         // Attachments: decrypt under their own name and open with the app for the type.
         editor.onOpenFile = { block ->
-            scope.launch {
+            // Recordings play inside the note (like Apple), other files open in their app.
+            if (AudioNotes.isAudio(block)) {
+                val fileId = block.getString("f")
+                if (player.playing == fileId) player.stop()
+                else scope.launch {
+                    try {
+                        val file = withContext(Dispatchers.IO) { sync.fetchFile(fileId, sync.get(noteId)?.share) }
+                        player.play(fileId, file)
+                    } catch (error: Exception) {
+                        state.showToast(errorText(error))
+                    }
+                }
+            } else scope.launch {
                 try {
                     val file = withContext(Dispatchers.IO) {
                         val source = sync.fetchFile(block.getString("f"), sync.get(noteId)?.share)
@@ -364,6 +379,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
             }
+            PlayerBar(player)
             linkQuery?.let { query ->
                 val mention = editor.linkKind == "mention"
                 val choices = if (mention) editor.mentionPeople().filter { it.second.contains(query, ignoreCase = true) }
@@ -452,6 +468,10 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             SheetAction("Foto aufnehmen") { state.takePhoto(::insert) },
             SheetAction("Aus Fotos wählen") { state.pickImage(::insert) },
             // Like Apple: attach a PDF or any other file (encrypted like photos).
+            // Like Apple: record audio into the note (encrypted like every attachment).
+            SheetAction("Audio aufnehmen") {
+                state.requestMicrophone { granted -> if (granted) recording = true else state.toastLater("Ohne Mikrofon-Erlaubnis keine Aufnahme.") }
+            },
             SheetAction("Datei anhängen …") {
                 state.pickFile { name, mime, bytes ->
                     scope.launch {
@@ -465,6 +485,25 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
             },
         )) { photoMenu = false }
+    }
+    if (recording) {
+        RecordDialog(
+            onDone = { file, length ->
+                recording = false
+                scope.launch {
+                    try {
+                        val bytes = withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
+                        val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
+                        editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", file.name).put("m", AudioNotes.mime)
+                            .put("b", bytes.size).put("d", Math.round(length * 10) / 10.0))
+                    } catch (error: Exception) {
+                        state.showToast(errorText(error))
+                    }
+                }
+            },
+            onFailed = { message -> recording = false; state.toastLater(message) },
+            onCancel = { recording = false },
+        )
     }
 }
 
