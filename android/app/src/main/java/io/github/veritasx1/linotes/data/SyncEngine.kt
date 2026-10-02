@@ -71,6 +71,11 @@ class SyncEngine(private val context: Context) {
         get() = uiPrefs.getLong("lists-seen", 0) / 1000.0
         set(value) = uiPrefs.edit().putLong("lists-seen", (value * 1000).toLong()).apply()
 
+    /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
+    var noteGallery: Boolean
+        get() = uiPrefs.getBoolean("note-gallery", false)
+        set(value) = uiPrefs.edit().putBoolean("note-gallery", value).apply()
+
     /** Open entries someone else added or changed since the lists were last looked at. */
     fun newListItems(): Int {
         val seen = listsSeen
