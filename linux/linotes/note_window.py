@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gdk, Gtk
 
 from . import model
 from .editor import NoteEditor
@@ -54,6 +54,11 @@ class NoteWindow(Adw.ApplicationWindow):
         view.set_content(scroller)
         self.set_content(view)
 
+        # Ctrl+Plus/Minus/0 change the text size here too.
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.add_controller(keys)
+
         main.note_windows.add(self)
         self.connect("close-request", self.on_close)
         if self.load():
@@ -94,6 +99,14 @@ class NoteWindow(Adw.ApplicationWindow):
         # Changed on another device: reload unless there are unsaved edits here.
         if self.note_id in ids and self.editor.edit_source is None:
             self.load(keep_cursor=True)
+
+    def on_key(self, _controller, keyval, _keycode, state):
+        from .window import text_size_step
+        step = text_size_step(keyval) if state & Gdk.ModifierType.CONTROL_MASK else None
+        if step is None:
+            return False
+        self.main.change_text_size(step)
+        return True
 
     def on_close(self, _window):
         if self.editor.edit_source is not None:
