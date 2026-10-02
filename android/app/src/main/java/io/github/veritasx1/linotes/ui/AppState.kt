@@ -22,6 +22,8 @@ sealed class Route {
     data class ListDetail(val listId: String) : Route()
     data object Boards : Route()
     data class Board(val boardId: String) : Route()
+    data object Plans : Route()
+    data class Plan(val planId: String) : Route()
     data object Settings : Route()
     data object People : Route()
     data class Verify(val userId: Int) : Route()
@@ -40,6 +42,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
         mutableStateListOf<Route>(Route.Folders),
         mutableStateListOf<Route>(Route.Lists),
         mutableStateListOf<Route>(Route.Boards),
+        mutableStateListOf<Route>(Route.Plans),
     )
     var toast by mutableStateOf<String?>(null)
     /** Observed: when it goes away, open locked notes redraw as locked. */

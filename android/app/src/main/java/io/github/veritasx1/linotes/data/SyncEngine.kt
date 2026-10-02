@@ -510,7 +510,7 @@ class SyncEngine(private val context: Context) {
                 for (folder in folders) if (folder.data.optString("parent") == parent && tree.add(folder.id)) { subfolders.add(folder); todo.add(folder.id) }
             }
             subfolders + all("note").filter { it.data.optString("folder") in tree } +
-                (all("list") + all("board")).filter { it.data.optString("folder") in tree }.flatMap { containerMembers(it) }
+                (all("list") + all("board") + all("plan")).filter { it.data.optString("folder") in tree }.flatMap { containerMembers(it) }
         }
         "list" -> all("item").filter { it.data.optString("list") == obj.id }
         "board" -> (all("column") + all("card")).filter { it.data.optString("board") == obj.id }

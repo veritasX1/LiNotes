@@ -75,6 +75,8 @@ fun LiNotesApp(state: AppState) {
                                 is Route.ListDetail -> ListDetailScreen(state, current.listId, revision)
                                 Route.Boards -> BoardsScreen(state, revision)
                                 is Route.Board -> BoardScreen(state, current.boardId, revision)
+                                Route.Plans -> PlansScreen(state, revision)
+                                is Route.Plan -> PlanScreen(state, current.planId, revision)
                                 Route.Settings -> SettingsScreen(state, revision)
                                 Route.People -> PeopleScreen(state, revision)
                                 is Route.Verify -> VerifyScreen(state, current.userId)
@@ -92,6 +94,7 @@ fun LiNotesApp(state: AppState) {
                             TabItem(Glyph.Notes, "Notizen"),
                             TabItem(Glyph.Cart, "Listen", openItems),
                             TabItem(Glyph.Board, "Aufgaben"),
+                            TabItem(Glyph.Table, "Pläne"),
                         ), state.tab) { state.openTab(it) }
                     }
                 }

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 
-KINDS = {"folder", "note", "list", "item", "board", "column", "card", "share", "settings", "contacts", "vault"}
+KINDS = {"folder", "note", "list", "item", "board", "column", "card", "plan", "share", "settings", "contacts", "vault"}
 CONFLICT_KINDS = {"note"}
 CHANNEL_LIFETIME = 10 * 60
 SCHEMA_VERSION = "2"

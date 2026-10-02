@@ -125,12 +125,12 @@ fun dropOnFolder(state: AppState, payload: String, folderId: String?) {
     val (kind, id) = payload.split(":", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
     when {
         kind == "note" && folderId != null -> moveNoteTo(state, id, folderId)
-        kind in setOf("folder", "list", "board") -> moveObjectTo(state, id, folderId)
+        kind in setOf("folder", "list", "board", "plan") -> moveObjectTo(state, id, folderId)
     }
 }
 
 fun acceptsOnFolder(payload: String, folderId: String) =
-    payload.substringBefore(":") in setOf("note", "folder", "list", "board") && payload != "folder:$folderId"
+    payload.substringBefore(":") in setOf("note", "folder", "list", "board", "plan") && payload != "folder:$folderId"
 
 /** "Neu in diesem Ordner": subfolder, list or board – a folder as a project's filing place.
  *  Everything new lives where the folder lives (private or in its share). */
