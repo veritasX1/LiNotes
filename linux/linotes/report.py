@@ -256,7 +256,11 @@ NOTE_MARKUP = {"b": ("<b>", "</b>"), "i": ("<i>", "</i>"), "u": ("<u>", "</u>"),
                "h": ("<span background='#FFE680'>", "</span>"),
                "h:orange": ("<span background='#FFCF85'>", "</span>"), "h:pink": ("<span background='#FFB7D3'>", "</span>"),
                "h:purple": ("<span background='#DFBCF7'>", "</span>"), "h:mint": ("<span background='#A5ECE0'>", "</span>"),
-               "h:blue": ("<span background='#ACE3FC'>", "</span>")}
+               "h:blue": ("<span background='#ACE3FC'>", "</span>"),
+               "c:purple": ("<span foreground='#9B51E0'>", "</span>"), "c:pink": ("<span foreground='#E0457F'>", "</span>"),
+               "c:orange": ("<span foreground='#E07A00'>", "</span>"), "c:mint": ("<span foreground='#12A594'>", "</span>"),
+               "c:blue": ("<span foreground='#1C8CE0'>", "</span>"),
+               "f:serif": ("<span font_family='Serif'>", "</span>"), "f:mono": ("<span font_family='Monospace'>", "</span>")}
 
 
 NOTE_LINK_MARKUP = ("<span foreground='#B87D00' underline='single'>", "</span>")
@@ -348,6 +352,8 @@ def write_note_pdf(blocks, path, header, image_path=None):
         if kind == "check" and block.get("c"):
             markup = f"<s>{markup}</s>"
         layout.set_markup(markup, -1)
+        if block.get("a") in ("center", "right"):
+            layout.set_alignment(Pango.Alignment.CENTER if block["a"] == "center" else Pango.Alignment.RIGHT)
         height = layout.get_pixel_extents()[1].height
         pdf.need(height)
         x = MARGIN + indent

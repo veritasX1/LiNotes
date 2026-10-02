@@ -46,6 +46,9 @@ def text_size_step(keyval):
 HIGHLIGHT_MENU = [("h", "Gelb"), ("h:orange", "Orange"), ("h:pink", "Pink"), ("h:purple", "Lila"),
                   ("h:mint", "Mint"), ("h:blue", "Blau"), (None, "Markierung entfernen")]
 
+TEXT_COLOR_MENU = [("c:purple", "Lila"), ("c:pink", "Pink"), ("c:orange", "Orange"), ("c:mint", "Mint"),
+                   ("c:blue", "Blau"), (None, "Standardfarbe")]
+
 PARAGRAPH_MENU = [
     ("title", "Titel", "<Control><Shift>t"),
     ("heading", "Überschrift", "<Control><Shift>h"),
@@ -299,6 +302,38 @@ class LiNotesWindow(Adw.ApplicationWindow):
             swatch.connect("clicked", lambda _button, color=name: self.highlight(color, editor))
             colors.append(swatch)
         box.append(colors)
+        # Text color, font and alignment (like Format → Font / Text in Notes).
+        text_colors = Gtk.Box(spacing=6, margin_top=6, margin_start=4)
+        text_colors.append(Gtk.Label(label="Textfarbe", xalign=0, hexpand=True))
+        for name, tooltip in TEXT_COLOR_MENU:
+            swatch = Gtk.Button(tooltip_text=tooltip)
+            swatch.add_css_class("highlight-swatch")
+            swatch.add_css_class("text-" + name.partition(":")[2] if name else "swatch-none")
+            if name:
+                swatch.set_label("A")
+            else:
+                swatch.set_label("✕")
+            swatch.connect("clicked", lambda _button, color=name: self.text_color(color, editor))
+            text_colors.append(swatch)
+        box.append(text_colors)
+        fonts = Gtk.Box(homogeneous=True, margin_top=6)
+        fonts.add_css_class("linked")
+        for name, label, css in ((None, "Standard", None), ("f:serif", "Serif", "font-serif"), ("f:mono", "Mono", "monospace")):
+            button = Gtk.Button(label=label, tooltip_text="Schrift: " + label)
+            if css:
+                button.add_css_class(css)
+            button.connect("clicked", lambda _button, font=name: self.font(font, editor))
+            fonts.append(button)
+        box.append(fonts)
+        aligns = Gtk.Box(homogeneous=True, margin_top=6)
+        aligns.add_css_class("linked")
+        for name, icon, tooltip in ((None, "format-justify-left-symbolic", "Linksbündig"),
+                                    ("center", "format-justify-center-symbolic", "Zentriert"),
+                                    ("right", "format-justify-right-symbolic", "Rechtsbündig")):
+            button = Gtk.Button(icon_name=icon, tooltip_text=tooltip)
+            button.connect("clicked", lambda _button, align=name: self.align(align, editor))
+            aligns.append(button)
+        box.append(aligns)
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
         for style, label, accel in PARAGRAPH_MENU:
             row = Gtk.Button()
@@ -1058,6 +1093,21 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def insert_divider(self, editor=None):
         if (target := self.format_target(editor)) and target.get_editable():
             target.insert_divider()
+            target.grab_focus()
+
+    def text_color(self, name, editor=None):
+        if (target := self.format_target(editor)):
+            target.set_text_color(name)
+            target.grab_focus()
+
+    def font(self, name, editor=None):
+        if (target := self.format_target(editor)):
+            target.set_font(name)
+            target.grab_focus()
+
+    def align(self, name, editor=None):
+        if (target := self.format_target(editor)):
+            target.set_alignment(name)
             target.grab_focus()
 
     def highlight(self, name, editor=None):

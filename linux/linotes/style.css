@@ -251,6 +251,12 @@ button.swatch-pink { background-color: #ff70a8; }
 button.swatch-purple { background-color: #bf7af0; }
 button.swatch-mint { background-color: #4cd9c0; }
 button.swatch-blue { background-color: #5ac8fa; }
+button.text-purple { color: #9b51e0; font-weight: bold; }
+button.text-pink { color: #e0457f; font-weight: bold; }
+button.text-orange { color: #e07a00; font-weight: bold; }
+button.text-mint { color: #12a594; font-weight: bold; }
+button.text-blue { color: #1c8ce0; font-weight: bold; }
+button.font-serif { font-family: Serif; }
 
 .pairing-code {
   font-size: 33pt;
