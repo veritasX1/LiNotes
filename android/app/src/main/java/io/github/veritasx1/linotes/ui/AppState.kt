@@ -61,6 +61,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var saveDocument: (name: String, content: ByteArray, done: (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
     var openDocument: (done: (ByteArray?) -> Unit) -> Unit = { it(null) }
     var requestCamera: (done: (Boolean) -> Unit) -> Unit = { it(false) }
+    var requestMicrophone: (done: (Boolean) -> Unit) -> Unit = { it(false) }
     var shareFile: (file: java.io.File, mime: String, title: String) -> Unit = { _, _, _ -> }
 
     /** Offer to save the key file (right after creating an account). */

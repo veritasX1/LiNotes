@@ -280,6 +280,7 @@ fun fileDetails(block: JSONObject): String {
     }
     val mime = block.optString("m")
     val name = block.optString("n")
+    if (mime.startsWith("audio/") && block.has("d")) return "${AudioNotes.durationText(block.optDouble("d"))} · $amount"
     val kind = when {
         mime == "application/pdf" -> "PDF-Dokument"
         mime.startsWith("image/") -> "Bild"
@@ -1198,6 +1199,18 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val target = android.graphics.RectF(iconBox.centerX() - w / 2, iconBox.centerY() - h / 2, iconBox.centerX() + w / 2, iconBox.centerY() + h / 2)
             canvas.drawRect(target, Paint().apply { color = 0xFFFFFFFF.toInt() })
             canvas.drawBitmap(preview, null, target, Paint(Paint.FILTER_BITMAP_FLAG))
+        } else if (AudioNotes.isAudio(block)) {
+            // A recording: a round play button like in Notes.
+            val circle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent }
+            val radius = minOf(iconBox.width(), iconBox.height()) / 2
+            canvas.drawCircle(iconBox.centerX(), iconBox.centerY(), radius, circle)
+            val triangle = android.graphics.Path().apply {
+                moveTo(iconBox.centerX() - radius * 0.3f, iconBox.centerY() - radius * 0.45f)
+                lineTo(iconBox.centerX() + radius * 0.5f, iconBox.centerY())
+                lineTo(iconBox.centerX() - radius * 0.3f, iconBox.centerY() + radius * 0.45f)
+                close()
+            }
+            canvas.drawPath(triangle, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() })
         } else {
             // A sheet with a folded corner, the extension on it.
             val sheet = android.graphics.RectF(iconBox.left + 6 * density, iconBox.top, iconBox.right - 6 * density, iconBox.bottom)
@@ -1211,7 +1224,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val maxText = width - textLeft - 12 * density
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
         val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
-        val name = android.text.TextUtils.ellipsize(block.optString("n", "Datei"), title, maxText, android.text.TextUtils.TruncateAt.MIDDLE).toString()
+        val name = android.text.TextUtils.ellipsize(if (AudioNotes.isAudio(block)) "Audioaufnahme" else block.optString("n", "Datei"), title, maxText, android.text.TextUtils.TruncateAt.MIDDLE).toString()
         canvas.drawText(name, textLeft, height / 2f - 3 * density, title)
         canvas.drawText(fileDetails(block), textLeft, height / 2f + 17 * density, sub)
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }

@@ -82,6 +82,7 @@ class MainActivity : FragmentActivity() {
     private var pendingSave: Pair<ByteArray, (Boolean) -> Unit>? = null
     private var pendingOpen: ((ByteArray?) -> Unit)? = null
     private var pendingCamera: ((Boolean) -> Unit)? = null
+    private var pendingMicrophone: ((Boolean) -> Unit)? = null
 
     private val saver = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val (content, done) = pendingSave ?: return@registerForActivityResult
@@ -106,6 +107,10 @@ class MainActivity : FragmentActivity() {
     private val camera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         pendingCamera?.invoke(granted)
         pendingCamera = null
+    }
+    private val microphone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        pendingMicrophone?.invoke(granted)
+        pendingMicrophone = null
     }
 
     private fun authenticate(title: String, done: (Boolean) -> Unit) {
@@ -178,6 +183,13 @@ class MainActivity : FragmentActivity() {
             else {
                 pendingCamera = done
                 camera.launch(Manifest.permission.CAMERA)
+            }
+        }
+        state.requestMicrophone = { done ->
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) done(true)
+            else {
+                pendingMicrophone = done
+                microphone.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
         lifecycle.addObserver(object : DefaultLifecycleObserver {
