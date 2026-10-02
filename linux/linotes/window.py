@@ -297,6 +297,17 @@ class LiNotesWindow(Adw.ApplicationWindow):
             row.set_child(line)
             row.connect("clicked", lambda _button, name=style: (popover.popdown(), self.paragraph(name)))
             box.append(row)
+        divider = Gtk.Button()
+        divider.add_css_class("flat")
+        line = Gtk.Box(spacing=16)
+        line.append(Gtk.Label(label="Trennlinie", xalign=0, hexpand=True))
+        hint = Gtk.Label(label="--- ↵")
+        hint.add_css_class("dim-label")
+        line.append(hint)
+        divider.set_child(line)
+        divider.set_tooltip_text("Oder auf einer leeren Zeile --- tippen und Enter drücken")
+        divider.connect("clicked", lambda _button: (popover.popdown(), self.insert_divider()))
+        box.append(divider)
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
         self.sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
         self.sort_checked.connect("toggled", lambda button: setattr(self.note_pane.editor, "auto_sort_checked", button.get_active()))
@@ -972,6 +983,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def paragraph(self, style):
         if self.note_pane.get_visible_child_name() == "editor":
             self.note_pane.editor.apply_paragraph(style)
+            self.note_pane.editor.grab_focus()
+
+    def insert_divider(self):
+        if self.note_pane.get_visible_child_name() == "editor" and self.note_pane.editor.get_editable():
+            self.note_pane.editor.insert_divider()
             self.note_pane.editor.grab_focus()
 
     def highlight(self, name):

@@ -322,6 +322,14 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.y += height + 8
             numbers = {}
             continue
+        if kind == "divider":
+            pdf.need(16)
+            pdf.cr.set_source_rgb(*LINE)
+            pdf.cr.rectangle(MARGIN, pdf.y + 7, pdf.width - 2 * MARGIN, 0.8)
+            pdf.cr.fill()
+            pdf.y += 16
+            numbers = {}
+            continue
         if kind == "number":
             numbers[level] = numbers.get(level, 0) + 1
             numbers = {key: value for key, value in numbers.items() if key <= level}
