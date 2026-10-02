@@ -326,6 +326,15 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.y += height + 8
             numbers = {}
             continue
+        if kind == "file":
+            # Attachments are listed with name and size (their content is not part of the PDF).
+            from .editor import file_details
+            layout = pdf.layout(f"📎 {block.get('n') or 'Datei'}  ({file_details(block)})", 10.5, color=GREY)
+            pdf.need(layout[0].get_pixel_extents()[1].height)
+            pdf.draw(layout, MARGIN, pdf.y)
+            pdf.y += layout[0].get_pixel_extents()[1].height + 6
+            numbers = {}
+            continue
         if kind == "divider":
             pdf.need(16)
             pdf.cr.set_source_rgb(*LINE)
