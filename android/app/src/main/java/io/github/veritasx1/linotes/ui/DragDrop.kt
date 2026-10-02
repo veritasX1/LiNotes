@@ -22,6 +22,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.unit.dp
 
 /** Like iOS: press and hold, then release = context menu (onLongClick); press, hold and
  *  move = drag `payload` ("<kind>:<id>") somewhere, e.g. onto a folder. Taps stay with
@@ -31,7 +32,12 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 @Composable
 fun Modifier.holdToDrag(payload: String, onLongClick: (() -> Unit)?): Modifier {
     val menu by rememberUpdatedState(onLongClick)
-    return dragAndDropSource {
+    val shadow = palette.accent.copy(alpha = 0.35f)
+    // The drag shadow is drawn here: the default one records the content into a picture
+    // that is not redrawn when e.g. a thumbnail inside finishes loading (empty previews).
+    return dragAndDropSource(drawDragDecoration = {
+        drawRoundRect(shadow, cornerRadius = androidx.compose.ui.geometry.CornerRadius(10.dp.toPx()))
+    }) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val press = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
