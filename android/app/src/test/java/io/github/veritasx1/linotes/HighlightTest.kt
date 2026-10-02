@@ -173,4 +173,29 @@ class HighlightTest {
         other.text!!.delete(zwei - 1, zwei)
         assertEquals(listOf("title:T", "body:eins", "file:", "body:zwei"), kinds(other))
     }
+
+    @Test
+    fun mentionsInSharedNotes() {
+        // Karte 91fbc637: like Ubuntu's test_mentions.py.
+        val editor = editor(JSONObject().put("t", "title").put("x", "T"), body("Frage an @Ol", JSONArray("[9,12,\"m:1\"]")))
+        // load() already ran in editor(); reload with the name lookup.
+        editor.userName = { if (it == 1) "Olaf" else null }
+        editor.mentionPeople = { listOf(1 to "Olaf") }
+        editor.load(editor.toBlocks())
+        assertEquals("Frage an @Olaf", editor.toBlocks()[1].optString("x"))
+        editor.setSelection(editor.text!!.length)
+        type(editor, " a")
+        type(editor, "@")
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(null, editor.pendingLinkQuery())   // e-mail address: nothing
+        type(editor, "b.de ")
+        type(editor, "@")
+        type(editor, "Ol")
+        assertEquals("Ol", editor.pendingLinkQuery())
+        editor.finishLink("1", "Olaf")
+        val line = editor.toBlocks()[1]
+        assertEquals("Frage an @Olaf a@b.de @Olaf ", line.optString("x"))
+        assertEquals("""[[9,14,"m:1"],[22,27,"m:1"]]""", line.getJSONArray("s").toString())
+        assertEquals(2, io.github.veritasx1.linotes.data.Model.mentionsOf(org.json.JSONArray(editor.toBlocks()), 1))
+    }
 }

@@ -61,16 +61,36 @@ object Model {
 
     /** Note links show the current title of the linked note (like Apple's Notes); a gone
      *  note (titleOf returns null) keeps the old text. Returns the block itself if nothing changed. */
-    fun refreshNoteLinks(block: JSONObject, titleOf: (String) -> String?): JSONObject {
+    const val MENTION = "m:"
+
+    /** The user id of an @-mention span ("m:<id>"), otherwise null. */
+    fun mentionTarget(spanName: String): Int? = if (spanName.startsWith(MENTION)) spanName.substring(MENTION.length).toIntOrNull() else null
+
+    /** How often [userId] is @-mentioned in the blocks (for notifications). */
+    fun mentionsOf(blocks: JSONArray, userId: Int): Int {
+        var count = 0
+        for (index in 0 until blocks.length()) {
+            val spans = blocks.optJSONObject(index)?.optJSONArray("s") ?: continue
+            for (spanIndex in 0 until spans.length()) if (mentionTarget(spans.optJSONArray(spanIndex)?.optString(2).orEmpty()) == userId) count++
+        }
+        return count
+    }
+
+    fun refreshNoteLinks(block: JSONObject, titleOf: (String) -> String?, nameOf: (Int) -> String? = { null }): JSONObject {
         val spans = block.optJSONArray("s") ?: return block
         var text = block.optString("x")
         val links = mutableListOf<Triple<Int, Int, String>>()
         for (index in 0 until spans.length()) {
             val span = spans.optJSONArray(index) ?: continue
-            val target = linkTarget(span.optString(2)) ?: continue
+            val target = linkTarget(span.optString(2))
+            val person = mentionTarget(span.optString(2))
             val start = span.optInt(0).coerceIn(0, text.length)
             val end = span.optInt(1).coerceIn(start, text.length)
-            val title = titleOf(target) ?: continue
+            val title = when {
+                target != null -> titleOf(target)
+                person != null -> nameOf(person)?.takeIf { it != "?" }?.let { "@$it" }
+                else -> null
+            } ?: continue
             if (title != text.substring(start, end)) links.add(Triple(start, end, title))
         }
         if (links.isEmpty()) return block

@@ -54,6 +54,14 @@ class LinkSpan(private val color: Int) : android.text.style.CharacterStyle(), an
     }
 }
 /** A link to another note (">>"), saved as span "n:<id>". Looks like a web address. */
+/** An @-mention of someone the note is shared with (span "m:<user id>"): accent, bold. */
+class MentionSpan(val userId: Int, private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.color = color
+        paint.isFakeBoldText = true
+    }
+}
+
 class NoteLinkSpan(val noteId: String, private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
     override fun updateDrawState(paint: TextPaint) {
         paint.color = color
@@ -313,6 +321,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var loadFilePreview: ((JSONObject, (Bitmap?) -> Unit) -> Unit)? = null
     /** Where the pending ">>" starts, or -1. */
     private var linkStart = -1
+    /** "note" after ">>", "mention" after "@". */
+    var linkKind = "note"
+        private set
+    /** People who can be @-mentioned here (user id, name) – only in shared notes, like Apple. */
+    var mentionPeople: () -> List<Pair<Int, String>> = { emptyList() }
+    var userName: (Int) -> String? = { null }
 
     init {
         background = ColorDrawable(0)
@@ -488,6 +502,15 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         if (linkStart < 0 && insertCount > 0 && insertEnd >= 2 && insertEnd <= text.length &&
             text[insertEnd - 1] == '>' && text[insertEnd - 2] == '>') {
             linkStart = insertEnd - 2
+            linkKind = "note"
+            post { onLinkRequested?.invoke() }
+        }
+        // "@" at a word start mentions someone the note is shared with (not in e-mail addresses).
+        if (linkStart < 0 && insertCount > 0 && insertEnd <= text.length && text[insertEnd - 1] == '@' &&
+            (insertEnd == 1 || text[insertEnd - 2] in " \n\t(" || text[insertEnd - 2] == OBJECT || text[insertEnd - 2] == PLACEHOLDER) &&
+            mentionPeople().isNotEmpty()) {
+            linkStart = insertEnd - 1
+            linkKind = "mention"
             post { onLinkRequested?.invoke() }
         }
         // New text takes the style that was switched on for typing.
@@ -683,8 +706,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val text = text ?: return null
         val start = linkStart
         val cursor = selectionStart
-        if (start < 0 || start + 2 > text.length || text[start] != '>' || text[start + 1] != '>' || cursor < start + 2) return null
-        val query = text.substring(start + 2, cursor)
+        val prefix = if (linkKind == "note") 2 else 1
+        if (start < 0 || start + prefix > text.length || cursor < start + prefix) return null
+        if (linkKind == "note" && (text[start] != '>' || text[start + 1] != '>')) return null
+        if (linkKind == "mention" && text[start] != '@') return null
+        val query = text.substring(start + prefix, cursor)
         return if ('\n' in query || query.length > 60) null else query
     }
 
@@ -696,11 +722,14 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val query = pendingLinkQuery()
         linkStart = -1
         if (noteId == null || title == null || start < 0) return
-        val end = start + 2 + (query?.length ?: 0)
+        val mention = linkKind == "mention"
+        val end = start + (if (mention) 1 else 2) + (query?.length ?: 0)
+        val shown = if (mention) "@$title" else title
         busy = true
-        text.replace(start, end, title)
-        text.setSpan(NoteLinkSpan(noteId, colors.accent), start, start + title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        val after = start + title.length
+        text.replace(start, end, shown)
+        text.setSpan(if (mention) MentionSpan(noteId.toInt(), colors.accent) else NoteLinkSpan(noteId, colors.accent),
+            start, start + shown.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val after = start + shown.length
         if (after < text.length && text[after] == ' ') setSelection(after + 1)
         else { text.insert(after, " "); setSelection(after + 1) }
         normalize(text)
@@ -904,7 +933,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 loadImage(fileId) { bitmap -> if (bitmap != null) showImage(span, bitmap) }
             } else {
-                val fresh = io.github.veritasx1.linotes.data.Model.refreshNoteLinks(block, noteTitle)
+                val fresh = io.github.veritasx1.linotes.data.Model.refreshNoteLinks(block, noteTitle, userName)
                 val text = fresh.optString("x")
                 builder.append(text)
                 val spans = fresh.optJSONArray("s") ?: JSONArray()
@@ -912,11 +941,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                     val item = spans.optJSONArray(spanIndex) ?: continue
                     val name = item.optString(2)
                     val target = io.github.veritasx1.linotes.data.Model.linkTarget(name)
-                    if (name !in INLINE && target == null) continue
+                    val person = io.github.veritasx1.linotes.data.Model.mentionTarget(name)
+                    if (name !in INLINE && target == null && person == null) continue
                     val from = (start + item.optInt(0)).coerceIn(start, start + text.length)
                     val to = (start + item.optInt(1)).coerceIn(from, start + text.length)
                     if (to <= from) continue
                     if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    else if (person != null) builder.setSpan(MentionSpan(person, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     else builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
                 }
             }
@@ -993,6 +1024,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                         index++
                     }
                 }
+            }
+            for (mention in text.getSpans(start, end, MentionSpan::class.java).sortedBy { text.getSpanStart(it) }) {
+                val from = text.getSpanStart(mention).coerceAtLeast(start)
+                val to = text.getSpanEnd(mention).coerceAtMost(end)
+                if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.MENTION + mention.userId))
             }
             for (link in text.getSpans(start, end, NoteLinkSpan::class.java).sortedBy { text.getSpanStart(it) }) {
                 val from = text.getSpanStart(link).coerceAtLeast(start)
