@@ -1,5 +1,6 @@
 """Note list (middle column) and note pane (editor column)."""
 
+import collections
 import threading
 
 import gi
@@ -70,7 +71,20 @@ class NoteRow(Gtk.ListBoxRow):
         self.set_child(box)
 
 
+# Finished thumbnails by (file id, size). The list is rebuilt on every edit; loading them again
+# each time left the boxes empty for a moment, so they flickered. File ids never change content.
+THUMBNAILS = collections.OrderedDict()
+THUMBNAIL_LIMIT = 400
+
+
 def load_thumbnail(sync, file_id, picture, size=88, share=None):
+    key = (file_id, size)
+    texture = THUMBNAILS.get(key)
+    if texture is not None:
+        THUMBNAILS.move_to_end(key)
+        picture.set_paintable(texture)
+        return
+
     def work():
         try:
             path = sync.fetch_file(file_id, share)
@@ -78,7 +92,15 @@ def load_thumbnail(sync, file_id, picture, size=88, share=None):
             pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
         except Exception:
             return
-        GLib.idle_add(lambda: (picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf)), False)[1])
+
+        def show():
+            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+            THUMBNAILS[key] = texture
+            while len(THUMBNAILS) > THUMBNAIL_LIMIT:
+                THUMBNAILS.popitem(last=False)
+            picture.set_paintable(texture)
+            return False
+        GLib.idle_add(show)
     threading.Thread(target=work, daemon=True).start()
 
 
