@@ -238,9 +238,19 @@ windowcontrols > button:active {
   color: var(--accent-color);
 }
 
-button.text-highlight {
-  background-color: alpha(#ffd83d, 0.55);
+button.highlight-swatch {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 9pt;
 }
+button.swatch-yellow { background-color: #ffd83d; }
+button.swatch-orange { background-color: #ff9f0a; }
+button.swatch-pink { background-color: #ff70a8; }
+button.swatch-purple { background-color: #bf7af0; }
+button.swatch-mint { background-color: #4cd9c0; }
+button.swatch-blue { background-color: #5ac8fa; }
 
 .pairing-code {
   font-size: 33pt;

@@ -32,6 +32,9 @@ DECORATION_LAYOUT = "close,minimize,maximize:"
 AUTO_LOCK_SECONDS = 5 * 60
 TRASH_DAYS = 30
 
+HIGHLIGHT_MENU = [("h", "Gelb"), ("h:orange", "Orange"), ("h:pink", "Pink"), ("h:purple", "Lila"),
+                  ("h:mint", "Mint"), ("h:blue", "Blau"), (None, "Markierung entfernen")]
+
 PARAGRAPH_MENU = [
     ("title", "Titel", "<Control><Shift>t"),
     ("heading", "Überschrift", "<Control><Shift>h"),
@@ -258,15 +261,25 @@ class LiNotesWindow(Adw.ApplicationWindow):
         inline = Gtk.Box(homogeneous=True)
         inline.add_css_class("linked")
         for key, label, css in (("b", "B", "text-bold"), ("i", "I", "text-italic"),
-                                ("u", "U", "text-underline"), ("s", "S", "text-strike"),
-                                ("h", "✎", "text-highlight")):
+                                ("u", "U", "text-underline"), ("s", "S", "text-strike")):
             button = Gtk.Button(label=label)
             button.add_css_class(css)
-            button.set_tooltip_text({"b": "Fett", "i": "Kursiv", "u": "Unterstrichen",
-                                     "s": "Durchgestrichen", "h": "Hervorheben"}[key])
+            button.set_tooltip_text({"b": "Fett", "i": "Kursiv", "u": "Unterstrichen", "s": "Durchgestrichen"}[key])
             button.connect("clicked", lambda _button, name=key: self.inline(name))
             inline.append(button)
         box.append(inline)
+        # Highlight colors like in Apple's Notes; a click on the active color removes it again.
+        colors = Gtk.Box(spacing=6, margin_top=6, margin_start=4)
+        colors.append(Gtk.Label(label="Markieren", xalign=0, hexpand=True))
+        for name, tooltip in HIGHLIGHT_MENU:
+            swatch = Gtk.Button(tooltip_text=tooltip)
+            swatch.add_css_class("highlight-swatch")
+            swatch.add_css_class("swatch-" + (name.partition(":")[2] or "yellow") if name else "swatch-none")
+            if not name:
+                swatch.set_label("✕")
+            swatch.connect("clicked", lambda _button, color=name: self.highlight(color))
+            colors.append(swatch)
+        box.append(colors)
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
         for style, label, accel in PARAGRAPH_MENU:
             row = Gtk.Button()
@@ -959,6 +972,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def paragraph(self, style):
         if self.note_pane.get_visible_child_name() == "editor":
             self.note_pane.editor.apply_paragraph(style)
+            self.note_pane.editor.grab_focus()
+
+    def highlight(self, name):
+        if self.note_pane.get_visible_child_name() == "editor":
+            self.note_pane.editor.set_highlight(name)
             self.note_pane.editor.grab_focus()
 
     def inline(self, name):

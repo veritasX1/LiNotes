@@ -253,7 +253,10 @@ NOTE_STYLES = {  # size, bold, italic, space after
     "body": (10.5, False, False, 3), "mono": (9.5, False, False, 3), "quote": (10.5, False, True, 3),
 }
 NOTE_MARKUP = {"b": ("<b>", "</b>"), "i": ("<i>", "</i>"), "u": ("<u>", "</u>"), "s": ("<s>", "</s>"),
-               "h": ("<span background='#FFE680'>", "</span>")}
+               "h": ("<span background='#FFE680'>", "</span>"),
+               "h:orange": ("<span background='#FFCF85'>", "</span>"), "h:pink": ("<span background='#FFB7D3'>", "</span>"),
+               "h:purple": ("<span background='#DFBCF7'>", "</span>"), "h:mint": ("<span background='#A5ECE0'>", "</span>"),
+               "h:blue": ("<span background='#ACE3FC'>", "</span>")}
 
 
 NOTE_LINK_MARKUP = ("<span foreground='#B87D00' underline='single'>", "</span>")

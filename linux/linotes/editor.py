@@ -25,7 +25,12 @@ from . import model
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
               "bullet", "dash", "number", "check")
 LISTS = ("bullet", "dash", "number", "check")
-INLINE = ("b", "i", "u", "s", "h")
+# Highlight colors like in Apple's Notes; "h" (yellow) is the original one and stays as it is.
+HIGHLIGHTS = {
+    "h": (1.0, 0.85, 0.24), "h:orange": (1.0, 0.62, 0.04), "h:pink": (1.0, 0.44, 0.66),
+    "h:purple": (0.75, 0.48, 0.94), "h:mint": (0.30, 0.85, 0.75), "h:blue": (0.35, 0.78, 0.98),
+}
+INLINE = ("b", "i", "u", "s") + tuple(HIGHLIGHTS)
 # Web addresses that become clickable links (trailing punctuation is not part of the address).
 LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
 MAX_INDENT = 4
@@ -120,7 +125,8 @@ class NoteEditor(Gtk.TextView):
         tag("i", style=Pango.Style.ITALIC)
         tag("u", underline=Pango.Underline.SINGLE)
         tag("s", strikethrough=True)
-        tag("h", background_rgba=rgba(1.0, 0.85, 0.2, 0.45))
+        for name, color in HIGHLIGHTS.items():
+            tag(name, background_rgba=rgba(*color, 0.45))
         # Web addresses: shown as links, a click opens them (not saved – found again on every change).
         tag("link", foreground_rgba=rgba(0.72, 0.49, 0.0, 1.0), underline=Pango.Underline.SINGLE)
         tag("image", pixels_above_lines=6, pixels_below_lines=6)
@@ -398,7 +404,40 @@ class NoteEditor(Gtk.TextView):
             self.set_line_style(line, style, level, checked=False if style != "check" else None)
         self.emit_style()
 
+    def set_highlight(self, name):
+        """Mark the selection (or the next typed text) in one color; name None removes
+        the marking. One color per character – a new one replaces the old."""
+        buffer = self.buffer
+        bounds = buffer.get_selection_bounds()
+        if not bounds:
+            current = set(self.active_inline())
+            same = name in current
+            current -= set(HIGHLIGHTS)
+            if name and not same:
+                current.add(name)
+            self.typing_inline = current
+            self.emit("style-changed")
+            return
+        start, end = bounds
+        everything = name is not None
+        if name:
+            tag = buffer.get_tag_table().lookup(name)
+            probe = start.copy()
+            while probe.compare(end) < 0:
+                if not probe.has_tag(tag) and probe.get_char() not in ("\n", OBJECT):
+                    everything = False
+                    break
+                probe.forward_char()
+        for other in HIGHLIGHTS:
+            buffer.remove_tag_by_name(other, start, end)
+        if name and not everything:
+            buffer.apply_tag_by_name(name, start, end)
+        self.emit_style()
+
     def toggle_inline(self, name):
+        if name in HIGHLIGHTS:
+            self.set_highlight(name)
+            return
         buffer = self.buffer
         bounds = buffer.get_selection_bounds()
         tag = buffer.get_tag_table().lookup(name)
