@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from . import model
+from . import smoothscroll
 from .dialogs import ask_text, confirm
 from .icons import icon_button
 from .lists import share_label
@@ -237,6 +238,7 @@ class BoardView(Gtk.Box):
         self.columns_box.set_margin_top(14)
         self.columns_box.set_margin_bottom(20)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.columns_box)
+        smoothscroll.enable(scroller)
         self.scroller = scroller
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)

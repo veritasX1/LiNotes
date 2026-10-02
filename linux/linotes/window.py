@@ -16,6 +16,7 @@ gi.require_version("Pango", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
+from . import smoothscroll
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
 from . import activity, audio, security_ui, textsize, uiprefs
 from .icons import Icon, icon_button, icon_menu_button
@@ -769,8 +770,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.BROWSE)
         listbox.add_css_class("navigation-sidebar")
         popover = Gtk.Popover(autohide=False, has_arrow=True, position=Gtk.PositionType.BOTTOM, can_focus=False)
-        popover.set_child(Gtk.ScrolledWindow(child=listbox, propagate_natural_height=True, propagate_natural_width=True,
-                                             max_content_height=320, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        popover.set_child(smoothscroll.enable(Gtk.ScrolledWindow(child=listbox, propagate_natural_height=True, propagate_natural_width=True,
+                                             max_content_height=320, hscrollbar_policy=Gtk.PolicyType.NEVER)))
         listbox.set_size_request(300, -1)
         popover.set_parent(editor)
         found = []

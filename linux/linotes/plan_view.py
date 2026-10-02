@@ -10,6 +10,7 @@ gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango, PangoCairo
 
 from . import plans
+from . import smoothscroll
 from .dialogs import ask_text
 
 COLUMN_TYPES = [("free", "Freie Spalten"), ("weekdays", "Wochentage"), ("dates", "Datum (Tage)"), ("weeks", "Wochen")]
@@ -53,6 +54,7 @@ class PlanView(Gtk.Box):
         bar.append(self.tools)
         self.append(bar)
         self.scroller = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+        smoothscroll.enable(self.scroller)
         self.append(self.scroller)
 
     # --- loading and saving ---

@@ -13,6 +13,7 @@ gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gtk
 
 from . import e2e, pairing
+from . import smoothscroll
 from .api import Api, ApiError, OfflineError
 from .dialogs import error_text, run_async
 from .qrcodegen import QrCode
@@ -172,6 +173,7 @@ class Onboarding(Gtk.Box):
     def wrap(self, child, name):
         clamp = Adw.Clamp(maximum_size=420, child=child, valign=Gtk.Align.CENTER)
         scroller = Gtk.ScrolledWindow(child=clamp)
+        smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.stack.add_named(scroller, name)
 
