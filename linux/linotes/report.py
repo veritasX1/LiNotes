@@ -335,6 +335,25 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.y += layout[0].get_pixel_extents()[1].height + 6
             numbers = {}
             continue
+        if kind == "table":
+            # Rows with thin lines, each row kept on one page.
+            rows = model.table_rows(block)
+            width = (pdf.width - 2 * MARGIN) / len(rows[0])
+            for row in rows:
+                cells = [pdf.layout(text, 10.5, width=width - 10) for text in row]
+                height = max(pdf.height(cell) for cell in cells) + 10
+                pdf.need(height)
+                pdf.cr.set_source_rgb(*LINE)
+                pdf.cr.set_line_width(0.8)
+                for index, cell in enumerate(cells):
+                    pdf.cr.rectangle(MARGIN + index * width, pdf.y, width, height)
+                    pdf.cr.stroke()
+                    pdf.draw(cell, MARGIN + index * width + 5, pdf.y + 5)
+                    pdf.cr.set_source_rgb(*LINE)
+                pdf.y += height
+            pdf.y += 8
+            numbers = {}
+            continue
         if kind == "divider":
             pdf.need(16)
             pdf.cr.set_source_rgb(*LINE)
