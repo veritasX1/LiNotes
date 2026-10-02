@@ -528,7 +528,8 @@ class NoteEditor(Gtk.TextView):
         buffer = self.get_buffer()
         start, end = buffer.get_bounds()
         buffer.remove_tag_by_name("link", start, end)
-        for match in LINK.finditer(buffer.get_text(start, end, True)):
+        # get_slice keeps the placeholder of images, so offsets match the buffer.
+        for match in LINK.finditer(buffer.get_slice(start, end, True)):
             buffer.apply_tag_by_name("link", buffer.get_iter_at_offset(match.start()), buffer.get_iter_at_offset(match.end()))
 
     def link_at(self, x, y):
@@ -547,7 +548,7 @@ class NoteEditor(Gtk.TextView):
         if not start.starts_tag(tag):
             start.backward_to_tag_toggle(tag)
         end.forward_to_tag_toggle(tag)
-        url = self.get_buffer().get_text(start, end, True)
+        url = self.get_buffer().get_text(start, end, False)
         return url if url.startswith(("http://", "https://")) else "https://" + url
 
     # ========================================================
