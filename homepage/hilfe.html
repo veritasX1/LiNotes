@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LiNotes – Hilfe</title>
+<meta name="description" content="Jede Funktion von LiNotes Schritt für Schritt erklärt – für Android und Ubuntu, mit Bildern.">
+<link rel="icon" href="linotes.svg" type="image/svg+xml">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="linotes.svg" alt="">LiNotes</a>
+    <nav class="links">
+      <a href="index.html#notizen">Notizen</a>
+      <a href="index.html#plaene">Pläne</a>
+      <a href="index.html#aufgaben">Aufgaben</a>
+      <a href="hilfe.html" class="active">Hilfe</a>
+      <a href="server.html">Eigener Server</a>
+    </nav>
+    <a class="btn small cta" href="index.html#laden">Laden</a>
+  </div>
+</header>
+
+<main>
+<div class="wrap docs">
+  <nav class="toc">
+    <input class="search" type="search" placeholder="Hilfe durchsuchen" aria-label="Hilfe durchsuchen">
+    <h4>Erste Schritte</h4>
+    <a href="#start">Mit oder ohne Server</a>
+    <a href="#konto">Konto und Schlüsseldatei</a>
+    <a href="#geraete">Weiteres Gerät</a>
+    <h4>Notizen</h4>
+    <a href="#neu">Neue Notiz</a>
+    <a href="#formatieren">Formatieren</a>
+    <a href="#checklisten">Checklisten</a>
+    <a href="#markieren">Markieren und Textfarbe</a>
+    <a href="#tabellen">Tabellen</a>
+    <a href="#rechnen">Rechnen</a>
+    <a href="#medien">Fotos, Dateien, PDFs</a>
+    <a href="#audio">Audio aufnehmen</a>
+    <a href="#abschnitte">Abschnitte einklappen</a>
+    <a href="#verlinken">Notizen verlinken</a>
+    <a href="#erwaehnen">@-Erwähnungen</a>
+    <a href="#aktivitaet">Änderungen anderer</a>
+    <a href="#ordnen">Ordner, Sortieren, Galerie</a>
+    <a href="#suchen">Suchen und Tags</a>
+    <a href="#sperren">Gesperrte Notizen</a>
+    <a href="#pdf">PDF und Drucken</a>
+    <a href="#papierkorb">Zuletzt gelöscht</a>
+    <h4>Listen, Aufgaben, Pläne</h4>
+    <a href="#listen">Listen</a>
+    <a href="#boards">Aufgaben-Boards</a>
+    <a href="#entwicklung">Entwicklungsprojekte</a>
+    <a href="#plaene">Pläne</a>
+    <a href="#rotation">Rotation</a>
+    <a href="#zeitstrahl">Zeitstrahl</a>
+    <h4>Teilen und Sicherheit</h4>
+    <a href="#verifizieren">Personen verifizieren</a>
+    <a href="#teilen">Teilen</a>
+    <a href="#platz">Platz auf dem Handy</a>
+    <a href="#datenschutz">Was der Server weiß</a>
+    <h4>Darstellung und Bedienung</h4>
+    <a href="#darstellung">Textgröße, Blocksatz</a>
+    <a href="#fenster">Eigenes Fenster</a>
+    <a href="#kuerzel">Tastenkürzel</a>
+  </nav>
+
+  <article>
+    <h1>Hilfe</h1>
+    <p class="lead">Jede Funktion, Schritt für Schritt. <span class="tag">Ubuntu</span> und <span class="tag">Android</span> zeigen, wo es sich unterscheidet.</p>
+
+    <!-- ERSTE SCHRITTE -->
+    <section id="start">
+      <h2>Mit oder ohne Server</h2>
+      <div class="shots">
+        <div>
+          <p>Beim ersten Start fragt LiNotes nach der <b>Adresse deines Servers</b>. Die bekommst du von der Person, die den Server betreibt – oder du richtest dir <a href="server.html">selbst einen ein</a>.</p>
+          <p>Kein Server? Tippe auf <b>„Ohne Server nutzen“</b>. LiNotes ist dann eine Notizen-App, bei der alles verschlüsselt nur auf diesem Gerät liegt. Später kannst du unter <b>Einstellungen → „Mit Server verbinden …“</b> <span class="tag">Ubuntu</span> Kontomenü einen Server eintragen – deine Notizen werden dann hochgeladen.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="img/android-m-start.webp" alt="Startbildschirm mit Feld für die Serveradresse und „Ohne Server nutzen“" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="konto">
+      <h2>Konto und Schlüsseldatei</h2>
+      <ol class="steps-list">
+        <li><b>Konto anlegen</b>Serveradresse eingeben, „Neues Konto erstellen“ wählen, dann Einladungscode, Benutzernamen (klein, ohne Leerzeichen) und deinen Namen. Ein Passwort gibt es nicht – dein Konto schützt ein Schlüssel, der nur auf deinen Geräten liegt.</li>
+        <li><b>Schlüsseldatei sichern</b>Einstellungen → „Schlüsseldatei sichern …“ <span class="tag">Ubuntu</span> Kontomenü. Passphrase wählen und die Datei z. B. auf einem USB-Stick verwahren. Verlierst du alle Geräte, kommst du nur damit wieder an deine Notizen – niemand sonst kann sie wiederherstellen. LiNotes erinnert dich nach ein paar Tagen daran.</li>
+      </ol>
+    </section>
+
+    <section id="geraete">
+      <h2>Weiteres Gerät verbinden</h2>
+      <ol class="steps-list">
+        <li><b>Auf dem neuen Gerät</b>Serveradresse eingeben und „Mit anderem Gerät verbinden“ wählen, dann deinen Benutzernamen.</li>
+        <li><b>Code bestätigen</b>Das neue Gerät zeigt einen 6-stelligen Code und einen QR-Code. Auf einem Gerät, auf dem du schon angemeldet bist, erscheint „Neues Gerät verbinden?“ – dort den Code eintippen oder scannen. Warst du es nicht selbst: „Ablehnen“.</li>
+      </ol>
+    </section>
+
+    <!-- NOTIZEN -->
+    <section id="neu">
+      <h2>Neue Notiz</h2>
+      <p><span class="tag">Android</span> Stift-Symbol oben rechts oder unten in der Notiz. <span class="tag">Ubuntu</span> Stift-Symbol in der Leiste oder <kbd>Strg</kbd>+<kbd>N</kbd>.</p>
+      <p><b>Schnelle Notiz von überall:</b> <span class="tag">Android</span> In den Schnelleinstellungen (Wischen von oben) die Kachel „Neue Notiz“ hinzufügen. <span class="tag">Ubuntu</span> <code class="inline">linotes --neue-notiz</code> öffnet sofort eine neue Notiz – z. B. als eigenes Tastenkürzel in den Ubuntu-Einstellungen.</p>
+      <p>Die erste Zeile wird automatisch zum Titel. Eine neue Notiz, in die du nichts schreibst, verschwindet beim Verlassen von selbst – wie bei Apple.</p>
+    </section>
+
+    <section id="formatieren">
+      <h2>Formatieren</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-02-rezept.webp" data-light="img/ubuntu-02-rezept.webp" data-dark="img/ubuntu-dark-02-rezept.webp" alt="Rezept mit Unterüberschriften, Aufzählung, nummerierter Liste und Zitat" loading="lazy"></div></div>
+      <p>Über <b>„Aa“</b> wählst du <b>Titel, Überschrift, Unterüberschrift, Text, Monospace, Aufzählung, Liste mit Strichen, nummerierte Liste</b> und <b>Zitat</b>. Fett, kursiv, unterstrichen und durchgestrichen stehen im selben Menü.</p>
+      <p>Einrücken: <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span class="tag">Ubuntu</span> bzw. über „Aa“ <span class="tag">Android</span>. Eine <b>Trennlinie</b> entsteht, wenn du auf einer leeren Zeile <code class="inline">---</code> tippst und Enter drückst.</p>
+    </section>
+
+    <section id="checklisten">
+      <h2>Checklisten</h2>
+      <p>Checklisten-Symbol in der Leiste, dann einfach Punkte schreiben. Den Kreis antippen, um einen Punkt abzuhaken. Eine leere Zeile beendet die Liste. Über „Mehr“ lassen sich abgehakte Punkte automatisch nach unten sortieren.</p>
+    </section>
+
+    <section id="markieren">
+      <h2>Markieren, Textfarbe, Schrift, Ausrichtung</h2>
+      <p>Text auswählen und über „Aa“ <b>markieren</b> – in Gelb, Orange, Rosa, Lila, Mint oder Blau. Im selben Menü: <b>Textfarbe</b>, <b>Schriftart</b> und <b>Ausrichtung</b> (links, zentriert, rechts). <span class="tag">Ubuntu</span> Gelb markieren geht auch mit <kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>.</p>
+    </section>
+
+    <section id="tabellen">
+      <h2>Tabellen</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-01-notiz.webp" data-light="img/ubuntu-01-notiz.webp" data-dark="img/ubuntu-dark-01-notiz.webp" alt="Notiz mit Budget-Tabelle" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-c-notiz.webp" data-light="img/android-c-notiz.webp" data-dark="img/android-dark-c-notiz.webp" alt="Dieselbe Tabelle auf dem Handy" loading="lazy"></div>
+      </div>
+      <p><b>Einfügen:</b> Tabellen-Symbol in der Leiste – du bekommst eine Tabelle mit 3 × 3 Zellen.</p>
+      <p><span class="tag">Ubuntu</span> Direkt in die Zellen schreiben. <kbd>Tab</kbd> springt zur nächsten Zelle, in der letzten Zelle entsteht eine neue Zeile. <kbd>Enter</kbd> und die Pfeiltasten wechseln die Zeile. <b>Rechtsklick</b> auf eine Zelle: Zeile darüber/darunter, Spalte links/rechts einfügen, Zeile oder Spalte löschen, Tabelle löschen.</p>
+      <p><span class="tag">Android</span> Die Tabelle öffnet sich im Tabellen-Editor. „Weiter“ auf der Tastatur springt zur nächsten Zelle. Unten fügst du Zeilen und Spalten neben der gewählten Zelle ein oder löschst sie. In der Notiz die Tabelle antippen, um sie wieder zu bearbeiten.</p>
+    </section>
+
+    <section id="rechnen">
+      <h2>Rechnen</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-03-rechnen.webp" data-light="img/ubuntu-03-rechnen.webp" data-dark="img/ubuntu-dark-03-rechnen.webp" alt="Haushaltsbuch mit Rechnungen" loading="lazy"></div></div>
+      <p>Schreib eine Rechnung und ein <code class="inline">=</code> ans Ende der Zeile – LiNotes ergänzt das Ergebnis. Es gilt Punkt vor Strich, Klammern funktionieren, Dezimalzahlen mit Komma. Eine Beschriftung davor stört nicht: <code class="inline">Fixkosten: 850 + 74 + 35 =</code> ergibt <b>959</b>.</p>
+    </section>
+
+    <section id="medien">
+      <h2>Fotos, Dateien, PDFs</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-04-audio-pdf.webp" data-light="img/ubuntu-04-audio-pdf.webp" data-dark="img/ubuntu-dark-04-audio-pdf.webp" alt="Notiz mit Audioaufnahme und PDF-Anhang" loading="lazy"></div></div>
+      <p><span class="tag">Android</span> Foto-Symbol → „Foto aufnehmen“, „Aus Fotos wählen“ oder „Datei anhängen …“. <span class="tag">Ubuntu</span> Foto-Symbol bzw. Büroklammer – oder Dateien einfach in die Notiz ziehen.</p>
+      <p>Anhänge werden wie alles andere verschlüsselt. PDFs zeigen eine Vorschau der ersten Seite; antippen öffnet die Datei mit der passenden App.</p>
+    </section>
+
+    <section id="audio">
+      <h2>Audio aufnehmen</h2>
+      <div class="shots">
+        <div>
+          <p>Mikrofon-Symbol in der Leiste antippen – die Aufnahme beginnt sofort, die Zeit läuft mit. <b>„Fertig“</b> legt sie in die Notiz, <b>„Abbrechen“</b> verwirft sie. Beim ersten Mal fragt Android nach der Mikrofon-Erlaubnis.</p>
+          <p>Die Aufnahme erscheint als Karte mit Dauer. Antippen spielt sie direkt in der Notiz ab – <span class="tag">Android</span> mit einer Leiste unten zum Stoppen, <span class="tag">Ubuntu</span> der Knopf wird zum Stopp-Knopf. Aufnahmen vom Handy lassen sich am Rechner abspielen und umgekehrt.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="img/android-e-audio.webp" data-light="img/android-e-audio.webp" data-dark="img/android-dark-e-audio.webp" alt="Audioaufnahme in einer Notiz auf dem Handy" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="abschnitte">
+      <h2>Abschnitte einklappen</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-05-abschnitte.webp" data-light="img/ubuntu-05-abschnitte.webp" data-dark="img/ubuntu-dark-05-abschnitte.webp" alt="Notiz mit eingeklapptem Abschnitt" loading="lazy"></div></div>
+      <p>Überschriften und Unterüberschriften mit Inhalt darunter haben links einen Pfeil. Antippen klappt alles bis zur nächsten Überschrift gleicher Stufe ein. Der Zustand wird mit der Notiz gespeichert und gilt auf allen Geräten. Im PDF steht immer alles.</p>
+    </section>
+
+    <section id="verlinken">
+      <h2>Notizen verlinken</h2>
+      <p>Tippe <code class="inline">&gt;&gt;</code> – es erscheint eine Auswahl deiner Notizen; weitertippen filtert. <span class="tag">Ubuntu</span> Auch mit <kbd>Strg</kbd>+<kbd>K</kbd>. Der Link zeigt immer den aktuellen Titel – auch wenn du die verlinkte Notiz umbenennst. Antippen öffnet sie.</p>
+      <p>Webadressen in Notizen sind automatisch antippbar.</p>
+    </section>
+
+    <section id="erwaehnen">
+      <h2>@-Erwähnungen</h2>
+      <p>In <b>geteilten</b> Notizen am Wortanfang <code class="inline">@</code> tippen – es erscheinen die Personen, mit denen die Notiz geteilt ist. Die erwähnte Person bekommt eine Benachrichtigung „… hat dich erwähnt“; antippen öffnet die Notiz.</p>
+    </section>
+
+    <section id="aktivitaet">
+      <h2>Änderungen anderer sehen</h2>
+      <p>Hat jemand eine geteilte Notiz geändert, seit du sie zuletzt angesehen hast, steht in der Liste ein <b>Punkt</b> vor dem Titel. In der Notiz zeigt eine Zeile, wer wann geändert hat, und die <b>geänderten Zeilen sind farbig hinterlegt</b>. Ändert jemand die Notiz, während du sie offen hast, erscheint die Markierung sofort.</p>
+    </section>
+
+    <section id="ordnen">
+      <h2>Ordner, Sortieren, Galerie, Anheften</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-06-galerie.webp" data-light="img/ubuntu-06-galerie.webp" data-dark="img/ubuntu-dark-06-galerie.webp" alt="Galerieansicht" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-a-ordner.webp" data-light="img/android-a-ordner.webp" data-dark="img/android-dark-a-ordner.webp" alt="Ordnerübersicht auf dem Handy" loading="lazy"></div>
+      </div>
+      <ul>
+        <li><b>Ordner und Unterordner:</b> <span class="tag">Android</span> Ordner-Symbol oben rechts. <span class="tag">Ubuntu</span> „+“ über der Seitenleiste. Ordner lassen sich beliebig tief verschachteln.</li>
+        <li><b>Verschieben:</b> Notizen, Listen, Boards und Pläne auf einen Ordner ziehen – <span class="tag">Android</span> gedrückt halten und ziehen, <span class="tag">Ubuntu</span> mit der Maus. Oder lange drücken / Rechtsklick → „Verschieben nach …“.</li>
+        <li><b>Sortieren:</b> Menü „…“ → Bearbeitungsdatum, Erstellungsdatum oder Titel. Gilt auf allen Geräten.</li>
+        <li><b>Galerie:</b> Menü „…“ → „Als Galerie anzeigen“ <span class="tag">Ubuntu</span> oder <kbd>Strg</kbd>+<kbd>2</kbd>.</li>
+        <li><b>Anheften:</b> Notiz lange drücken / Rechtsklick → „Anheften“. Angeheftete Notizen stehen oben.</li>
+      </ul>
+    </section>
+
+    <section id="suchen">
+      <h2>Suchen und Tags</h2>
+      <p>Das Suchfeld über der Liste durchsucht alle Notizen. Schreibe <code class="inline">#Wort</code> in eine Notiz – der Tag erscheint in der Übersicht zum Filtern.</p>
+    </section>
+
+    <section id="sperren">
+      <h2>Gesperrte Notizen</h2>
+      <p>In der Notiz „Mehr“ → <b>„Notiz sperren“</b> <span class="tag">Ubuntu</span> Schloss-Symbol. Beim ersten Mal legst du ein Notizen-Passwort fest. Der Titel bleibt sichtbar, der Inhalt ist zusätzlich verschlüsselt. Am Handy lässt sich das Entsperren mit Fingerabdruck, PIN oder Muster einschalten (Einstellungen → Gesperrte Notizen).</p>
+      <p>Entsperrte Notizen sperren sich nach einigen Minuten ohne Benutzung und beim Verlassen der App wieder. Sofort: Schloss-Symbol in der Notiz oder „Gesperrte Notizen jetzt sperren“. Geteilte Notizen können nicht gesperrt werden.</p>
+    </section>
+
+    <section id="pdf">
+      <h2>PDF und Drucken</h2>
+      <p><span class="tag">Android</span> In der Notiz „Mehr“ → „Als PDF senden …“ oder „Drucken …“. <span class="tag">Ubuntu</span> Rechtsklick auf die Notiz → „Als PDF exportieren …“ (<kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>) oder „Drucken …“ (<kbd>Strg</kbd>+<kbd>P</kbd>). Das PDF sieht aus wie die Notiz – mit Überschriften, Listen, Tabellen und Fotos.</p>
+    </section>
+
+    <section id="papierkorb">
+      <h2>Zuletzt gelöscht</h2>
+      <p>Gelöschte Notizen liegen 30 Tage in „Zuletzt gelöscht“ und lassen sich dort wiederherstellen.</p>
+    </section>
+
+    <!-- LISTEN, AUFGABEN, PLÄNE -->
+    <section id="listen">
+      <h2>Listen</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-07-liste.webp" data-light="img/ubuntu-07-liste.webp" data-dark="img/ubuntu-dark-07-liste.webp" alt="Einkaufsliste unter Ubuntu" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-f-liste.webp" data-light="img/android-f-liste.webp" data-dark="img/android-dark-f-liste.webp" alt="Einkaufsliste auf dem Handy" loading="lazy"></div>
+      </div>
+      <p>Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis; „Erledigte löschen“ räumt auf. Was andere neu eintragen, zeigt ein Zähler am Reiter „Listen“.</p>
+    </section>
+
+    <section id="boards">
+      <h2>Aufgaben-Boards</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-08-board.webp" data-light="img/ubuntu-08-board.webp" data-dark="img/ubuntu-dark-08-board.webp" alt="Aufgaben-Board unter Ubuntu" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-g-board.webp" data-light="img/android-g-board.webp" data-dark="img/android-dark-g-board.webp" alt="Aufgaben-Board auf dem Handy" loading="lazy"></div>
+      </div>
+      <p>Neue Karte mit „Karte hinzufügen …“ unter einer Spalte. Karte antippen für Fälligkeit, Zuständigkeit, Priorität, Farbe und Notizen. <span class="tag">Ubuntu</span> Karten mit der Maus in eine andere Spalte ziehen. <span class="tag">Android</span> Karte lange drücken → Spalte wählen. Spalten lassen sich umbenennen, hinzufügen und löschen.</p>
+      <p><b>Bericht:</b> <span class="tag">Android</span> Board lange drücken → „Bericht teilen (PDF)“. <span class="tag">Ubuntu</span> Rechtsklick → „Bericht exportieren …“ (PDF oder CSV).</p>
+    </section>
+
+    <section id="entwicklung">
+      <h2>Entwicklungsprojekte</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-13-entwicklung.webp" alt="Entwicklungsprojekt mit Spalten CR bis Freigegeben" loading="lazy"></div></div>
+      <p>Board lange drücken / Rechtsklick → <b>„Als Entwicklungsprojekt führen“</b>. Dann zeigen die Karten ihre Kurz-ID zum Zitieren in Commits und Berichten, und im Karten-Dialog gibt es zusätzlich:</p>
+      <ul>
+        <li><b>Auswirkungsanalyse</b> – was betroffen ist, welche Risiken, was mitgeprüft werden muss.</li>
+        <li><b>Verifikation</b> – Tests und Nachweise.</li>
+        <li><b>Umgesetzt in Version</b> und die <b>verknüpften Commits</b> (automatisch, wenn die Karten-ID in der Commit-Nachricht steht).</li>
+        <li><b>Verlauf</b> – wer die Karte wann in welche Spalte geschoben hat.</li>
+      </ul>
+      <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-14-karte.webp" alt="Karten-Dialog eines Change Requests" loading="lazy"></div></div>
+      <p>Der <b>Bericht</b> enthält dann eine Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Version ↔ Abnahme) und für jede Karte eine Detailseite.</p>
+      <div class="shots single"><div class="window" style="background: #fff"><img class="zoomable" src="img/ubuntu-15-bericht-seite-1.webp" alt="Traceability-Matrix im PDF-Bericht" loading="lazy"></div></div>
+      <p class="note">Die Bilder zeigen ein fiktives Beispiel: das Automotive-Projekt „Spurhalteassistent LKA – Steuergerät“ mit den Spalten CR, Analyse, Umsetzung, Verifikation und Freigegeben.</p>
+    </section>
+
+    <section id="plaene">
+      <h2>Pläne</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-12-dienstplan.webp" data-light="img/ubuntu-12-dienstplan.webp" data-dark="img/ubuntu-dark-12-dienstplan.webp" alt="Dienstplan mit farbigen Schichten" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-k-dienstplan.webp" data-light="img/android-k-dienstplan.webp" data-dark="img/android-dark-k-dienstplan.webp" alt="Dienstplan auf dem Handy" loading="lazy"></div>
+      </div>
+      <p><b>Neuer Plan:</b> <span class="tag">Android</span> Reiter „Pläne“ → „+“. <span class="tag">Ubuntu</span> „+“ über der Seitenleiste → „Neuer Plan …“. Vorlage wählen: Leerer Plan, Stundenplan, Schichtplan, Putzplan, OP-/Raumplan oder Projektplan.</p>
+      <p><b>Raster bearbeiten:</b> <span class="tag">Ubuntu</span> Direkt in die Zellen schreiben, Rechtsklick für Farbe, Zeilen und Spalten. <span class="tag">Android</span> Zelle antippen für Text und Farbe; Zeilen- und Spaltenköpfe antippen zum Umbenennen, Einfügen und Löschen.</p>
+      <p><b>Spaltenart</b> (Menü „…“ bzw. Auswahl oben): freie Spalten, Wochentage, einzelne Tage ab einem Datum oder Kalenderwochen ab dieser Woche. Die heutige Spalte ist hervorgehoben.</p>
+      <p><b>PDF:</b> „PDF …“ <span class="tag">Ubuntu</span> bzw. „…“ → „Als PDF teilen …“ <span class="tag">Android</span> – im Querformat zum Aushängen.</p>
+    </section>
+
+    <section id="rotation">
+      <h2>Rotation</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-09-putzplan.webp" data-light="img/ubuntu-09-putzplan.webp" data-dark="img/ubuntu-dark-09-putzplan.webp" alt="Putzplan mit Rotation" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-i-putzplan.webp" data-light="img/android-i-putzplan.webp" data-dark="img/android-dark-i-putzplan.webp" alt="Putzplan auf dem Handy" loading="lazy"></div>
+      </div>
+      <p>Für Putz- und Dienstpläne mit Spalten „Wochen“: „Rotation …“ wählen und die Namen eintragen, getrennt durch Kommas. Jede Woche rückt jeder Name eine Zeile weiter. Namen aus der Rotation stehen <i>kursiv</i>. Ein eigener Eintrag in einer Zelle (z. B. „Ben (Urlaub)“) gilt nur dort.</p>
+    </section>
+
+    <section id="zeitstrahl">
+      <h2>Zeitstrahl (Projektplan)</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="img/ubuntu-11-projektplan.webp" data-light="img/ubuntu-11-projektplan.webp" data-dark="img/ubuntu-dark-11-projektplan.webp" alt="Projektplan als Zeitstrahl" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="img/android-j-projektplan.webp" data-light="img/android-j-projektplan.webp" data-dark="img/android-dark-j-projektplan.webp" alt="Zeitstrahl auf dem Handy" loading="lazy"></div>
+      </div>
+      <p>Aufgaben erscheinen als Balken, Meilensteine als Raute, die rote Linie ist heute. <span class="tag">Ubuntu</span> „+ Aufgabe“ und „+ Meilenstein“ oben; Name, Von, Bis und Farbe in der Liste darunter ändern. <span class="tag">Android</span> „+“ oben rechts oder „Aufgabe hinzufügen“ unter der Liste; eine Aufgabe antippen zum Bearbeiten oder Löschen. Daten im Format TT.MM.JJJJ.</p>
+    </section>
+
+    <!-- TEILEN UND SICHERHEIT -->
+    <section id="verifizieren">
+      <h2>Personen verifizieren</h2>
+      <p>Bevor ihr etwas teilt, verifiziert ihr euch einmal: Einstellungen → „Personen“ → Person antippen <span class="tag">Ubuntu</span> Kontomenü → Personen → „Verifizieren“. Dein Gerät zeigt einen Code; auf dem Gerät der anderen Person erscheint eine Anfrage – dort den Code eintippen oder den QR-Code scannen. So kann niemand, auch nicht der Server, euch einen falschen Schlüssel unterschieben.</p>
+    </section>
+
+    <section id="teilen">
+      <h2>Teilen</h2>
+      <p>Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, wird automatisch neu verschlüsselt. Geteiltes erkennst du am Personen-Symbol.</p>
+    </section>
+
+    <section id="platz">
+      <h2>Platz auf dem Handy</h2>
+      <p>Einstellungen → <b>„Notizen behalten“</b> legt fest, wie lange der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy bleibt (immer, 90, 30, 7 Tage oder nur auf dem Server). Pro Notiz: „Mehr“ → „Auf dem Gerät behalten“. Danach wird die Notiz beim Öffnen verschlüsselt geladen. Angeheftete Notizen, Listen und Boards bleiben immer auf dem Gerät.</p>
+    </section>
+
+    <section id="datenschutz">
+      <h2>Was der Server weiß</h2>
+      <p>Alles – Notizen, Listen, Boards, Pläne, Ordnernamen, Bilder und Aufnahmen – wird auf deinem Gerät verschlüsselt, bevor es den Server erreicht. Der Server sieht nur, dass es Einträge gibt, wie groß sie sind und wann sie geändert wurden – nicht, was darin steht. Die Apps enthalten keine Werbung und keine Tracker.</p>
+    </section>
+
+    <!-- DARSTELLUNG -->
+    <section id="darstellung">
+      <h2>Textgröße, Blocksatz, Silbentrennung</h2>
+      <div class="shots">
+        <div>
+          <p><span class="tag">Android</span> Einstellungen → Darstellung: <b>Textgröße</b>, <b>Blocksatz</b> und <b>Silbentrennung</b> (nach der Sprache des Handys). Titel und Überschriften bleiben im Flattersatz.</p>
+          <p><span class="tag">Ubuntu</span> Menü „…“ neben Liste/Galerie: <b>Textgröße</b> (oder <kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd> / <kbd>Strg</kbd>+<kbd>0</kbd>) und <b>Blocksatz</b>. Silbentrennung gibt es unter Ubuntu nicht.</p>
+          <p>Alles gilt pro Gerät – groß und im Blocksatz am Handy, kompakt am Laptop.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="img/android-l-einstellungen.webp" data-light="img/android-l-einstellungen.webp" data-dark="img/android-dark-l-einstellungen.webp" alt="Einstellungen auf dem Handy" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="fenster">
+      <h2>Notiz in eigenem Fenster <span class="tag">Ubuntu</span></h2>
+      <p>Doppelklick auf eine Notiz in der Liste, Rechtsklick → „In eigenem Fenster öffnen“ oder <kbd>Strg</kbd>+<kbd>O</kbd>. Änderungen gleichen sich in beide Richtungen sofort ab. <kbd>Strg</kbd>+<kbd>W</kbd> schließt das Notizfenster.</p>
+    </section>
+
+    <section id="kuerzel">
+      <h2>Tastenkürzel <span class="tag">Ubuntu</span></h2>
+      <p>Alle Kürzel mit Suchfeld: <kbd>Strg</kbd>+<kbd>?</kbd> oder <kbd>F1</kbd>. Die wichtigsten:</p>
+      <ul>
+        <li><kbd>Strg</kbd>+<kbd>N</kbd> neue Notiz · <kbd>Strg</kbd>+<kbd>F</kbd> suchen · <kbd>Strg</kbd>+<kbd>D</kbd> duplizieren</li>
+        <li><kbd>Strg</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> fett, kursiv, unterstrichen · <kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> markieren</li>
+        <li><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>H</kbd> / <kbd>J</kbd> Titel, Überschrift, Unterüberschrift</li>
+        <li><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> Checkliste · <kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> abhaken</li>
+        <li><kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> Zeile verschieben · <kbd>Strg</kbd>+<kbd>K</kbd> mit Notiz verlinken</li>
+        <li><kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> Trennlinie · <kbd>Strg</kbd>+<kbd>P</kbd> drucken · <kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd> gesperrte Notizen sperren</li>
+      </ul>
+      <p style="margin-top: 30px">Noch Fragen offen? <a href="index.html">Zur Startseite</a> · <a href="server.html">Eigener Server</a></p>
+    </section>
+  </article>
+</div>
+</main>
+
+<footer>
+  <div class="wrap made">
+    <img src="linotes.svg" alt="" width="34" height="34">
+    <p><b>Entwickelt in Schleswig-Holstein.</b><br>Von Olaf Winkler – zwischen Nord- und Ostsee.</p>
+  </div>
+  <div class="wrap cols">
+    <div><h4>LiNotes</h4><p><a href="index.html">Startseite</a> · <a href="server.html">Eigener Server</a> · <a href="index.html#laden">Laden</a></p></div>
+    <div><h4>Datenschutz dieser Seite</h4><p>Keine Cookies, keine Inhalte von fremden Servern, keine Zugriffsprotokolle.</p></div>
+    <div><h4>Hinweis</h4><p>LiNotes ist ein unabhängiges Projekt und steht in keiner Verbindung zu Apple Inc.</p></div>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>
