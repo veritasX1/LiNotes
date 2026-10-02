@@ -33,7 +33,16 @@ HIGHLIGHTS = {
     "h": (1.0, 0.85, 0.24), "h:orange": (1.0, 0.62, 0.04), "h:pink": (1.0, 0.44, 0.66),
     "h:purple": (0.75, 0.48, 0.94), "h:mint": (0.30, 0.85, 0.75), "h:blue": (0.35, 0.78, 0.98),
 }
-INLINE = ("b", "i", "u", "s") + tuple(HIGHLIGHTS)
+# Text colors like in Apple's Notes, and a choice of fonts (same on every device).
+TEXT_COLORS = {
+    "c:purple": (0.61, 0.32, 0.88), "c:pink": (0.88, 0.27, 0.50), "c:orange": (0.88, 0.48, 0.0),
+    "c:mint": (0.07, 0.65, 0.58), "c:blue": (0.11, 0.55, 0.88),
+}
+FONTS = {"f:serif": "Serif", "f:mono": "Monospace"}
+# Groups where only one value per character makes sense.
+EXCLUSIVE = (tuple(HIGHLIGHTS), tuple(TEXT_COLORS), tuple(FONTS))
+INLINE = ("b", "i", "u", "s") + tuple(HIGHLIGHTS) + tuple(TEXT_COLORS) + tuple(FONTS)
+ALIGNMENTS = {"center": Gtk.Justification.CENTER, "right": Gtk.Justification.RIGHT}
 # Web addresses that become clickable links (trailing punctuation is not part of the address).
 LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
 MAX_INDENT = 4
@@ -96,6 +105,7 @@ class NoteEditor(Gtk.TextView):
         self.add_controller(motion)
 
         self.pending_line_style = None
+        self.pending_alignment = None
         self.edit_source = None
 
     # ========================================================
@@ -130,6 +140,13 @@ class NoteEditor(Gtk.TextView):
         tag("s", strikethrough=True)
         for name, color in HIGHLIGHTS.items():
             tag(name, background_rgba=rgba(*color, 0.45))
+        for name, color in TEXT_COLORS.items():
+            tag(name, foreground_rgba=rgba(*color))
+        for name, family in FONTS.items():
+            tag(name, family=family)
+        # Paragraph alignment ("a" on the block); left is the default.
+        for name, justification in ALIGNMENTS.items():
+            tag("a-" + name, justification=justification)
         # Web addresses: shown as links, a click opens them (not saved – found again on every change).
         tag("link", foreground_rgba=rgba(0.72, 0.49, 0.0, 1.0), underline=Pango.Underline.SINGLE)
         tag("image", pixels_above_lines=6, pixels_below_lines=6)
@@ -251,6 +268,9 @@ class NoteEditor(Gtk.TextView):
             else:
                 self.set_line_style(number, style if style not in ("title",) else "body", level, checked=False)
         self.pending_line_style = None
+        if self.pending_alignment and self.pending_alignment[0] == line:
+            self.set_alignment(self.pending_alignment[1], range(line, end_line + 1))
+        self.pending_alignment = None
         if text == ">" and not self.link_start:
             # ">>" links to another note, like in Apple's Notes.
             before = location.copy()
@@ -386,6 +406,7 @@ class NoteEditor(Gtk.TextView):
             return True
 
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
+        line_start = buffer.create_mark(None, buffer.get_iter_at_line(line)[1], True)
         buffer.begin_user_action()
         self.loading = True
         buffer.insert(cursor, "\n")
@@ -397,6 +418,14 @@ class NoteEditor(Gtk.TextView):
         next_style = style if style in LISTS + ("mono", "quote", "body") else "body"
         # Inline styles of the split text stay where they were; new text is plain.
         self.set_line_style(new_line, next_style, level if next_style in LISTS else 0, checked=False)
+        # Like Notes: the alignment carries on to the next line.
+        first = buffer.get_iter_at_mark(line_start)
+        buffer.delete_mark(line_start)
+        for name in ALIGNMENTS:
+            if first.has_tag(buffer.get_tag_table().lookup("a-" + name)):
+                self.set_alignment(name, [line, new_line])
+                # An empty last line has nothing to carry the tag yet.
+                self.pending_alignment = (new_line, name)
         buffer.end_user_action()
         self.scroll_mark_onscreen(buffer.get_insert())
         self.emit_style()
@@ -448,15 +477,17 @@ class NoteEditor(Gtk.TextView):
             self.set_line_style(line, style, level, checked=False if style != "check" else None)
         self.emit_style()
 
-    def set_highlight(self, name):
+    def set_highlight(self, name, group=None):
         """Mark the selection (or the next typed text) in one color; name None removes
-        the marking. One color per character – a new one replaces the old."""
+        the marking. One color per character – a new one replaces the old. The same
+        works for text colors and fonts (group: the names that exclude each other)."""
+        group = group or next((g for g in EXCLUSIVE if name in g), tuple(HIGHLIGHTS))
         buffer = self.buffer
         bounds = buffer.get_selection_bounds()
         if not bounds:
             current = set(self.active_inline())
             same = name in current
-            current -= set(HIGHLIGHTS)
+            current -= set(group)
             if name and not same:
                 current.add(name)
             self.typing_inline = current
@@ -472,14 +503,37 @@ class NoteEditor(Gtk.TextView):
                     everything = False
                     break
                 probe.forward_char()
-        for other in HIGHLIGHTS:
+        for other in group:
             buffer.remove_tag_by_name(other, start, end)
         if name and not everything:
             buffer.apply_tag_by_name(name, start, end)
         self.emit_style()
 
+    def set_text_color(self, name):
+        self.set_highlight(name, tuple(TEXT_COLORS))
+
+    def set_font(self, name):
+        self.set_highlight(name, tuple(FONTS))
+
+    def line_alignment(self, line):
+        start = self.buffer.get_iter_at_line(line)[1]
+        for name in ALIGNMENTS:
+            if start.has_tag(self.buffer.get_tag_table().lookup("a-" + name)):
+                return name
+        return None
+
+    def set_alignment(self, name, lines=None):
+        """Align the selected lines left (None), centered or right, like Format → Text in Notes."""
+        for line in (lines if lines is not None else self.selected_lines()):
+            start, _end, with_break = self.line_bounds(line)
+            for other in ALIGNMENTS:
+                self.buffer.remove_tag_by_name("a-" + other, start, with_break)
+            if name in ALIGNMENTS:
+                self.buffer.apply_tag_by_name("a-" + name, start, with_break)
+        self.emit_style()
+
     def toggle_inline(self, name):
-        if name in HIGHLIGHTS:
+        if any(name in group for group in EXCLUSIVE):
             self.set_highlight(name)
             return
         buffer = self.buffer
@@ -948,6 +1002,8 @@ class NoteEditor(Gtk.TextView):
             if kind in ("image", "divider"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
+            if block.get("a") in ALIGNMENTS:
+                self.set_alignment(block["a"], [line])
             if kind in FOLDABLE and block.get("z"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("collapsed", start, with_break)
@@ -983,6 +1039,8 @@ class NoteEditor(Gtk.TextView):
                 block["c"] = self.line_checked(line)
             if block["t"] in FOLDABLE and self.is_collapsed(line):
                 block["z"] = True
+            if self.line_alignment(line):
+                block["a"] = self.line_alignment(line)
             spans = self.spans(start, end)
             if spans:
                 block["s"] = spans
