@@ -54,6 +54,52 @@ object Model {
         return null
     }
 
+    const val NOTE_LINK = "n:"
+
+    /** The note id of a note link span ("n:<id>"), otherwise null. */
+    fun linkTarget(spanName: String): String? = if (spanName.startsWith(NOTE_LINK)) spanName.substring(NOTE_LINK.length) else null
+
+    /** Note links show the current title of the linked note (like Apple's Notes); a gone
+     *  note (titleOf returns null) keeps the old text. Returns the block itself if nothing changed. */
+    fun refreshNoteLinks(block: JSONObject, titleOf: (String) -> String?): JSONObject {
+        val spans = block.optJSONArray("s") ?: return block
+        var text = block.optString("x")
+        val links = mutableListOf<Triple<Int, Int, String>>()
+        for (index in 0 until spans.length()) {
+            val span = spans.optJSONArray(index) ?: continue
+            val target = linkTarget(span.optString(2)) ?: continue
+            val start = span.optInt(0).coerceIn(0, text.length)
+            val end = span.optInt(1).coerceIn(start, text.length)
+            val title = titleOf(target) ?: continue
+            if (title != text.substring(start, end)) links.add(Triple(start, end, title))
+        }
+        if (links.isEmpty()) return block
+        val list = (0 until spans.length()).mapNotNull { spans.optJSONArray(it) }.filter { it.length() == 3 }
+            .map { arrayOf<Any>(it.optInt(0), it.optInt(1), it.optString(2)) }
+        // Back to front, so the offsets of earlier links stay valid.
+        for ((start, end, title) in links.sortedByDescending { it.first }) {
+            text = text.substring(0, start) + title + text.substring(end)
+            val delta = title.length - (end - start)
+            for (span in list) {
+                val from = span[0] as Int
+                val to = span[1] as Int
+                span[0] = if (from >= end) from + delta else if (from > start) start else from
+                span[1] = if (to >= end) to + delta else if (to > start) start + title.length else to
+            }
+        }
+        val result = JSONArray()
+        list.filter { (it[0] as Int) < (it[1] as Int) }.sortedWith(compareBy({ it[0] as Int }, { it[1] as Int }))
+            .forEach { result.put(JSONArray().put(it[0]).put(it[1]).put(it[2])) }
+        return JSONObject(block.toString()).put("x", text).put("s", result)
+    }
+
+    /** Notes offered after typing ">>": newest first, filtered by the typed text. */
+    fun linkChoices(notes: List<SyncObject>, exclude: String?, query: String, limit: Int = 8): List<SyncObject> {
+        val needle = query.trim().lowercase()
+        return notes.filter { it.id != exclude && !it.data.has("trashed") && (needle.isEmpty() || needle in title(it).lowercase()) }
+            .sortedByDescending { modified(it) }.take(limit)
+    }
+
     fun text(note: SyncObject): String {
         val body = blocks(note)
         return (0 until body.length()).joinToString("\n") { body.optJSONObject(it)?.optString("x").orEmpty() }
