@@ -314,3 +314,16 @@ button.font-serif { font-family: Serif; }
 .file-preview image {
   border-radius: 4px;
 }
+
+.unread-dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 50%;
+  background-color: #e6a300;
+}
+.activity-note {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: alpha(#e6a300, 0.16);
+  font-size: 9pt;
+}

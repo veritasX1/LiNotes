@@ -17,7 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import security_ui, textsize, uiprefs
+from . import activity, security_ui, textsize, uiprefs
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -211,6 +211,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_list.set_size_request(280, -1)
         self.note_list.connect("note-selected", lambda _list, note_id: (self.open_note(note_id), self.show_note_narrow()))
         self.note_list.connect("context", self.on_note_context)
+        self.note_list.is_unread = lambda note: activity.unread(note, self.sync.user_id)
         self.note_list.connect("open-window", lambda _list, note_id: self.open_note_window(note_id))
         self.note_list.connect("open-key", lambda _list, key: self.sidebar.select(key) or self.select(key))
         self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
@@ -244,9 +245,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.on_key)
         self.add_controller(keys)
-        activity = Gtk.EventControllerKey()
-        activity.connect("key-pressed", lambda *_args: self.touch_vault() or False)
-        self.add_controller(activity)
+        vault_activity = Gtk.EventControllerKey()
+        vault_activity.connect("key-pressed", lambda *_args: self.touch_vault() or False)
+        self.add_controller(vault_activity)
 
     def build_breakpoints(self):
         """Adapt to the window width like GNOME apps: the sidebar folds away below 900 px,
@@ -660,7 +661,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.note_pane.show_locked(note_id)
             return
         self.editing_blocks = blocks
+        was_unread = activity.unread(note, self.sync.user_id)
+        changes = activity.changes(note, blocks, self.sync.user_id)
         self.note_pane.show_note(note, blocks, editable=not note["data"].get("trashed"))
+        if changes:
+            self.note_pane.show_changes(changes, self.sync.user_name(note["updated_by"]), model.modified(note))
+        activity.remember(note, blocks)
+        if was_unread:
+            GLib.idle_add(lambda: self.refresh_list_only() and False)  # the dot goes away
         self.update_note_actions()
 
     def note_body(self, note):
@@ -853,6 +861,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         else:
             data["body"] = blocks
         self.sync.put("note", data, note.get("share"), note["id"], notify=False)
+        activity.remember(self.sync.get(note_id), blocks)
         if note_id == self.current_note and self.note_pane.get_visible_child_name() == "editor":
             if source is not self.note_pane.editor:
                 self.editing_blocks = blocks
@@ -1660,9 +1669,16 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if note is None:
                     self.note_pane.show_empty()
                 elif not note["data"].get("enc") and model.note_blocks(note) != self.editing_blocks:
+                    # Changed elsewhere while open: someone else's changes are marked right away.
+                    before = self.editing_blocks or []
                     self.editing_blocks = model.note_blocks(note)
                     self.note_pane.editor.load_blocks(self.editing_blocks, keep_cursor=True)
                     self.note_pane.update_date(note)
+                    if activity.changed_by_other(note, self.sync.user_id):
+                        lines = model.changed_lines(model.block_lines(before), model.block_lines(self.editing_blocks))
+                        if lines:
+                            self.note_pane.show_changes(lines, self.sync.user_name(note["updated_by"]), model.modified(note))
+                    activity.remember(note, self.editing_blocks)
         self.update_note_actions()
 
     # ========================================================

@@ -159,6 +159,8 @@ class NoteEditor(Gtk.TextView):
         # Collapsed sections: the heading line carries "collapsed", its content is hidden by "folded".
         # A result filled in after "=" (accent color until the note is opened again).
         tag("calc", foreground_rgba=rgba(*ACCENT), weight=Pango.Weight.SEMIBOLD)
+        # Lines someone else changed since my last view (like Apple's highlights; not saved).
+        tag("changed", paragraph_background_rgba=rgba(*ACCENT, 0.16))
         tag("collapsed")
         tag("folded", invisible=True)
         self.update_margins()
@@ -821,6 +823,14 @@ class NoteEditor(Gtk.TextView):
     # COLLAPSIBLE SECTIONS (like Apple: headings fold their content)
     # ========================================================
 
+    def mark_changed(self, lines):
+        """Highlight the given lines (changes by someone else) until the note is loaded again."""
+        buffer = self.buffer
+        for line in lines:
+            if line < buffer.get_line_count():
+                start, _end, with_break = self.line_bounds(line)
+                buffer.apply_tag_by_name("changed", start, with_break)
+
     def is_collapsed(self, line):
         start = self.buffer.get_iter_at_line(line)[1]
         return start.has_tag(self.buffer.get_tag_table().lookup("collapsed")) and self.line_style(line) in FOLDABLE
@@ -1080,6 +1090,9 @@ class NoteEditor(Gtk.TextView):
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
         buffer.place_cursor(cursor)
         self.queue_draw()
+        # GTK measures the new text lazily and can keep the old height (the last lines were cut
+        # off until the window changed) – re-measure once the layout has settled.
+        GLib.idle_add(lambda: self.queue_resize() and False)
 
     def to_blocks(self):
         buffer = self.buffer
