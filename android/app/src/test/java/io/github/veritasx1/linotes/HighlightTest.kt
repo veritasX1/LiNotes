@@ -145,4 +145,14 @@ class HighlightTest {
         editor.setAlignment(null)
         assertEquals(false, editor.toBlocks()[2].has("a"))
     }
+
+    @Test
+    fun equalsSignFillsInTheResult() {
+        // Karte de1319cf: like Ubuntu's test_calc.py test_editor.
+        val editor = editor(JSONObject().put("t", "title").put("x", "Kosten"), body("Miete = 450"), body("Miete * 12 "))
+        editor.setSelection(editor.text!!.length)
+        type(editor, "=")
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals("Miete * 12 = 5400", editor.toBlocks()[2].optString("x"))
+    }
 }
