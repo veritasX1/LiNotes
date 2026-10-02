@@ -217,6 +217,42 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         // Links between notes (">>", like Apple's Notes).
         editor.noteTitle = { id -> sync.get(id)?.takeIf { !it.data.has("trashed") }?.let { Model.title(it) } }
         editor.onLinkRequested = { linkQuery = editor.pendingLinkQuery() ?: "" }
+        // Attachments: decrypt under their own name and open with the app for the type.
+        editor.onOpenFile = { block ->
+            scope.launch {
+                try {
+                    val file = withContext(Dispatchers.IO) {
+                        val source = sync.fetchFile(block.getString("f"), sync.get(noteId)?.share)
+                        val folder = java.io.File(context.cacheDir, "attachments/" + block.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
+                        java.io.File(folder, java.io.File(block.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
+                    }
+                    state.openFile(file, block.optString("m", "application/octet-stream"))
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
+        editor.loadFilePreview = { block, done ->
+            scope.launch {
+                done(withContext(Dispatchers.IO) {
+                    try {
+                        val source = sync.fetchFile(block.getString("f"), sync.get(noteId)?.share)
+                        android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(source, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { pdf ->
+                            pdf.openPage(0).use { page ->
+                                val scale = 160f / maxOf(page.width, page.height)
+                                Bitmap.createBitmap((page.width * scale).toInt().coerceAtLeast(1), (page.height * scale).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888).also {
+                                    it.eraseColor(android.graphics.Color.WHITE)
+                                    page.render(it, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                }
+                            }
+                        }
+                    } catch (error: Exception) {
+                        android.util.Log.w("LiNotes", "PDF-Vorschau nicht möglich", error)
+                        null
+                    }
+                })
+            }
+        }
         editor.onOpenNote = { id ->
             val target = sync.get(id)
             if (target == null || target.data.has("trashed")) state.toastLater("Die verlinkte Notiz gibt es nicht mehr.")
@@ -303,7 +339,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
                 onPhoto = {
-                    if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos möglich.")
+                    if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos und Anhänge möglich.")
                     else photoMenu = true
                 },
                 onCompose = { save(); state.pop(); newNote(state, note.data.optString("folder").let { "folder:$it" }) },
@@ -374,6 +410,19 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         ActionSheet(null, listOf(
             SheetAction("Foto aufnehmen") { state.takePhoto(::insert) },
             SheetAction("Aus Fotos wählen") { state.pickImage(::insert) },
+            // Like Apple: attach a PDF or any other file (encrypted like photos).
+            SheetAction("Datei anhängen …") {
+                state.pickFile { name, mime, bytes ->
+                    scope.launch {
+                        try {
+                            val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
+                            editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size))
+                        } catch (error: Exception) {
+                            state.showToast(errorText(error))
+                        }
+                    }
+                }
+            },
         )) { photoMenu = false }
     }
 }

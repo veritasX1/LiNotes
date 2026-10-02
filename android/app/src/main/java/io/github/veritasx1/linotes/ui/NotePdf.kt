@@ -89,6 +89,13 @@ object NotePdf {
                 numbers.clear()
                 continue
             }
+            if (kind == "file") {
+                // Attachments are listed with name and size (their content is not part of the PDF).
+                pdf.styled("📎 ${block.optString("n", "Datei")}  (${fileDetails(block)})", 10.5f, false, false, color = pdf.grey,
+                    mono = false, indent = 0f, space = 6f, mark = null, markColor = Color.BLACK, bar = false)
+                numbers.clear()
+                continue
+            }
             if (kind == "divider") {
                 pdf.need(16f)
                 pdf.y += 7f
