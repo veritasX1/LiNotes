@@ -65,6 +65,7 @@ def build(sync, board_id):
             "impact": data.get("impact") or "",
             "verification": data.get("verification") or "",
             "version": data.get("version") or "",
+            "files": ", ".join(item.get("n", "") for item in data.get("files") or []),
             "accepted": f"{sync.user_name(accepted.get('by'))}, {stamp(accepted.get('at'))}" if accepted else "",
             "history": [(step.get("n", ""), stamp(step.get("at")), sync.user_name(step.get("by"))) for step in history],
         })
@@ -81,7 +82,8 @@ def build(sync, board_id):
 # --- CSV --------------------------------------------------------------
 
 CSV_FIELDS = [("id", "ID"), ("title", "Titel"), ("status", "Status"), ("priority", "Priorität"),
-              ("assignee", "Zuständig"), ("due", "Fällig"), ("created", "Erstellt"), ("done", "Erledigt")]
+              ("assignee", "Zuständig"), ("due", "Fällig"), ("created", "Erstellt"), ("done", "Erledigt"),
+              ("files", "Anhänge")]
 CSV_DEV_FIELDS = [("commits", "Commits"), ("verification", "Verifikation"), ("impact", "Auswirkungsanalyse"),
                   ("version", "Version"), ("accepted", "Abnahme")]
 
@@ -225,6 +227,9 @@ def write_pdf(report, path):
                 if r[key].strip():
                     pdf.text(label, size=9, bold=True, space=1)
                     pdf.text(r[key].strip(), size=9, space=5)
+            if r["files"]:
+                pdf.text("Anhänge", size=9, bold=True, space=1)
+                pdf.text(r["files"], size=8.5, space=5)
             if r["commit_list"]:
                 pdf.text("Commits", size=9, bold=True, space=1)
                 for commit in r["commit_list"]:
