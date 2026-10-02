@@ -54,6 +54,9 @@ object Keep {
  * kept in state.json; decrypted objects live only in memory. Local edits
  * are encrypted when queued. Shares carry the keys that let others read.
  */
+/** Same steps as linux/linotes/textsize.py. */
+val TEXT_SIZES = listOf(0.85f to "Klein", 1.0f to "Normal", 1.15f to "Groß", 1.3f to "Sehr groß", 1.5f to "Riesig")
+
 class SyncEngine(private val context: Context) {
     companion object {
         /** User id while LiNotes is used without a server. */
@@ -70,6 +73,12 @@ class SyncEngine(private val context: Context) {
     var listsSeen: Double
         get() = uiPrefs.getLong("lists-seen", 0) / 1000.0
         set(value) = uiPrefs.edit().putLong("lists-seen", (value * 1000).toLong()).apply()
+
+    /** Text size of notes (index into [TEXT_SIZES]), per device like on Ubuntu. Adds to the
+     *  font size of the system (Android settings). */
+    var textSize: Int
+        get() = uiPrefs.getInt("text-size", 1).coerceIn(0, TEXT_SIZES.lastIndex)
+        set(value) = uiPrefs.edit().putInt("text-size", value.coerceIn(0, TEXT_SIZES.lastIndex)).apply()
 
     /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
     var noteGallery: Boolean
