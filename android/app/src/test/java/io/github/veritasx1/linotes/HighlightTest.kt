@@ -118,4 +118,31 @@ class HighlightTest {
         assertEquals(true, editor.text.toString().contains("Woche 2"))
         assertEquals(listOf("title:Plan", "heading:Woche 1", "body:Montag", "subheading:Details", "check:Einkaufen", "heading:Woche 2", "body:Dienstag"), kinds(editor))
     }
+
+    @Test
+    fun textColorFontAndAlignment() {
+        // Karte 55ca5a4f: same data as Ubuntu's test_text_style.py.
+        val editor = editor(JSONObject().put("t", "title").put("x", "T"),
+            body("rot und blau", JSONArray("[0,3,\"c:pink\"]")).put("a", "center"))
+        assertEquals("center", editor.toBlocks()[1].optString("a"))
+        editor.setSelection(2, 5)
+        editor.setTextColorStyle("c:blue")
+        editor.setHighlight("h:mint")
+        editor.setSelection(2 + 8, 2 + 12)
+        editor.setFont("f:serif")
+        assertEquals("""[[0,3,"c:blue"],[0,3,"h:mint"],[8,12,"f:serif"]]""",
+            spans(editor)[1].replace(" ", "").let { s -> org.json.JSONArray(s).let { a -> (0 until a.length()).map { a.getJSONArray(it).toString() }.sorted().joinToString(",", "[", "]") } })
+        // Alignment survives a style change and carries on with Enter.
+        editor.setSelection(editor.text!!.length)
+        editor.setAlignment("right")
+        editor.applyParagraph("heading")
+        type(editor, "\n")
+        type(editor, "weiter")
+        val blocks = editor.toBlocks()
+        assertEquals("right", blocks[1].optString("a"))
+        assertEquals("heading", blocks[1].optString("t"))
+        assertEquals("right", blocks[2].optString("a"))
+        editor.setAlignment(null)
+        assertEquals(false, editor.toBlocks()[2].has("a"))
+    }
 }
