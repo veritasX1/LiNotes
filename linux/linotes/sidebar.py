@@ -102,6 +102,7 @@ class Sidebar(Gtk.Box):
         menu.append("Neuen Ordner", "win.new-folder")
         menu.append("Neue Liste", "win.new-list")
         menu.append("Neues Board", "win.new-board")
+        menu.append("Neuer Plan", "win.new-plan")
         section = Gio.Menu()
         section.append("Mit Server verbinden …", "win.connect")
         section.append("Personen und Verifizierung …", "win.people")
@@ -163,6 +164,9 @@ class Sidebar(Gtk.Box):
             hint = self.place_hint(board)
             self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards, hint), "Aufgaben")
 
+        for plan in sorted(sync.objects("plan"), key=lambda p: (p["data"].get("order", 0), p["data"].get("name", ""))):
+            self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or "Plan", None, self.place_hint(plan)), "Pläne")
+
         self.refresh_tags(live)
         self.updating = False
         self.select(selected or "all", emit=False)
@@ -201,11 +205,11 @@ class Sidebar(Gtk.Box):
     def add(self, row, section):
         row.section = section
         kind = row.key.partition(":")[0]
-        if kind in ("folder", "list", "board"):
+        if kind in ("folder", "list", "board", "plan"):
             drag_source(row, row.key)
         if kind == "folder":
             # Notes, folders, lists and boards can be dropped onto a folder (not board cards).
-            drop_target(row, lambda payload, key=row.key: payload.partition(":")[0] in ("note", "folder", "list", "board")
+            drop_target(row, lambda payload, key=row.key: payload.partition(":")[0] in ("note", "folder", "list", "board", "plan")
                         and payload != key, lambda payload, key=row.key: self.window.drop_on(key, payload))
         self.list.append(row)
 
@@ -214,7 +218,7 @@ class Sidebar(Gtk.Box):
             label = Gtk.Label(label=row.section, xalign=0)
             label.add_css_class("sidebar-heading")
             # Dropping onto the heading takes a folder to the top / a list or board out of its folder.
-            wanted = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board"}.get(row.section)
+            wanted = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board", "Pläne": "plan"}.get(row.section)
             if wanted:
                 drop_target(label, lambda payload, w=wanted: payload.partition(":")[0] == w,
                             lambda payload, section=row.section: self.window.drop_on(section, payload))

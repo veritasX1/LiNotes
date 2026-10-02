@@ -500,7 +500,7 @@ class SyncEngine:
                         todo.append(folder["id"])
                         result.append(folder)
             result += [n for n in self.objects("note") if n["data"].get("folder") in tree]
-            for container in self.objects("list") + self.objects("board"):
+            for container in self.objects("list") + self.objects("board") + self.objects("plan"):
                 if container["data"].get("folder") in tree:
                     result += self.container_members(container)
         elif kind == "list":

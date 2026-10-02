@@ -398,3 +398,81 @@ def write_note_pdf(blocks, path, header, image_path=None):
         pdf.draw((layout, color), x, pdf.y)
         pdf.y += height + space
     pdf.close()
+
+
+def write_plan_pdf(plan, path):
+    """A plan on A4 landscape to hang up: the grid with colors, or the timeline with bars."""
+    import datetime
+    from . import plans
+    name = plan.get("name") or "Plan"
+    pdf = Pdf(path, f"{name} · Stand {datetime.date.today().strftime('%d.%m.%Y')}", landscape=True)
+    title = pdf.layout(name, 18, bold=True)
+    pdf.draw(title, MARGIN, pdf.y)
+    pdf.y += pdf.height(title) + 12
+    if plan.get("mode") == "timeline":
+        first, last = plans.timeline_range(plan)
+        days = (last - first).days + 1
+        label_width = 150
+        scale = (pdf.width - 2 * MARGIN - label_width) / days
+        top = pdf.y
+        for i in range(0, days, 7):
+            x = MARGIN + label_width + i * scale
+            d = first + datetime.timedelta(days=i)
+            pdf.draw(pdf.layout(f"KW {d.isocalendar()[1]} · {d.strftime('%d.%m.')}", 8, color=GREY), x + 2, top)
+        pdf.y += 16
+        for task in plan.get("tasks") or []:
+            pdf.need(24)
+            pdf.draw(pdf.layout(task.get("x") or "", 10, width=label_width - 8), MARGIN, pdf.y + 3)
+            for i in range(0, days, 7):
+                pdf.cr.set_source_rgb(*LINE)
+                pdf.cr.rectangle(MARGIN + label_width + i * scale, pdf.y, 0.6, 22)
+                pdf.cr.fill()
+            span = plans.task_span(task)
+            if span:
+                pdf.cr.set_source_rgb(*plans.COLORS.get(task.get("k"), plans.COLORS["blue"]))
+                x = MARGIN + label_width + (span[0] - first).days * scale
+                if task.get("m"):
+                    cx, cy = x + scale / 2, pdf.y + 11
+                    pdf.cr.move_to(cx, cy - 8)
+                    pdf.cr.line_to(cx + 8, cy)
+                    pdf.cr.line_to(cx, cy + 8)
+                    pdf.cr.line_to(cx - 8, cy)
+                    pdf.cr.close_path()
+                else:
+                    pdf.cr.rectangle(x, pdf.y + 4, ((span[1] - span[0]).days + 1) * scale, 14)
+                pdf.cr.fill()
+            pdf.y += 24
+        pdf.close()
+        return
+    rows = plans.text_rows(plan)
+    columns = len(rows[0])
+    first_width = 110
+    width = (pdf.width - 2 * MARGIN - first_width) / max(1, columns - 1)
+    grid = plans.cells(plan)
+    today = plans.today_column(plan)
+    for r, row in enumerate(rows):
+        layouts = [pdf.layout(text, 10, bold=(r == 0 or c == 0), width=(first_width if c == 0 else width) - 10)
+                   for c, text in enumerate(row)]
+        height = max(pdf.height(cell) for cell in layouts) + 12
+        pdf.need(height)
+        x = MARGIN
+        for c, cell in enumerate(layouts):
+            w = first_width if c == 0 else width
+            color = (grid[r - 1][c - 1] or {}).get("k") if r > 0 and c > 0 else None
+            if color:
+                red, green, blue = plans.COLORS.get(color, plans.COLORS["grey"])
+                pdf.cr.set_source_rgba(red, green, blue, 0.35)
+                pdf.cr.rectangle(x, pdf.y, w, height)
+                pdf.cr.fill()
+            elif c > 0 and c - 1 == today and r == 0:
+                pdf.cr.set_source_rgba(1.0, 0.85, 0.24, 0.25)
+                pdf.cr.rectangle(x, pdf.y, w, height)
+                pdf.cr.fill()
+            pdf.cr.set_source_rgb(*LINE)
+            pdf.cr.set_line_width(0.8)
+            pdf.cr.rectangle(x, pdf.y, w, height)
+            pdf.cr.stroke()
+            pdf.draw(cell, x + 5, pdf.y + 6)
+            x += w
+        pdf.y += height
+    pdf.close()
