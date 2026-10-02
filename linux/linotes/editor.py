@@ -19,7 +19,7 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import audio, calc, model
+from . import audio, calc, model, textsize
 from .table import NoteTable
 
 
@@ -70,6 +70,7 @@ class NoteEditor(Gtk.TextView):
     def __init__(self, image_loader=None):
         super().__init__()
         self.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.set_justified(textsize.load_justify())
         self.set_left_margin(36)
         self.set_right_margin(36)
         self.set_top_margin(8)
@@ -130,9 +131,11 @@ class NoteEditor(Gtk.TextView):
             table.add(new)
             return new
 
-        tag("title", scale=1.9, weight=Pango.Weight.BOLD, pixels_below_lines=8)
-        tag("heading", scale=1.45, weight=Pango.Weight.BOLD, pixels_above_lines=6, pixels_below_lines=4)
-        tag("subheading", scale=1.18, weight=Pango.Weight.SEMIBOLD, pixels_above_lines=4)
+        # Titles and headings stay ragged with justified text (Blocksatz is for running text).
+        tag("title", scale=1.9, weight=Pango.Weight.BOLD, pixels_below_lines=8, justification=Gtk.Justification.LEFT)
+        tag("heading", scale=1.45, weight=Pango.Weight.BOLD, pixels_above_lines=6, pixels_below_lines=4,
+            justification=Gtk.Justification.LEFT)
+        tag("subheading", scale=1.18, weight=Pango.Weight.SEMIBOLD, pixels_above_lines=4, justification=Gtk.Justification.LEFT)
         tag("body")
         tag("mono", family="Monospace", scale=0.92)
         tag("quote", left_margin=20, foreground_rgba=rgba(0.45, 0.45, 0.48), style=Pango.Style.ITALIC)
@@ -548,6 +551,10 @@ class NoteEditor(Gtk.TextView):
             if start.has_tag(self.buffer.get_tag_table().lookup("a-" + name)):
                 return name
         return None
+
+    def set_justified(self, on):
+        """Blocksatz (per device, like the text size): running text fills the line."""
+        self.set_justification(Gtk.Justification.FILL if on else Gtk.Justification.LEFT)
 
     def set_alignment(self, name, lines=None):
         """Align the selected lines left (None), centered or right, like Format → Text in Notes."""

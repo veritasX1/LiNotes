@@ -145,6 +145,14 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             // Text size from the settings (per device), on top of the system font size.
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 17f * io.github.veritasx1.linotes.data.TEXT_SIZES[sync.textSize].first)
+            // Justified text and German hyphenation, per device (settings → Darstellung).
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                justificationMode = if (sync.justify) android.text.Layout.JUSTIFICATION_MODE_INTER_WORD else android.text.Layout.JUSTIFICATION_MODE_NONE
+            }
+            justified = sync.justify
+            textLocale = java.util.Locale.getDefault()
+            hyphenationFrequency = if (sync.hyphenate) android.text.Layout.HYPHENATION_FREQUENCY_FULL else android.text.Layout.HYPHENATION_FREQUENCY_NONE
+            breakStrategy = if (sync.justify || sync.hyphenate) android.text.Layout.BREAK_STRATEGY_HIGH_QUALITY else android.text.Layout.BREAK_STRATEGY_SIMPLE
         }
     }
     val loadedBlocks = remember(noteId) { mutableStateOf<String?>(null) }

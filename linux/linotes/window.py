@@ -171,7 +171,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         for level, (_factor, label) in enumerate(textsize.SIZES):
             sizes.append(label, f"win.text-size::{level}")
         sort_menu.append_section("Textgröße (Strg + / Strg −)", sizes)
-        self.sort_button = icon_menu_button("more", "Sortieren und Textgröße", Gtk.PopoverMenu.new_from_model(sort_menu))
+        layout = Gio.Menu()
+        layout.append("Blocksatz", "win.justify")
+        sort_menu.append_section(None, layout)
+        self.sort_button = icon_menu_button("more", "Sortieren und Darstellung", Gtk.PopoverMenu.new_from_model(sort_menu))
         header.pack_start(self.sort_button)
         self.delete_button = icon_button("trash", "Löschen")
         self.delete_button.set_action_name("win.delete-note")
@@ -1811,6 +1814,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.text_size_action.connect("activate", lambda _action, value: self.set_text_size(int(value.get_string())))
         self.add_action(self.text_size_action)
         textsize.apply(textsize.load())
+        self.justify_action = Gio.SimpleAction.new_stateful("justify", None, GLib.Variant.new_boolean(textsize.load_justify()))
+        self.justify_action.connect("activate", lambda action, _value: self.set_justified(not action.get_state().get_boolean()))
+        self.add_action(self.justify_action)
         current = self.sync.settings().get("note_sort", "modified")
         self.sort_action = Gio.SimpleAction.new_stateful("sort-notes", GLib.VariantType.new("s"), GLib.Variant.new_string(current))
         self.sort_action.connect("activate", lambda action, value: self.sort_notes(value.get_string()))
@@ -1825,6 +1831,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         textsize.save(level)
         textsize.apply(level)
         self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def set_justified(self, on):
+        textsize.save_justify(on)
+        self.justify_action.set_state(GLib.Variant.new_boolean(on))
+        for editor in [self.note_pane.editor] + [window.editor for window in self.note_windows]:
+            editor.set_justified(on)
 
     def change_text_size(self, step):
         """Ctrl+Plus / Ctrl+Minus (step 0: back to normal)."""

@@ -239,6 +239,17 @@ class ChangedSpan(private val color: Int) : android.text.style.LineBackgroundSpa
     }
 }
 
+/** A space that keeps its width: with justified text, titles and headings must not be stretched
+ *  (Android justifies the whole field, not single paragraphs). Justification only widens plain
+ *  text runs, not replaced ones; the line can still break at the space. */
+class FixedSpaceSpan : android.text.style.ReplacementSpan() {
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        if (fm != null) paint.getFontMetricsInt(fm)
+        return Math.round(paint.measureText(" "))
+    }
+    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {}
+}
+
 class FoldSpan(val hidden: List<JSONObject>)
 
 private val FOLDABLE = mapOf("heading" to 1, "subheading" to 2)
@@ -641,7 +652,24 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         deletedBreakAt = -1
         deletedPlaceholderAt = -1
         markLinks(text)
+        markFixedSpaces(text)
         invalidate()
+    }
+
+    /** Justified text (settings): keep titles and headings unstretched. */
+    var justified = false
+
+    private fun markFixedSpaces(text: Editable) {
+        for (old in text.getSpans(0, text.length, FixedSpaceSpan::class.java)) text.removeSpan(old)
+        if (!justified) return
+        for (para in text.getSpans(0, text.length, ParaSpan::class.java)) {
+            if (para.type != "title" && para.type != "heading" && para.type != "subheading") continue
+            val start = text.getSpanStart(para)
+            val end = text.getSpanEnd(para)
+            for (index in start until end) {
+                if (text[index] == ' ') text.setSpan(FixedSpaceSpan(), index, index + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
     }
 
     // --- formatting API ----------------------------------------
@@ -994,7 +1022,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
-        text?.let { markLinks(it) }
+        text?.let { markLinks(it); markFixedSpaces(it) }
         lineBlocks = origins
         busy = false
     }
