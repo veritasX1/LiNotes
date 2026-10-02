@@ -51,6 +51,11 @@ object NotePdf {
                 "u" -> UnderlineSpan()
                 "s" -> StrikethroughSpan()
                 "h" -> BackgroundColorSpan(Color.rgb(255, 230, 128))
+                "h:orange" -> BackgroundColorSpan(Color.rgb(255, 207, 133))
+                "h:pink" -> BackgroundColorSpan(Color.rgb(255, 183, 211))
+                "h:purple" -> BackgroundColorSpan(Color.rgb(223, 188, 247))
+                "h:mint" -> BackgroundColorSpan(Color.rgb(165, 236, 224))
+                "h:blue" -> BackgroundColorSpan(Color.rgb(172, 227, 252))
                 // Links to other notes look like links (accent color, underlined).
                 else -> if (span.optString(2).startsWith("n:")) {
                     result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
