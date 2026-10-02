@@ -102,7 +102,14 @@ class NoteWindow(Adw.ApplicationWindow):
 
     def on_key(self, _controller, keyval, _keycode, state):
         from .window import text_size_step
-        step = text_size_step(keyval) if state & Gdk.ModifierType.CONTROL_MASK else None
+        control = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if control and Gdk.keyval_to_lower(keyval) == Gdk.KEY_w:
+            self.close()
+            return True
+        if keyval == Gdk.KEY_F1 or (control and keyval == Gdk.KEY_question):
+            self.main.show_shortcuts()
+            return True
+        step = text_size_step(keyval) if control else None
         if step is None:
             return False
         self.main.change_text_size(step)
