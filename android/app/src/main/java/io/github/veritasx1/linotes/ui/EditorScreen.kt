@@ -550,9 +550,22 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
                             .clickable { editor.toggleInline(name) }.padding(horizontal = 14.dp, vertical = 8.dp))
                 }
             }
-            Text("Marker", fontSize = 15.sp, color = colors.label,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if ("h" in inline) colors.highlight else colors.surface)
-                    .clickable { editor.toggleInline("h") }.padding(horizontal = 10.dp, vertical = 9.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        // Highlight colors like in Apple's Notes; the active color is ringed, tapping it again removes it.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Markieren", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            for ((name, rgb) in HIGHLIGHTS) {
+                val active = name in inline
+                Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp))
+                    .background(if (active) colors.label else Color.Transparent).padding(if (active) 2.dp else 0.dp)
+                    .clip(RoundedCornerShape(15.dp)).background(Color(0xFF000000 or rgb.toLong()))
+                    .clickable { editor.setHighlight(name) })
+            }
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.surface).clickable { editor.setHighlight(null) },
+                contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.Close, colors.secondary, 10.dp)
+            }
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

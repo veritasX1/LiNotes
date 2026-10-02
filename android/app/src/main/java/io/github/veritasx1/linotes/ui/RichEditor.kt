@@ -167,6 +167,15 @@ class ParaSpan(
     }
 }
 
+/** Highlight marking in one of the colors of Apple's Notes ("h" = yellow, "h:pink", …). */
+class HighlightSpan(val name: String, color: Int) : BackgroundColorSpan(color)
+
+/** Highlight colors (RGB) like in Apple's Notes; "h" (yellow) is the original one and uses the theme color. */
+val HIGHLIGHTS = linkedMapOf(
+    "h" to 0xFFD83D, "h:orange" to 0xFF9F0A, "h:pink" to 0xFF70A8,
+    "h:purple" to 0xBF7AF0, "h:mint" to 0x4CD9C0, "h:blue" to 0x5AC8FA,
+)
+
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
 data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
@@ -561,7 +570,35 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         return false
     }
 
+    /** Mark the selection (or the next typed text) in one color; null removes the marking.
+     *  One color per character – a new one replaces the old, the same one again removes it. */
+    fun setHighlight(name: String?) {
+        val text = text ?: return
+        val start = selectionStart
+        val end = selectionEnd
+        if (start < 0) return
+        if (start == end) {
+            val current = (pendingInline ?: activeInline()).toMutableSet()
+            val same = name != null && name in current
+            current.removeAll(HIGHLIGHTS.keys)
+            if (name != null && !same) current.add(name)
+            pendingInline = current
+            onStyleChanged?.invoke()
+            return
+        }
+        busy = true
+        val everything = name != null && (start until end).all { index ->
+            text[index] == '\n' || text[index] == OBJECT || hasInline(text, name, index)
+        }
+        for (other in HIGHLIGHTS.keys) removeInline(text, other, start, end)
+        if (name != null && !everything) text.setSpan(inlineSpan(name), start, end, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
     fun toggleInline(name: String) {
+        if (name in HIGHLIGHTS) return setHighlight(name)
         val text = text ?: return
         val start = selectionStart
         val end = selectionEnd
@@ -740,7 +777,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     }
 
     companion object {
-        val INLINE = listOf("b", "i", "u", "s", "h")
+        val INLINE = listOf("b", "i", "u", "s") + HIGHLIGHTS.keys
 
         fun decodeImage(bytes: ByteArray, maxSize: Int = 1600): Bitmap? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -780,7 +817,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         "i" -> StyleSpan(Typeface.ITALIC)
         "u" -> UnderlineSpan()
         "s" -> StrikethroughSpan()
-        else -> BackgroundColorSpan(colors.highlight)
+        "h" -> HighlightSpan(name, colors.highlight)
+        else -> HighlightSpan(name, (0x73 shl 24) or (HIGHLIGHTS[name] ?: 0xFFD83D))
     }
 
     private fun matches(span: Any, name: String) = when (name) {
@@ -788,7 +826,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         "i" -> span is StyleSpan && span.style == Typeface.ITALIC
         "u" -> span is UnderlineSpan
         "s" -> span is StrikethroughSpan
-        else -> span is BackgroundColorSpan
+        else -> span is HighlightSpan && span.name == name
     }
 
     private fun hasInline(text: Spanned, name: String, index: Int): Boolean =
