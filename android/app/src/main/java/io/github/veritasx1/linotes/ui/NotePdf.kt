@@ -78,6 +78,13 @@ object NotePdf {
                 numbers.clear()
                 continue
             }
+            if (kind == "divider") {
+                pdf.need(16f)
+                pdf.y += 7f
+                pdf.rule(9f)
+                numbers.clear()
+                continue
+            }
             if (kind == "number") {
                 numbers[level] = (numbers[level] ?: 0) + 1
                 numbers.keys.filter { it > level }.forEach { numbers.remove(it) }

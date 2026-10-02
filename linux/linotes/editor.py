@@ -393,6 +393,13 @@ class NoteEditor(Gtk.TextView):
             self.emit_style()
             self.on_changed(buffer)
             return True
+        if line > 0 and buffer.get_iter_at_line(line - 1)[1].get_child_anchor() in self.anchors:
+            # Right after a divider, backspace removes it; after a photo it does nothing –
+            # text joined into an object line would get lost.
+            if self.is_divider(line - 1):
+                buffer.delete(buffer.get_iter_at_line(line - 1)[1], buffer.get_iter_at_line(line)[1])
+                self.on_changed(buffer)
+            return True
         return False
 
     def emit_style(self):
@@ -813,10 +820,12 @@ class NoteEditor(Gtk.TextView):
             anchor = start.get_child_anchor()
             if anchor is not None and anchor in self.anchors:
                 image = self.anchors[anchor]
-                if image.get("divider"):
-                    blocks.append({"t": "divider"})
-                    continue
-                blocks.append({"t": "image", "f": image["file"], "w": image.get("width")})
+                blocks.append({"t": "divider"} if image.get("divider")
+                              else {"t": "image", "f": image["file"], "w": image.get("width")})
+                # Text that ended up next to a divider or photo is kept as a line of its own.
+                extra = buffer.get_text(start, end, False).replace(OBJECT, "")
+                if extra.strip():
+                    blocks.append({"t": "body", "x": extra})
                 continue
             text = buffer.get_text(start, end, True).replace(OBJECT, "")
             block = {"t": self.line_style(line), "x": text}

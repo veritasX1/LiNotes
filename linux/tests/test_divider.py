@@ -35,6 +35,16 @@ def main():
     buffer.insert_at_cursor("zwei")
     assert [(b["t"], b.get("x")) for b in editor.to_blocks()] == [("title", "T"), ("body", "eins"), ("divider", None), ("body", "zwei")]
 
+    # Backspace at the start of the line below removes the divider, the text stays.
+    buffer.place_cursor(buffer.get_iter_at_line(3)[1])
+    assert editor.handle_backspace()
+    assert [(b["t"], b.get("x")) for b in editor.to_blocks()] == [("title", "T"), ("body", "eins"), ("body", "zwei")]
+    # Text that got onto an object line is not lost.
+    editor.load_blocks([{"t": "title", "x": "T"}, {"t": "divider"}])
+    buffer.place_cursor(buffer.get_end_iter())
+    buffer.insert_at_cursor("da")
+    assert [(b["t"], b.get("x")) for b in editor.to_blocks()][1:] == [("divider", None), ("body", "da")]
+
     # PDF with a divider.
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "t.pdf"
