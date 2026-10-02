@@ -386,3 +386,13 @@ button.font-serif { font-family: Serif; }
   color: alpha(currentColor, 0.72);
   font-style: italic;
 }
+
+/* Cards with pictures: cover on the board, thumbnails in the card dialog */
+.card-cover {
+  border-radius: 8px;
+  margin-bottom: 2px;
+}
+
+.card-thumb {
+  border-radius: 6px;
+}

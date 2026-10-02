@@ -1,6 +1,8 @@
 """Kanban board for tasks: columns with cards, drag and drop between them."""
 
 import datetime
+import mimetypes
+from pathlib import Path
 
 import gi
 
@@ -11,9 +13,23 @@ from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from . import model
 from . import smoothscroll
-from .dialogs import ask_text, confirm
+from .dialogs import ask_text, confirm, error_text, run_async
 from .icons import icon_button
 from .lists import share_label
+
+
+MAX_ATTACHMENT = 24 * 1024 * 1024    # as for notes: the server takes 25 MB with encryption
+
+
+def human_size(size):
+    for unit in ("Bytes", "KB", "MB"):
+        if size < 1024 or unit == "MB":
+            return f"{size:.0f} {unit}" if unit != "MB" else f"{size:.1f} MB".replace(".", ",")
+        size /= 1024
+
+
+def is_image(item):
+    return (item.get("m") or "").startswith("image/")
 
 
 LABEL_COLORS = [
@@ -60,6 +76,16 @@ class CardWidget(Gtk.Box):
             strip.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             self.append(strip)
 
+        files = data.get("files") or []
+        cover = next((item for item in files if is_image(item)), None)
+        if cover is not None:
+            # The first picture as a cover, as in Trello or Apple's Freeform.
+            from .notes import load_thumbnail
+            picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, height_request=96)
+            picture.add_css_class("card-cover")
+            load_thumbnail(board.sync, cover["f"], picture, 360, share=card.get("share"))
+            self.append(picture)
+
         title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True)
         title.add_css_class("card-title")
         mark = model.PRIORITY_MARKS.get(data.get("priority"))
@@ -95,6 +121,11 @@ class CardWidget(Gtk.Box):
             ident.add_css_class("card-id")
             ident.set_tooltip_text("Karten-ID – in Commits und Berichten zitieren")
             meta.append(ident)
+        if files:
+            clip = Gtk.Label(label=f"📎 {len(files)}", xalign=0)
+            clip.add_css_class("card-meta")
+            clip.set_tooltip_text("Anhänge: " + ", ".join(item.get("n", "Datei") for item in files))
+            meta.append(clip)
         spacer = Gtk.Box(hexpand=True)
         meta.append(spacer)
         if data.get("assignee"):
@@ -516,6 +547,14 @@ class CardDialog(Adw.Dialog):
         self.notes.set_bottom_margin(8)
         notes_group.add(self.notes)
         page.add(notes_group)
+        self.files_group = Adw.PreferencesGroup(title="Anhänge")
+        page.add(self.files_group)
+        self.file_rows = []
+        self.fill_files()
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.connect("drop", lambda _t, value, _x, _y: self.add_paths(
+            [Path(f.get_path()) for f in value.get_files() if f.get_path()]) or True)
+        page.add_controller(drop)
         dev = board.is_dev()
         dates = model.card_dates(card, dev)
         if dates:
@@ -549,6 +588,100 @@ class CardDialog(Adw.Dialog):
         self.set_child(view)
         self.connect("closed", lambda _dialog: self.save())
         self.deleted = False
+
+    # ---- attachments ---------------------------------------------
+
+    def card(self):
+        return self.sync.get(self.card_id)
+
+    def fill_files(self):
+        for row in self.file_rows:
+            self.files_group.remove(row)
+        self.file_rows = []
+        card = self.card()
+        if card is None:
+            return
+        share = card.get("share")
+        for index, item in enumerate(card["data"].get("files") or []):
+            row = Adw.ActionRow(title=GLib.markup_escape_text(item.get("n") or "Datei"),
+                                subtitle=human_size(item.get("b") or 0), activatable=True)
+            row.set_tooltip_text("Öffnen")
+            if is_image(item):
+                from .notes import load_thumbnail
+                # A fixed 40 px square (a Picture would take the image's own width).
+                picture = Gtk.Image(pixel_size=40)
+                picture.set_paintable = picture.set_from_paintable
+                picture.add_css_class("card-thumb")
+                load_thumbnail(self.sync, item["f"], picture, 80, share=share)
+                row.add_prefix(picture)
+            else:
+                row.add_prefix(Gtk.Image(icon_name="text-x-generic-symbolic", pixel_size=24))
+            remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Anhang entfernen")
+            remove.add_css_class("flat")
+            remove.update_property([Gtk.AccessibleProperty.LABEL], ["Anhang entfernen"])
+            remove.connect("clicked", lambda _b, i=index: self.remove_file(i))
+            row.add_suffix(remove)
+            row.connect("activated", lambda _r, it=item: self.board.window.open_attachment(it, share))
+            self.files_group.add(row)
+            self.file_rows.append(row)
+        add = Adw.ButtonRow(title="Datei oder Bild hinzufügen …", start_icon_name="mail-attachment-symbolic")
+        add.connect("activated", lambda _r: self.choose_files())
+        self.files_group.add(add)
+        self.file_rows.append(add)
+        self.files_group.set_description(None if card["data"].get("files") else
+                                         "Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen. Auch per Ziehen.")
+
+    def choose_files(self):
+        dialog = Gtk.FileDialog(title="Datei oder Bild anhängen")
+
+        def chosen(dialog, result):
+            try:
+                files = dialog.open_multiple_finish(result)
+            except GLib.Error:
+                return
+            self.add_paths([Path(f.get_path()) for f in files if f.get_path()])
+        dialog.open_multiple(self.board.window, None, chosen)
+
+    def add_paths(self, paths):
+        card = self.card()
+        if card is None:
+            return
+        share = card.get("share")
+        window = self.board.window
+        for path in paths:
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            if size > MAX_ATTACHMENT:
+                window.toast(f"„{path.name}“ ist zu groß (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB).")
+                continue
+            mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            content = path.read_bytes()
+
+            def done(reference, error, path=path, mime=mime, size=size):
+                if error is not None:
+                    window.toast(error_text(error))
+                    return
+                current = self.card()
+                if current is None:
+                    return
+                files = list(current["data"].get("files") or [])
+                files.append({"f": reference, "n": path.name, "m": mime, "b": size})
+                self.sync.update(self.card_id, files=files)
+                self.fill_files()
+            window.toast(f"„{path.name}“ wird angehängt …")
+            run_async(lambda content=content: self.sync.upload_file(content, share), done)
+
+    def remove_file(self, index):
+        card = self.card()
+        if card is None:
+            return
+        files = list(card["data"].get("files") or [])
+        if 0 <= index < len(files):
+            removed = files.pop(index)
+            self.sync.update(self.card_id, files=files)
+            self.fill_files()
+            self.board.window.toast(f"„{removed.get('n', 'Datei')}“ entfernt")
 
     def text_group(self, page, title, text, hint):
         group = Adw.PreferencesGroup(title=title, description=hint)
