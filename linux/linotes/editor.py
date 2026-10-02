@@ -339,6 +339,15 @@ class NoteEditor(Gtk.TextView):
         start, end, _with_break = self.line_bounds(line)
         text = buffer.get_text(start, end, False).replace(OBJECT, "")
 
+        if style == "body" and text.strip() in ("---", "—-", "–-", "—", "___"):
+            # "---" and Enter becomes a divider (Android keyboards turn "--" into a dash).
+            buffer.begin_user_action()
+            buffer.delete(start, end)
+            self.insert_divider()
+            buffer.end_user_action()
+            self.emit_style()
+            return True
+
         if style in LISTS and not text.strip():
             # An empty list item ends the list (or outdents first).
             if level:
@@ -689,6 +698,14 @@ class NoteEditor(Gtk.TextView):
 
         cr = snapshot.append_cairo(Graphene.Rect().init(visible.x, visible.y, visible.width, visible.height))
         for line in range(first, last + 1):
+            if self.is_divider(line):
+                start = self.buffer.get_iter_at_line(line)[1]
+                location = self.get_iter_location(start)
+                cr.set_source_rgba(color.red, color.green, color.blue, 0.22)
+                cr.rectangle(self.get_left_margin(), location.y + location.height / 2,
+                             self.get_width() - self.get_left_margin() - self.get_right_margin(), 1)
+                cr.fill()
+                continue
             style = self.line_style(line)
             if style not in LISTS:
                 continue
@@ -753,6 +770,8 @@ class NoteEditor(Gtk.TextView):
             if kind == "image":
                 anchor = buffer.create_child_anchor(end)
                 self.add_image(anchor, block.get("f"), block.get("w"))
+            elif kind == "divider":
+                self.add_divider(buffer.create_child_anchor(end))
             else:
                 block = model.refresh_note_links(block, self.note_title)
                 text = block.get("x", "")
@@ -774,9 +793,9 @@ class NoteEditor(Gtk.TextView):
             if index < len(blocks) - 1:
                 buffer.insert(buffer.get_end_iter(), "\n")
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
-            style = kind if kind in PARAGRAPHS else ("body" if kind != "image" else "body")
+            style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind == "image":
+            if kind in ("image", "divider"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
         buffer.end_irreversible_action()
@@ -794,6 +813,9 @@ class NoteEditor(Gtk.TextView):
             anchor = start.get_child_anchor()
             if anchor is not None and anchor in self.anchors:
                 image = self.anchors[anchor]
+                if image.get("divider"):
+                    blocks.append({"t": "divider"})
+                    continue
                 blocks.append({"t": "image", "f": image["file"], "w": image.get("width")})
                 continue
             text = buffer.get_text(start, end, True).replace(OBJECT, "")
@@ -866,7 +888,22 @@ class NoteEditor(Gtk.TextView):
         picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf))
         return False
 
-    def insert_image(self, file_id):
+    def add_divider(self, anchor):
+        """A divider is an object on a line of its own (like an image); the line is drawn
+        across the editor in do_snapshot_layer."""
+        spacer = Gtk.Box()
+        spacer.set_size_request(1, 14)
+        self.anchors[anchor] = {"divider": True, "picture": spacer}
+        self.add_child_at_anchor(spacer, anchor)
+
+    def is_divider(self, line):
+        anchor = self.buffer.get_iter_at_line(line)[1].get_child_anchor()
+        return anchor is not None and self.anchors.get(anchor, {}).get("divider", False)
+
+    def insert_divider(self):
+        self.insert_image(None, divider=True)
+
+    def insert_image(self, file_id, divider=False):
         buffer = self.buffer
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
         if not cursor.starts_line():
@@ -878,7 +915,10 @@ class NoteEditor(Gtk.TextView):
         self.loading = True
         anchor = buffer.create_child_anchor(cursor)
         self.loading = False
-        self.add_image(anchor, file_id)
+        if divider:
+            self.add_divider(anchor)
+        else:
+            self.add_image(anchor, file_id)
         line = cursor.get_line()
         after = buffer.get_iter_at_line(line)[1]
         after.forward_to_line_end()
@@ -886,6 +926,10 @@ class NoteEditor(Gtk.TextView):
         self.set_line_style(line, "body", 0, checked=False)
         start, _end, with_break = self.line_bounds(line)
         buffer.apply_tag_by_name("image", start, with_break)
+        if divider:
+            # Typing goes on below the line.
+            self.set_line_style(line + 1, "body", 0, checked=False)
+            buffer.place_cursor(buffer.get_iter_at_line(line + 1)[1])
         self.on_changed(buffer)
 
 
