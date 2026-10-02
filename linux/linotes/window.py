@@ -17,7 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import security_ui
+from . import security_ui, textsize
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -31,6 +31,17 @@ DECORATION_LAYOUT = "close,minimize,maximize:"
 # Like Apple: an unlocked note stays open for a few minutes of inactivity.
 AUTO_LOCK_SECONDS = 5 * 60
 TRASH_DAYS = 30
+
+def text_size_step(keyval):
+    """Ctrl with +, - or 0 (also on the number pad): +1, -1, 0 (normal); None otherwise."""
+    if keyval in (Gdk.KEY_plus, Gdk.KEY_KP_Add, Gdk.KEY_equal):
+        return 1
+    if keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+        return -1
+    if keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
+        return 0
+    return None
+
 
 HIGHLIGHT_MENU = [("h", "Gelb"), ("h:orange", "Orange"), ("h:pink", "Pink"), ("h:purple", "Lila"),
                   ("h:mint", "Mint"), ("h:blue", "Blau"), (None, "Markierung entfernen")]
@@ -148,7 +159,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         for key, label in model.NOTE_SORTS:
             section.append(label, f"win.sort-notes::{key}")
         sort_menu.append_section("Notizen sortieren nach", section)
-        self.sort_button = icon_menu_button("more", "Sortieren", Gtk.PopoverMenu.new_from_model(sort_menu))
+        # Like Apple's default text size: per device, Ctrl+Plus/Minus/0.
+        sizes = Gio.Menu()
+        for level, (_factor, label) in enumerate(textsize.SIZES):
+            sizes.append(label, f"win.text-size::{level}")
+        sort_menu.append_section("Textgröße (Strg + / Strg −)", sizes)
+        self.sort_button = icon_menu_button("more", "Sortieren und Textgröße", Gtk.PopoverMenu.new_from_model(sort_menu))
         header.pack_start(self.sort_button)
         self.delete_button = icon_button("trash", "Löschen")
         self.delete_button.set_action_name("win.delete-note")
@@ -1523,10 +1539,26 @@ class LiNotesWindow(Adw.ApplicationWindow):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, function=callback: function())
             self.add_action(action)
+        self.text_size_action = Gio.SimpleAction.new_stateful(
+            "text-size", GLib.VariantType.new("s"), GLib.Variant.new_string(str(textsize.load())))
+        self.text_size_action.connect("activate", lambda _action, value: self.set_text_size(int(value.get_string())))
+        self.add_action(self.text_size_action)
+        textsize.apply(textsize.load())
         current = self.sync.settings().get("note_sort", "modified")
         self.sort_action = Gio.SimpleAction.new_stateful("sort-notes", GLib.VariantType.new("s"), GLib.Variant.new_string(current))
         self.sort_action.connect("activate", lambda action, value: self.sort_notes(value.get_string()))
         self.add_action(self.sort_action)
+
+    def set_text_size(self, level):
+        level = max(0, min(len(textsize.SIZES) - 1, level))
+        textsize.save(level)
+        textsize.apply(level)
+        self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def change_text_size(self, step):
+        """Ctrl+Plus / Ctrl+Minus (step 0: back to normal)."""
+        current = int(self.text_size_action.get_state().get_string())
+        self.set_text_size(current + step if step else textsize.NORMAL)
 
     def sort_notes(self, order):
         self.sort_action.set_state(GLib.Variant.new_string(order))
@@ -1541,6 +1573,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
         alt = bool(state & Gdk.ModifierType.ALT_MASK)
         key = Gdk.keyval_to_lower(keyval)
+        text_size = text_size_step(keyval)
+        if text_size is not None:
+            self.change_text_size(text_size)
+            return True
         if key == Gdk.KEY_n and shift:
             self.new_folder()
             return True
