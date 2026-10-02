@@ -26,6 +26,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** The server takes 25 MB including encryption (as on Ubuntu). */
+const val MAX_ATTACHMENT = 24 * 1024 * 1024
+
 class MainActivity : FragmentActivity() {
 
     private lateinit var state: AppState
@@ -38,6 +41,33 @@ class MainActivity : FragmentActivity() {
         val mime = contentResolver.getType(uri) ?: "image/jpeg"
         val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@registerForActivityResult
         callback(bytes, mime)
+    }
+
+    // Attachments (like Apple: PDFs and other files): name and size come from the provider.
+    private var pendingFile: ((String, String, ByteArray) -> Unit)? = null
+    private val filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val callback = pendingFile ?: return@registerForActivityResult
+        pendingFile = null
+        if (uri == null) return@registerForActivityResult
+        var name = "Datei"
+        var size = -1L
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = cursor.getString(it) ?: name }
+                cursor.getColumnIndex(android.provider.OpenableColumns.SIZE).takeIf { it >= 0 }?.let { if (!cursor.isNull(it)) size = cursor.getLong(it) }
+            }
+        }
+        if (size > MAX_ATTACHMENT) {
+            state.toastLater("„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
+            return@registerForActivityResult
+        }
+        val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+        val bytes = try { contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (error: Exception) { null }
+        if (bytes == null || bytes.size > MAX_ATTACHMENT) {
+            state.toastLater(if (bytes == null) "„$name“ ließ sich nicht lesen." else "„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
+            return@registerForActivityResult
+        }
+        callback(name, mime, bytes)
     }
 
     // Photo straight from the camera: the camera app writes into a file we hand it.
@@ -108,6 +138,20 @@ class MainActivity : FragmentActivity() {
                     pendingPhoto = file to callback
                     photo.launch(androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file))
                 }
+            }
+        }
+        state.pickFile = { callback ->
+            pendingFile = callback
+            filePicker.launch(arrayOf("*/*"))
+        }
+        state.openFile = { file, mime ->
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file)
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            try {
+                startActivity(android.content.Intent.createChooser(intent, file.name))
+            } catch (error: android.content.ActivityNotFoundException) {
+                state.toastLater("Keine App zum Öffnen von „${file.name}“.")
             }
         }
         state.authenticate = { title, done -> authenticate(title, done) }

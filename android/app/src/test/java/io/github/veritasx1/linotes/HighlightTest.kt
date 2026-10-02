@@ -155,4 +155,22 @@ class HighlightTest {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         assertEquals("Miete * 12 = 5400", editor.toBlocks()[2].optString("x"))
     }
+
+    @Test
+    fun attachedFilesLoadSaveAndStayApart() {
+        // Karte 1ed7564d: like Ubuntu's test_attachments.py.
+        val file = JSONObject().put("t", "file").put("f", "local:abc").put("n", "Bericht.pdf").put("m", "application/pdf").put("b", 1258291)
+        val editor = editor(JSONObject().put("t", "title").put("x", "T"), JSONObject(file.toString()), body("danach"))
+        assertEquals(file.toString(), editor.toBlocks()[1].toString())
+        assertEquals("PDF-Dokument · 1,2 MB", io.github.veritasx1.linotes.ui.fileDetails(file))
+        val other = editor(JSONObject().put("t", "title").put("x", "T"), body("eins"))
+        other.setSelection(other.text!!.length)
+        other.insertFile(JSONObject(file.toString()).put("n", "Liste.xlsx").put("m", "application/vnd.ms-excel").put("b", 2048))
+        type(other, "zwei")
+        assertEquals(listOf("title:T", "body:eins", "file:", "body:zwei"), kinds(other))
+        // Backspace at the start of "zwei" does not merge it into the file line.
+        val zwei = other.text!!.indexOf("zwei")
+        other.text!!.delete(zwei - 1, zwei)
+        assertEquals(listOf("title:T", "body:eins", "file:", "body:zwei"), kinds(other))
+    }
 }

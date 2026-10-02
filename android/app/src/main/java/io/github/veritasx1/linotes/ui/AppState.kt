@@ -49,6 +49,10 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     private var vaultUsed = 0L
     var pickImage: ((ByteArray, String) -> Unit) -> Unit = {}
     var takePhoto: ((ByteArray, String) -> Unit) -> Unit = {}
+    /** Any file to attach: (name, mime, content), or a message if it is too big. */
+    var pickFile: ((String, String, ByteArray) -> Unit) -> Unit = {}
+    /** Open a decrypted attachment with the app that handles its type. */
+    var openFile: (file: java.io.File, mime: String) -> Unit = { _, _ -> }
 
     // Platform hooks, filled in by MainActivity.
     var authenticate: (title: String, done: (Boolean) -> Unit) -> Unit = { _, done -> done(false) }

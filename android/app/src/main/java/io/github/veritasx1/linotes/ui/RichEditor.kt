@@ -248,6 +248,35 @@ class FontSpan(val name: String, family: String) : android.text.style.TypefaceSp
 /** A result filled in after "=" (accent color until the note is opened again). */
 class CalcSpan(color: Int) : android.text.style.ForegroundColorSpan(color)
 
+/** An attached file (block {"t": "file", "f", "n", "m", "b"}) drawn as a card like in Notes. */
+class FileBlockSpan(val block: JSONObject, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
+
+/** "PDF-Dokument · 1,2 MB" – the same wording as on Ubuntu where possible. */
+fun fileDetails(block: JSONObject): String {
+    val size = block.optLong("b")
+    val amount = when {
+        size >= 1024 * 1024 -> String.format(java.util.Locale.GERMANY, "%.1f MB", size / 1024.0 / 1024.0)
+        size >= 1024 -> "${Math.round(size / 1024.0)} KB"
+        else -> "$size Bytes"
+    }
+    val mime = block.optString("m")
+    val name = block.optString("n")
+    val kind = when {
+        mime == "application/pdf" -> "PDF-Dokument"
+        mime.startsWith("image/") -> "Bild"
+        mime.startsWith("audio/") -> "Audio"
+        mime.startsWith("video/") -> "Video"
+        mime.startsWith("text/") -> "Textdokument"
+        "wordprocessing" in mime || "msword" in mime || "opendocument.text" in mime -> "Textdokument"
+        "spreadsheet" in mime || "ms-excel" in mime -> "Tabelle"
+        "presentation" in mime || "powerpoint" in mime -> "Präsentation"
+        "zip" in mime -> "ZIP-Archiv"
+        '.' in name -> name.substringAfterLast('.').uppercase() + "-Datei"
+        else -> "Datei"
+    }
+    return "$kind · $amount"
+}
+
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
 data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
@@ -279,6 +308,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     /** ">>" was typed: the screen offers notes to link to. */
     var onLinkRequested: (() -> Unit)? = null
     var onOpenNote: ((String) -> Unit)? = null
+    var onOpenFile: ((JSONObject) -> Unit)? = null
+    /** First page of an attached PDF for its card (null: no preview). */
+    var loadFilePreview: ((JSONObject, (Bitmap?) -> Unit) -> Unit)? = null
     /** Where the pending ">>" starts, or -1. */
     private var linkStart = -1
 
@@ -544,6 +576,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             when {
                 text.getSpans(start, paragraphEnd(text, start), DividerSpan::class.java).isNotEmpty() -> "divider"
                 text.getSpans(start, paragraphEnd(text, start), ImageBlockSpan::class.java).isNotEmpty() -> "image"
+                text.getSpans(start, paragraphEnd(text, start), FileBlockSpan::class.java).isNotEmpty() -> "image"
                 else -> styles[index].type
             }
         }
@@ -682,6 +715,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val text = text ?: return false
         if (event.eventTime - event.downTime > android.view.ViewConfiguration.getLongPressTimeout()) return false
         val offset = getOffsetForPosition(event.x, event.y)
+        text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FileBlockSpan::class.java).firstOrNull {
+            val start = text.getSpanStart(it)
+            val line = layout?.getLineForOffset(start)
+            line != null && line == layout?.getLineForVertical(event.y.toInt() - totalPaddingTop + scrollY)
+        }?.let { onOpenFile?.invoke(JSONObject(it.block.toString())); return true }
         text.getSpans(offset, offset, NoteLinkSpan::class.java).firstOrNull {
             offset in text.getSpanStart(it) until text.getSpanEnd(it)
         }?.let { onOpenNote?.invoke(it.noteId); return true }
@@ -853,6 +891,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (type == "divider") {
                 builder.append(OBJECT)
                 builder.setSpan(dividerSpan(), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else if (type == "file") {
+                builder.append(OBJECT)
+                val span = FileBlockSpan(JSONObject(block.toString()), fileCard(block, null))
+                builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                loadPreview(span)
             } else if (type == "image") {
                 builder.append(OBJECT)
                 val fileId = block.optString("f")
@@ -878,7 +921,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image" || type == "divider") "body" else type
+            val paraType = if (type == "image" || type == "divider" || type == "file") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
             folds[index]?.let { hidden ->
@@ -914,6 +957,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val end = paragraphEnd(text, start)
             // Text that ended up next to a divider or photo is kept as a line of its own.
             val extra = text.substring(start, end).replace(OBJECT.toString(), "").replace(PLACEHOLDER.toString(), "")
+            val file = text.getSpans(start, end, FileBlockSpan::class.java).firstOrNull()
+            if (file != null) {
+                result.add(JSONObject(file.block.toString()))
+                if (extra.isNotBlank()) result.add(JSONObject().put("t", "body").put("x", extra))
+                continue
+            }
             if (text.getSpans(start, end, DividerSpan::class.java).isNotEmpty()) {
                 result.add(JSONObject().put("t", "divider"))
                 if (extra.isNotBlank()) result.add(JSONObject().put("t", "body").put("x", extra))
@@ -1021,6 +1070,84 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         busy = false
         setSelection((at + 2).coerceAtMost(text.length))
         onEdited?.invoke()
+    }
+
+    // --- attachments -------------------------------------------
+
+    /** Attach a file on a line of its own at the cursor; typing goes on below it. */
+    fun insertFile(block: JSONObject) {
+        val text = text ?: return
+        var at = selectionStart.coerceAtLeast(0)
+        busy = true
+        if (at > 0 && text[at - 1] != '\n') {
+            at = paragraphEnd(text, at)
+            text.insert(at, "\n")
+            at += 1
+        }
+        text.insert(at, "$OBJECT\n")
+        val span = FileBlockSpan(block, fileCard(block, null))
+        text.setSpan(span, at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        normalize(text)
+        busy = false
+        setSelection((at + 2).coerceAtMost(text.length))
+        loadPreview(span)
+        onEdited?.invoke()
+    }
+
+    private fun loadPreview(span: FileBlockSpan) {
+        if (span.block.optString("m") != "application/pdf") return
+        val loader = loadFilePreview ?: return
+        loader(span.block) { bitmap ->
+            if (bitmap == null) return@loader
+            post {
+                val text = text ?: return@post
+                val start = text.getSpanStart(span)
+                if (start < 0) return@post
+                busy = true
+                text.removeSpan(span)
+                text.setSpan(FileBlockSpan(span.block, fileCard(span.block, bitmap)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                busy = false
+                invalidate()
+            }
+        }
+    }
+
+    /** The card: rounded box, preview or document symbol, name and details. */
+    private fun fileCard(block: JSONObject, preview: Bitmap?): Drawable {
+        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 }?.coerceAtMost((420 * density).toInt()) ?: (320 * density).toInt()
+        val height = (76 * density).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val radius = 10 * density
+        val box = android.graphics.RectF(density, density, width - density, height - density)
+        canvas.drawRoundRect(box, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (colors.label and 0x00FFFFFF) or 0x10000000 })
+        canvas.drawRoundRect(box, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeWidth = density; color = (colors.label and 0x00FFFFFF) or 0x26000000 })
+        val iconBox = android.graphics.RectF(12 * density, 10 * density, 56 * density, height - 10 * density)
+        if (preview != null) {
+            val scale = minOf(iconBox.width() / preview.width, iconBox.height() / preview.height)
+            val w = preview.width * scale
+            val h = preview.height * scale
+            val target = android.graphics.RectF(iconBox.centerX() - w / 2, iconBox.centerY() - h / 2, iconBox.centerX() + w / 2, iconBox.centerY() + h / 2)
+            canvas.drawRect(target, Paint().apply { color = 0xFFFFFFFF.toInt() })
+            canvas.drawBitmap(preview, null, target, Paint(Paint.FILTER_BITMAP_FLAG))
+        } else {
+            // A sheet with a folded corner, the extension on it.
+            val sheet = android.graphics.RectF(iconBox.left + 6 * density, iconBox.top, iconBox.right - 6 * density, iconBox.bottom)
+            val paper = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent }
+            canvas.drawRoundRect(sheet, 4 * density, 4 * density, paper)
+            val ext = block.optString("n").substringAfterLast('.', "").uppercase().take(4)
+            val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); textSize = 10 * density; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+            canvas.drawText(ext, sheet.centerX(), sheet.centerY() + 4 * density, label)
+        }
+        val textLeft = 68 * density
+        val maxText = width - textLeft - 12 * density
+        val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
+        val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
+        val name = android.text.TextUtils.ellipsize(block.optString("n", "Datei"), title, maxText, android.text.TextUtils.TruncateAt.MIDDLE).toString()
+        canvas.drawText(name, textLeft, height / 2f - 3 * density, title)
+        canvas.drawText(fileDetails(block), textLeft, height / 2f + 17 * density, sub)
+        return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
 
     // --- images ------------------------------------------------
