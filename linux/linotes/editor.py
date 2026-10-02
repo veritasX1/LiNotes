@@ -19,7 +19,7 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, GLib, GObject, Graphene, Gtk, Pango
 
-from . import model
+from . import calc, model
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -151,6 +151,8 @@ class NoteEditor(Gtk.TextView):
         tag("link", foreground_rgba=rgba(0.72, 0.49, 0.0, 1.0), underline=Pango.Underline.SINGLE)
         tag("image", pixels_above_lines=6, pixels_below_lines=6)
         # Collapsed sections: the heading line carries "collapsed", its content is hidden by "folded".
+        # A result filled in after "=" (accent color until the note is opened again).
+        tag("calc", foreground_rgba=rgba(*ACCENT), weight=Pango.Weight.SEMIBOLD)
         tag("collapsed")
         tag("folded", invisible=True)
         self.update_margins()
@@ -271,6 +273,10 @@ class NoteEditor(Gtk.TextView):
         if self.pending_alignment and self.pending_alignment[0] == line:
             self.set_alignment(self.pending_alignment[1], range(line, end_line + 1))
         self.pending_alignment = None
+        if text == "=" and location.ends_line():
+            # Like Apple's Math Notes: "12,5 * 4 =" gets its result.
+            mark = buffer.create_mark(None, location, False)
+            GLib.idle_add(lambda: self.insert_calculation(mark) and False)
         if text == ">" and not self.link_start:
             # ">>" links to another note, like in Apple's Notes.
             before = location.copy()
@@ -722,6 +728,27 @@ class NoteEditor(Gtk.TextView):
             buffer.insert_at_cursor(" ")
         buffer.end_user_action()
         self.grab_focus()
+
+    def insert_calculation(self, mark):
+        buffer = self.buffer
+        at = buffer.get_iter_at_mark(mark)
+        buffer.delete_mark(mark)
+        cursor = buffer.get_iter_at_mark(buffer.get_insert())
+        if not at.equal(cursor) or not at.ends_line():
+            return False  # typing went on meanwhile
+        line = at.get_line()
+        start = buffer.get_iter_at_line(line)[1]
+        text = buffer.get_text(start, at, False)
+        earlier = [buffer.get_text(*self.line_bounds(number)[:2], False) for number in range(line)]
+        result = calc.result_for(text, earlier)
+        if result is None:
+            return False
+        if text[:-1].endswith(" "):
+            result = " " + result
+        offset = at.get_offset()
+        buffer.insert(at, result)
+        buffer.apply_tag_by_name("calc", buffer.get_iter_at_offset(offset), buffer.get_iter_at_offset(offset + len(result)))
+        return False
 
     def start_link(self):
         """Ctrl+K: like typing ">>" – choose a note to link to."""
