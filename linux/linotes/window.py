@@ -11,8 +11,9 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
+gi.require_version("Pango", "1.0")
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import model, vault
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
@@ -186,6 +187,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_list.search.connect("search-changed", lambda _entry: self.show_notes())
         self.note_pane = NotePane(self.sync)
         self.note_pane.editor.connect("edited", lambda _editor: self.save_current())
+        self.note_pane.editor.note_title = self.link_title
+        self.note_pane.editor.connect("link-requested", lambda _editor: self.show_link_choice())
+        self.note_pane.editor.connect("open-note", lambda _editor, note_id: self.open_linked_note(note_id))
         self.note_pane.connect("unlock-requested", lambda _pane: self.unlock_current())
         self.note_pane.connect("restore-requested", lambda _pane: self.restore_current())
         paned.set_start_child(self.note_list)
@@ -574,6 +578,92 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.editing_blocks = blocks
         self.note_pane.show_note(note, blocks, editable=not note["data"].get("trashed"))
         self.update_note_actions()
+
+    # --- links between notes (">>", like Apple's Notes) ---
+
+    def link_title(self, note_id):
+        note = self.sync.get(note_id)
+        return model.note_title(note) if note and not note["data"].get("trashed") else None
+
+    def show_link_choice(self):
+        """After ">>": a list of notes at the cursor. Typing on filters it, ↑/↓ and
+        Enter pick one, Esc (or leaving the line) keeps the ">>" as text."""
+        editor = self.note_pane.editor
+        listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.BROWSE)
+        listbox.add_css_class("navigation-sidebar")
+        popover = Gtk.Popover(autohide=False, has_arrow=True, position=Gtk.PositionType.BOTTOM, can_focus=False)
+        popover.set_child(Gtk.ScrolledWindow(child=listbox, propagate_natural_height=True, propagate_natural_width=True,
+                                             max_content_height=320, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        listbox.set_size_request(300, -1)
+        popover.set_parent(editor)
+        found = []
+
+        def close(note=None):
+            editor.link_keys = None
+            editor.buffer.disconnect(handler)
+            popover.popdown()
+            popover.unparent()
+            editor.finish_link(note["id"] if note else None, model.note_title(note) if note else None)
+
+        def fill():
+            query = editor.pending_link_query()
+            if query is None or len(query) > 60:
+                GLib.idle_add(lambda: close() and False)
+                return
+            found[:] = model.link_choices(self.sync.objects("note"), exclude=self.current_note, query=query)
+            while (row := listbox.get_row_at_index(0)) is not None:
+                listbox.remove(row)
+            for note in found:
+                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
+                box.append(Gtk.Label(label=model.note_title(note), xalign=0, ellipsize=Pango.EllipsizeMode.END))
+                folder = self.sync.get(note["data"].get("folder") or "")
+                if folder:
+                    place = Gtk.Label(label=folder["data"].get("name", "Ordner"), xalign=0)
+                    place.add_css_class("dim-label")
+                    place.add_css_class("caption")
+                    box.append(place)
+                listbox.append(box)
+            if not found:
+                listbox.append(Gtk.Label(label="Keine passende Notiz", margin_top=6, margin_bottom=6, sensitive=False))
+            else:
+                listbox.select_row(listbox.get_row_at_index(0))
+            popover.set_pointing_to(editor.cursor_rect())
+
+        def keys(keyval):
+            row = listbox.get_selected_row()
+            index = row.get_index() if row else 0
+            if keyval in (Gdk.KEY_Down, Gdk.KEY_Up) and found:
+                index = max(0, min(len(found) - 1, index + (1 if keyval == Gdk.KEY_Down else -1)))
+                listbox.select_row(listbox.get_row_at_index(index))
+                return True
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab) and found:
+                close(found[index])
+                return True
+            if keyval == Gdk.KEY_Escape:
+                close()
+                return True
+            return False
+
+        listbox.connect("row-activated", lambda _list, row: found and close(found[row.get_index()]))
+        handler = editor.buffer.connect_after("changed", lambda _buffer: fill())
+        editor.link_keys = keys
+        fill()
+        popover.popup()
+
+    def open_linked_note(self, note_id):
+        note = self.sync.get(note_id)
+        if note is None or note["data"].get("trashed"):
+            self.toast("Die verlinkte Notiz gibt es nicht mehr.")
+            return
+        self.note_pane.editor.flush()
+        if self.stack.get_visible_child_name() != "notes" or note_id not in {n["id"] for n in self.notes_for(self.current_key)[0]}:
+            self.sidebar.select("all", emit=False)
+            self.current_key = "all"
+            self.stack.set_visible_child_name("notes")
+            self.show_note_tools(True)
+        self.open_note(note_id)
+        self.show_notes(keep_note=True)
+        self.show_note_narrow()
 
     def save_current(self):
         note = self.sync.get(self.current_note) if self.current_note else None
