@@ -63,6 +63,63 @@ def note_tags(note):
     return tags
 
 
+NOTE_LINK = "n:"
+
+
+def link_target(span_name):
+    """The note id of a note link span ("n:<id>"), otherwise None."""
+    return span_name[len(NOTE_LINK):] if isinstance(span_name, str) and span_name.startswith(NOTE_LINK) else None
+
+
+def refresh_note_links(block, title_of):
+    """Note links show the current title of the linked note (like Apple's Notes).
+    title_of(id) returns the title or None (note gone – the old text stays).
+    Returns the block itself when nothing changed, otherwise an updated copy."""
+    spans = block.get("s") or []
+    links = []
+    for span in spans:
+        try:
+            start, end, name = span
+        except ValueError:
+            continue
+        target = link_target(name)
+        if target:
+            title = title_of(target)
+            text = block.get("x", "")
+            if title and title != text[int(start):int(end)]:
+                links.append((int(start), int(end), title))
+    if not links:
+        return block
+    text = block.get("x", "")
+    new_spans = [list(span) for span in spans if len(span) == 3]
+    # Back to front, so the offsets of earlier links stay valid.
+    for start, end, title in sorted(links, reverse=True):
+        text = text[:start] + title + text[end:]
+        delta = len(title) - (end - start)
+        for span in new_spans:
+            if span[0] >= end:
+                span[0] += delta
+            elif span[0] > start:
+                span[0] = start
+            if span[1] >= end:
+                span[1] += delta
+            elif span[1] > start:
+                span[1] = start + len(title)
+    updated = dict(block)
+    updated["x"] = text
+    updated["s"] = sorted(span for span in new_spans if span[0] < span[1])
+    return updated
+
+
+def link_choices(notes, exclude=None, query="", limit=8):
+    """Notes offered after typing ">>": newest first, filtered by the typed text."""
+    query = query.strip().lower()
+    found = [n for n in notes if n["id"] != exclude and not n["data"].get("trashed")
+             and (not query or query in note_title(n).lower())]
+    found.sort(key=lambda n: -modified(n))
+    return found[:limit]
+
+
 def note_text(note):
     return "\n".join(block.get("x", "") for block in note_blocks(note))
 

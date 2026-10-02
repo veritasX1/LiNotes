@@ -256,6 +256,9 @@ NOTE_MARKUP = {"b": ("<b>", "</b>"), "i": ("<i>", "</i>"), "u": ("<u>", "</u>"),
                "h": ("<span background='#FFE680'>", "</span>")}
 
 
+NOTE_LINK_MARKUP = ("<span foreground='#B87D00' underline='single'>", "</span>")
+
+
 def block_markup(block):
     """Pango markup of one line with its bold/italic/… spans."""
     text = block.get("x", "")
@@ -265,9 +268,11 @@ def block_markup(block):
             start, end, name = span
         except ValueError:
             continue
-        if name in NOTE_MARKUP and int(start) < int(end):
-            opening.setdefault(int(start), []).append(NOTE_MARKUP[name][0])
-            closing.setdefault(min(int(end), len(text)), []).insert(0, NOTE_MARKUP[name][1])
+        # Links to other notes look like links (accent color, underlined).
+        markup = NOTE_MARKUP.get(name) or (NOTE_LINK_MARKUP if isinstance(name, str) and name.startswith("n:") else None)
+        if markup and int(start) < int(end):
+            opening.setdefault(int(start), []).append(markup[0])
+            closing.setdefault(min(int(end), len(text)), []).insert(0, markup[1])
     out = []
     for index in range(len(text) + 1):
         out += closing.get(index, [])

@@ -19,6 +19,8 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, GLib, GObject, Graphene, Gtk, Pango
 
+from . import model
+
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
               "bullet", "dash", "number", "check")
@@ -40,6 +42,9 @@ class NoteEditor(Gtk.TextView):
     __gsignals__ = {
         "edited": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "style-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        # ">>" was typed: the window offers notes to link to.
+        "link-requested": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "open-note": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
     def __init__(self, image_loader=None):
@@ -56,6 +61,11 @@ class NoteEditor(Gtk.TextView):
         self.loading = False
         self.auto_sort_checked = False
         self.typing_inline = None
+        # Title of a note by id (None if it is gone) – note links show the current title.
+        self.note_title = lambda _note_id: None
+        self.link_start = None
+        # While the note choice after ">>" is open, it gets ↑/↓/Enter/Esc first.
+        self.link_keys = None
 
         buffer = self.get_buffer()
         self.buffer = buffer
@@ -222,12 +232,19 @@ class NoteEditor(Gtk.TextView):
             buffer.remove_tag_by_name(name, start, location)
         for name in self.insert_inline:
             buffer.apply_tag_by_name(name, start, location)
+        self.trim_note_links(start, location)
         for number in range(line, end_line + 1):
             if number == line:
                 self.set_line_style(number, style, level)
             else:
                 self.set_line_style(number, style if style not in ("title",) else "body", level, checked=False)
         self.pending_line_style = None
+        if text == ">" and not self.link_start:
+            # ">>" links to another note, like in Apple's Notes.
+            before = location.copy()
+            if before.backward_chars(2) and buffer.get_text(before, location, False) == ">>":
+                self.link_start = buffer.create_mark(None, before, True)
+                GLib.idle_add(lambda: self.emit("link-requested") and False)
 
     def on_changed(self, buffer):
         self.queue_draw()
@@ -259,6 +276,9 @@ class NoteEditor(Gtk.TextView):
         control = bool(state & Gdk.ModifierType.CONTROL_MASK)
         shift = bool(state & Gdk.ModifierType.SHIFT_MASK)
         key = Gdk.keyval_to_lower(keyval)
+
+        if self.link_keys and self.link_keys(keyval):
+            return True
 
         if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and not control:
             return self.handle_return()
@@ -473,9 +493,14 @@ class NoteEditor(Gtk.TextView):
             buffer.apply_tag_by_name("link", buffer.get_iter_at_offset(match.start()), buffer.get_iter_at_offset(match.end()))
 
     def link_at(self, x, y):
-        """The web address under the pointer (widget coordinates), or None."""
+        """The web address under the pointer (widget coordinates), "n:<id>" for a
+        link to a note, or None."""
         buffer_x, buffer_y = self.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
         found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
+        if found:
+            for tag in iterator.get_tags():
+                if model.link_target(tag.get_property("name")):
+                    return tag.get_property("name")
         tag = self.get_buffer().get_tag_table().lookup("link")
         if not found or not iterator.has_tag(tag):
             return None
@@ -486,6 +511,88 @@ class NoteEditor(Gtk.TextView):
         url = self.get_buffer().get_text(start, end, True)
         return url if url.startswith(("http://", "https://")) else "https://" + url
 
+    # ========================================================
+    # LINKS TO OTHER NOTES (">>")
+    # ========================================================
+
+    def note_link_tag(self, note_id):
+        """One tag per linked note, named like the saved span ("n:<id>")."""
+        table = self.buffer.get_tag_table()
+        tag = table.lookup(model.NOTE_LINK + note_id)
+        if tag is None:
+            tag = Gtk.TextTag(name=model.NOTE_LINK + note_id)
+            tag.set_property("foreground-rgba", rgba(0.72, 0.49, 0.0, 1.0))
+            tag.set_property("underline", Pango.Underline.SINGLE)
+            table.add(tag)
+        return tag
+
+    def trim_note_links(self, start, end):
+        """Typed text belongs to a note link only inside it, not at its edges."""
+        names = set()
+        probe = start.copy()
+        while probe.compare(end) < 0:
+            names.update(tag.get_property("name") for tag in probe.get_tags())
+            probe.forward_char()
+        for name in names:
+            if not model.link_target(name):
+                continue
+            tag = self.buffer.get_tag_table().lookup(name)
+            before = start.copy()
+            inside = before.backward_char() and before.has_tag(tag) and end.has_tag(tag)
+            if not inside:
+                self.buffer.remove_tag(tag, start, end)
+
+    def pending_link_query(self):
+        """The text typed after ">>" while the note choice is open (None: cursor left it)."""
+        if not self.link_start:
+            return None
+        start = self.buffer.get_iter_at_mark(self.link_start)
+        start.forward_chars(2)
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        if cursor.compare(start) < 0 or cursor.get_line() != start.get_line():
+            return None
+        return self.buffer.get_text(start, cursor, False)
+
+    def finish_link(self, note_id=None, title=None):
+        """Replace ">>" (and what was typed after it) with a link to the note,
+        or just forget the pending ">>" when note_id is None."""
+        mark = self.link_start
+        self.link_start = None
+        if mark is None:
+            return
+        buffer = self.buffer
+        start = buffer.get_iter_at_mark(mark)
+        buffer.delete_mark(mark)
+        if note_id is None:
+            return
+        end = buffer.get_iter_at_mark(buffer.get_insert())
+        if end.compare(start) < 0 or end.get_line() != start.get_line():
+            end = start.copy()
+            end.forward_chars(2)
+        offset = start.get_offset()
+        buffer.begin_user_action()
+        buffer.delete(start, end)
+        buffer.insert(buffer.get_iter_at_offset(offset), title)
+        buffer.apply_tag(self.note_link_tag(note_id), buffer.get_iter_at_offset(offset),
+                         buffer.get_iter_at_offset(offset + len(title)))
+        after = buffer.get_iter_at_offset(offset + len(title))
+        if after.get_char() == " ":
+            after.forward_char()
+            buffer.place_cursor(after)
+        else:
+            buffer.place_cursor(after)
+            buffer.insert_at_cursor(" ")
+        buffer.end_user_action()
+        self.grab_focus()
+
+    def cursor_rect(self):
+        """Where the cursor is, in widget coordinates (for the note choice popover)."""
+        location = self.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
+        x, y = self.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, location.x, location.y)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = x, y, max(1, location.width), location.height
+        return rect
+
     def on_motion(self, _controller, x, y):
         self.set_cursor_from_name("pointer" if self.link_at(x, y) else "text")
 
@@ -494,7 +601,10 @@ class NoteEditor(Gtk.TextView):
         url = self.link_at(x, y) if n_press == 1 else None
         if url:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            Gtk.UriLauncher.new(url).launch(self.get_root(), None, None)
+            if model.link_target(url):
+                self.emit("open-note", model.link_target(url))
+            else:
+                Gtk.UriLauncher.new(url).launch(self.get_root(), None, None)
             return
         buffer_x, buffer_y = self.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
         found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
@@ -604,6 +714,7 @@ class NoteEditor(Gtk.TextView):
                 anchor = buffer.create_child_anchor(end)
                 self.add_image(anchor, block.get("f"), block.get("w"))
             else:
+                block = model.refresh_note_links(block, self.note_title)
                 text = block.get("x", "")
                 buffer.insert(end, text)
                 base = line_start_offset
@@ -612,7 +723,9 @@ class NoteEditor(Gtk.TextView):
                         start_offset, end_offset, name = span
                     except ValueError:
                         continue
-                    if name in INLINE:
+                    if name in INLINE or model.link_target(name):
+                        if model.link_target(name):
+                            self.note_link_tag(model.link_target(name))
                         buffer.apply_tag_by_name(
                             name,
                             buffer.get_iter_at_offset(base + int(start_offset)),
@@ -663,7 +776,9 @@ class NoteEditor(Gtk.TextView):
         result = []
         base = start.get_offset()
         table = self.buffer.get_tag_table()
-        for name in INLINE:
+        links = []
+        table.foreach(lambda tag: links.append(tag.get_property("name")) if model.link_target(tag.get_property("name")) else None)
+        for name in INLINE + tuple(links):
             tag = table.lookup(name)
             probe = start.copy()
             while probe.compare(end) < 0:
