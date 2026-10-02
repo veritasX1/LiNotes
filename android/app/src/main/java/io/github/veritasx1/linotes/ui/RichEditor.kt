@@ -934,6 +934,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (type == "divider") {
                 builder.append(OBJECT)
                 builder.setSpan(dividerSpan(), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else if (type == "table") {
+                builder.append(OBJECT)
+                builder.setSpan(FileBlockSpan(JSONObject(block.toString()), tableCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             } else if (type == "file") {
                 builder.append(OBJECT)
                 val span = FileBlockSpan(JSONObject(block.toString()), fileCard(block, null))
@@ -966,7 +969,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image" || type == "divider" || type == "file") "body" else type
+            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "table") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
             folds[index]?.let { hidden ->
@@ -1160,6 +1163,68 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         setSelection((at + 2).coerceAtMost(text.length))
         loadPreview(span)
         onEdited?.invoke()
+    }
+
+    /** A table (like Apple's): shown as a grid, tapping opens the table editor. */
+    fun insertTable(block: JSONObject) {
+        val text = text ?: return
+        var at = selectionStart.coerceAtLeast(0)
+        busy = true
+        if (at > 0 && text[at - 1] != '\n') {
+            at = paragraphEnd(text, at)
+            text.insert(at, "\n")
+            at += 1
+        }
+        text.insert(at, "$OBJECT\n")
+        text.setSpan(FileBlockSpan(block, tableCard(block)), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        normalize(text)
+        busy = false
+        setSelection((at + 2).coerceAtMost(text.length))
+        onEdited?.invoke()
+    }
+
+    /** Replace a table after editing it (null: delete it with its line). */
+    fun replaceTable(old: JSONObject, new: JSONObject?) {
+        val text = text ?: return
+        val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull { it.block.toString() == old.toString() } ?: return
+        val start = text.getSpanStart(span)
+        busy = true
+        text.removeSpan(span)
+        if (new == null) {
+            text.delete(start, (start + 2).coerceAtMost(text.length))
+        } else {
+            text.setSpan(FileBlockSpan(new, tableCard(new)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        normalize(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
+    private fun tableCard(block: JSONObject): Drawable {
+        val rows = io.github.veritasx1.linotes.data.Model.tableRows(block)
+        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 } ?: (320 * density).toInt()
+        val cell = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 15 * resources.displayMetrics.scaledDensity }
+        val rowHeight = (cell.textSize * 1.9f).toInt()
+        val shown = rows.take(20)
+        val height = rowHeight * shown.size + (if (rows.size > shown.size) rowHeight else 0) + (2 * density).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = density; color = (colors.label and 0x00FFFFFF) or 0x33000000 }
+        val columnWidth = (width - 2 * density) / rows[0].size
+        shown.forEachIndexed { r, row ->
+            row.forEachIndexed { c, value ->
+                val left = density + c * columnWidth
+                val top = density + r * rowHeight
+                canvas.drawRect(left, top, left + columnWidth, top + rowHeight, line)
+                val clipped = android.text.TextUtils.ellipsize(value, cell, columnWidth - 12 * density, android.text.TextUtils.TruncateAt.END).toString()
+                canvas.drawText(clipped, left + 6 * density, top + rowHeight / 2f + cell.textSize / 3f, cell)
+            }
+        }
+        if (rows.size > shown.size) {
+            val more = TextPaint(cell).apply { color = colors.secondary }
+            canvas.drawText("… ${rows.size - shown.size} weitere Zeilen", 6 * density, height - rowHeight / 2f + cell.textSize / 3f, more)
+        }
+        return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
 
     private fun loadPreview(span: FileBlockSpan) {
