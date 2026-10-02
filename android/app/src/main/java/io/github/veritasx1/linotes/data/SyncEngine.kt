@@ -635,6 +635,45 @@ class SyncEngine(private val context: Context) {
 
     fun keepOf(note: SyncObject): String = note.data.optString("keep").ifEmpty { keepDefault() }
 
+    // --- changes by others in shared notes (like Apple's highlights) ---
+    // What I saw last of each shared note is remembered on this device (same as Ubuntu's activity.py).
+
+    private fun seenNotes(): JSONObject = try { JSONObject(uiPrefs.getString("seen-notes", "{}") ?: "{}") } catch (error: Exception) { JSONObject() }
+
+    /** Notes I have never opened count as new only for changes after this feature arrived. */
+    private fun activitySince(): Double {
+        val first = uiPrefs.getLong("activity-since", 0)
+        if (first > 0) return first / 1000.0
+        val now = System.currentTimeMillis()
+        uiPrefs.edit().putLong("activity-since", now).apply()
+        return now / 1000.0
+    }
+
+    /** I have seen this version (opened it, or saved it myself). */
+    fun rememberSeen(note: SyncObject, blocks: JSONArray) {
+        if (note.share == null) return
+        val seen = seenNotes()
+        seen.put(note.id, JSONObject().put("t", Model.modified(note)).put("l", JSONArray(Model.blockLines(blocks))))
+        uiPrefs.edit().putString("seen-notes", seen.toString()).apply()
+    }
+
+    fun changedByOther(note: SyncObject) = note.share != null && note.updatedBy != 0 && note.updatedBy != userId
+
+    /** A dot in the list: someone else changed it since I looked (Apple: the blue dot). */
+    fun unread(note: SyncObject): Boolean {
+        if (!changedByOther(note) || note.data.has("trashed")) return false
+        val snapshot = seenNotes().optJSONObject(note.id)
+        return Model.modified(note) > (snapshot?.optDouble("t") ?: activitySince()) + 1
+    }
+
+    /** Lines (block indices) changed by someone else since my last view, null: nothing to show. */
+    fun changesSinceSeen(note: SyncObject, blocks: JSONArray): List<Int>? {
+        val snapshot = seenNotes().optJSONObject(note.id) ?: return null
+        if (!unread(note)) return null
+        val old = snapshot.optJSONArray("l") ?: JSONArray()
+        return Model.changedLines((0 until old.length()).map { old.optString(it) }, Model.blockLines(blocks)).ifEmpty { null }
+    }
+
     fun markOpened(id: String) {
         openedPrefs.edit().putLong(id, System.currentTimeMillis() / 1000).apply()
     }

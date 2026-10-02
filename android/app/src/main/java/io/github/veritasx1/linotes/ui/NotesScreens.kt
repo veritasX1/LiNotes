@@ -406,6 +406,11 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? 
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (sync.unread(note)) {
+                        // Changed by someone else since I looked (like Apple's blue dot).
+                        Box(Modifier.size(8.dp).background(colors.accent, androidx.compose.foundation.shape.CircleShape))
+                        Spacer(Modifier.width(6.dp))
+                    }
                     if (Model.isLocked(note)) {
                         GlyphIcon(Glyph.Lock, colors.secondary, 15.dp)
                         Spacer(Modifier.width(4.dp))
