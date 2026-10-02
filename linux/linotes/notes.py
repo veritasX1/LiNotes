@@ -82,6 +82,7 @@ class NoteList(Gtk.Box):
     __gsignals__ = {
         "note-selected": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "context": (GObject.SignalFlags.RUN_FIRST, None, (str, object, float, float)),
+        "open-window": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "open-key": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
@@ -127,6 +128,10 @@ class NoteList(Gtk.Box):
         click = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
         click.connect("pressed", self.on_context)
         self.list.add_controller(click)
+        # Double-click opens the note in its own window (like Apple's Notes).
+        double = Gtk.GestureClick(button=Gdk.BUTTON_PRIMARY)
+        double.connect("pressed", self.on_double_click)
+        self.list.add_controller(double)
 
         self.gallery = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.SINGLE, homogeneous=True)
         self.gallery.set_valign(Gtk.Align.START)
@@ -248,6 +253,11 @@ class NoteList(Gtk.Box):
             return
         self.selected_id = row.note_id
         self.emit("note-selected", row.note_id)
+
+    def on_double_click(self, gesture, n_press, x, y):
+        row = self.list.get_row_at_y(int(y))
+        if n_press == 2 and isinstance(row, NoteRow):
+            self.emit("open-window", row.note_id)
 
     def on_context(self, gesture, n_press, x, y):
         row = self.list.get_row_at_y(int(y))
