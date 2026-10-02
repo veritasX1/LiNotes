@@ -75,8 +75,8 @@ class MarketingShots {
             block("subheading", "Zubereitung"), block("number", "Butter und Zucker schaumig schlagen."), block("number", "Mehl und Backpulver unterheben."),
             block("number", "Äpfel einritzen, auf den Teig setzen."), block("number", "45 Minuten bei 180 °C backen."),
             block("quote", "Mit Sahne servieren – Oma bestand darauf."))
-        note(haushalt, 60 * 5, block("title", "Haushaltsbuch Oktober"), block("body", "Miete 850 + Strom 74 + Internet 35 = 959"),
-            block("body", "Lebensmittel 412 / 2 = 206"), block("body", "Sparrate 959 * 0,1 = 95,9"))
+        note(haushalt, 60 * 5, block("title", "Haushaltsbuch Oktober"), block("body", "Fixkosten: 850 + 74 + 35 = 959"),
+            block("body", "Lebensmittel: 412 / 2 = 206"), block("body", "Sparrate: 959 * 0,1 = 95,9"))
         val audio = sync.uploadFile(ByteArray(2048) { it.toByte() }, null)
         val meetingText = "Kurz besprochen: Lieferung kommt Dienstag, Anna übernimmt die Abholung."
         val meeting = note(Model.privateFolder(uid), 40, block("title", "Elternabend 2b"),
