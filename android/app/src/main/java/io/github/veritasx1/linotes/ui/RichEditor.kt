@@ -245,6 +245,9 @@ val FONTS = linkedMapOf("f:serif" to "serif", "f:mono" to "monospace")
 class TextColorSpan(val name: String, color: Int) : android.text.style.ForegroundColorSpan(color)
 class FontSpan(val name: String, family: String) : android.text.style.TypefaceSpan(family)
 
+/** A result filled in after "=" (accent color until the note is opened again). */
+class CalcSpan(color: Int) : android.text.style.ForegroundColorSpan(color)
+
 class ImageBlockSpan(val fileId: String, drawable: Drawable) : ImageSpan(drawable, ALIGN_BOTTOM)
 
 data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, val accent: Int, val highlight: Int)
@@ -441,6 +444,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 normalize(text)
                 return
             }
+        }
+        // Like Apple's Math Notes: "=" at the end of a line gets the result of the calculation.
+        if (insertCount == 1 && insertStart < text.length && text[insertStart] == '=' &&
+            (insertStart + 1 == text.length || text[insertStart + 1] == '\n')) {
+            val at = insertStart + 1
+            android.os.Handler(android.os.Looper.getMainLooper()).post { insertCalculation(at) }
         }
         // ">>" links to another note, like in Apple's Notes.
         val insertEnd = insertStart + insertCount
@@ -952,6 +961,20 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             result.removeAt(result.size - 1)
         }
         return result
+    }
+
+    // --- math ------------------------------------------------
+
+    private fun insertCalculation(at: Int) {
+        val text = text ?: return
+        if (selectionStart != at || at > text.length || text[at - 1] != '=') return  // typing went on meanwhile
+        val lineStart = text.lastIndexOf('\n', at - 1).let { if (it < 0) 0 else it + 1 }
+        val line = text.substring(lineStart, at).replace(PLACEHOLDER.toString(), "")
+        val earlier = if (lineStart == 0) emptyList() else text.substring(0, lineStart - 1).split('\n')
+        var result = io.github.veritasx1.linotes.data.Calc.resultFor(line, earlier) ?: return
+        if (line.dropLast(1).endsWith(" ")) result = " $result"
+        text.insert(at, result)
+        text.setSpan(CalcSpan(colors.accent), at, at + result.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
     // --- collapsible sections ----------------------------------
