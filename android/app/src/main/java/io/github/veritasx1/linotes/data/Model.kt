@@ -130,6 +130,12 @@ object Model {
         return tagPattern.findAll(text(note)).map { it.groupValues[1].lowercase() }.toSet()
     }
 
+    /** Nothing typed, no picture, file or divider (whitespace does not count). */
+    fun isEmptyBody(blocks: JSONArray): Boolean = (0 until blocks.length()).all { index ->
+        val block = blocks.optJSONObject(index) ?: return@all true
+        block.optString("t", "body") !in setOf("image", "file", "divider") && block.optString("x").isBlank()
+    }
+
     /** One comparable string per block (text, or the kind and file for images and files). */
     fun blockLines(blocks: JSONArray): List<String> = (0 until blocks.length()).map { index ->
         val block = blocks.optJSONObject(index) ?: JSONObject()

@@ -284,6 +284,13 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         onDispose {
             job?.cancel()
             save()
+            // A new note left without anything in it is not kept (Apple: no stray "Neue Notiz").
+            if (state.freshNotes.remove(noteId)) {
+                val current = sync.get(noteId)
+                if (current != null && !current.data.has("enc") && !current.data.has("trashed") && Model.isEmptyBody(Model.blocks(current))) {
+                    sync.delete(noteId)
+                }
+            }
         }
     }
     editor.isEnabled = !trashed

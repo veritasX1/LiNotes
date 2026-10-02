@@ -76,6 +76,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.vault_used = 0
         self.current_key = "all"
         self.current_note = None
+        # A note made here that is still empty is dropped when it is left (like Apple).
+        self.fresh_note = None
         self.editing_blocks = None
         self.note_windows = set()
 
@@ -245,6 +247,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.on_key)
         self.add_controller(keys)
+        self.connect("close-request", lambda _window: self.drop_fresh_note() or False)
         vault_activity = Gtk.EventControllerKey()
         vault_activity.connect("key-pressed", lambda *_args: self.touch_vault() or False)
         self.add_controller(vault_activity)
@@ -522,8 +525,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.narrow_note = False
         self.current_key = key
         kind, _sep, object_id = key.partition(":")
-        if kind == "list" and self.sync.get(object_id):
+        if kind in ("list", "board") and self.sync.get(object_id):
             self.note_pane.editor.flush()
+            self.drop_fresh_note()
+        if kind == "list" and self.sync.get(object_id):
             self.list_view.show(object_id)
             self.stack.set_visible_child_name("list")
             self.show_note_tools(False)
@@ -636,7 +641,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "body": model.empty_note_body(),
             "created": now, "modified": now,
         }, folder.get("share") if folder else None, notify=False)
+        self.drop_fresh_note()
         self.current_note = note["id"]
+        self.fresh_note = note["id"]
         self.sidebar.refresh()
         self.show_notes()
         self.open_note(note["id"])
@@ -646,6 +653,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def open_note(self, note_id):
         if note_id != self.current_note:
             self.note_pane.editor.flush()
+        if note_id != self.fresh_note and self.fresh_note is not None:
+            self.drop_fresh_note(refresh=True)
         note = self.sync.get(note_id)
         self.current_note = note_id
         if note is None:
@@ -670,6 +679,26 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if was_unread:
             GLib.idle_add(lambda: self.refresh_list_only() and False)  # the dot goes away
         self.update_note_actions()
+
+    def drop_fresh_note(self, refresh=False):
+        """Delete the note made here if it is still empty now that it is left (Apple does the same:
+        no stray "Neue Notiz"). Notes that were empty before are never touched."""
+        note_id, self.fresh_note = self.fresh_note, None
+        if note_id is None:
+            return
+        self.note_pane.editor.flush()
+        note = self.sync.get(note_id)
+        if note is None or note["data"].get("trashed") or note["data"].get("enc"):
+            return
+        if not model.is_empty_body(model.note_blocks(note)):
+            return
+        self.sync.delete(note_id)
+        if self.current_note == note_id:
+            self.current_note = None
+        if refresh:
+            GLib.idle_add(lambda: (self.sidebar.refresh(), self.refresh_list_only()) and False)
+        else:
+            self.sidebar.refresh()
 
     def note_body(self, note):
         """The blocks of a note, decrypted if it is locked; None while locked."""

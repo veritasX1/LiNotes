@@ -34,6 +34,8 @@ sealed class Route {
 class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var signedIn by mutableStateOf(sync.restore())
     var tab by mutableIntStateOf(0)
+    /** Notes made on this device in this run: dropped when left empty (like Apple). */
+    val freshNotes = mutableSetOf<String>()
     val stacks = listOf(
         mutableStateListOf<Route>(Route.Folders),
         mutableStateListOf<Route>(Route.Lists),
