@@ -111,7 +111,7 @@ class Sidebar(Gtk.Box):
         section.append("Einladungscode erzeugen …", "win.invite")
         section.append("Schlüsseldatei sichern …", "win.keyfile")
         section.append("Notizen-Passwort ändern …", "win.change-vault")
-        section.append("Gesperrte Notizen jetzt sperren", "win.lock-all")
+        section.append("Entsperrte Notizen jetzt sperren", "win.lock-all")
         menu.append_section(None, section)
         section = Gio.Menu()
         section.append("Tastenkürzel", "win.shortcuts")

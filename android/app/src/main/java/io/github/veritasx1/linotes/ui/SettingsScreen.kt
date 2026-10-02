@@ -78,7 +78,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow("Notizen-Passwort ändern …", Glyph.Password, titleColor = if (state.hasVault()) colors.label else colors.tertiary) {
                 if (state.hasVault()) changeVault = true else state.toastLater("Du hast noch kein Notizen-Passwort festgelegt.")
             }
-            GroupRow("Gesperrte Notizen jetzt sperren", Glyph.Lock, divider = false, chevron = false) {
+            GroupRow("Entsperrte Notizen jetzt sperren", Glyph.Lock, divider = false, chevron = false) {
                 state.lockAll()
                 state.toastLater("Gesperrte Notizen sind wieder gesperrt.")
             }

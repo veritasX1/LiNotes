@@ -80,7 +80,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
         title = "Ordner",
         actions = {
             // Like Apple's "Lock Now": shown while locked notes are open.
-            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Entsperrte Notizen jetzt sperren") { state.lockAll() }
             BarButton(Glyph.Gear, "Einstellungen") { state.push(Route.Settings) }
             BarButton(Glyph.FolderPlus, "Neuer Ordner") { newFolder = true }
             BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, null) }
@@ -270,7 +270,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         onBack = { state.pop() },
         subtitle = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
         actions = {
-            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Gesperrte Notizen jetzt sperren") { state.lockAll() }
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Entsperrte Notizen jetzt sperren") { state.lockAll() }
             // Inside a folder: create a subfolder, list or board here – the folder as a project's filing place.
             if (folderId != null) BarButton(Glyph.FolderPlus, "Neu in diesem Ordner") { createMenu = true }
             BarButton(Glyph.More, "Ansicht und Sortierung") { sortMenu = true }
