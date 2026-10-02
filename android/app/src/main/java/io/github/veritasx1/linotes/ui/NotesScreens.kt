@@ -211,6 +211,7 @@ fun newNote(state: AppState, folderKey: String?) {
     val body = org.json.JSONArray().put(JSONObject().put("t", "title").put("x", ""))
     val note = sync.put("note", JSONObject().put("folder", folder?.id).put("body", body).put("created", now).put("modified", now),
         folder?.share)
+    state.freshNotes.add(note.id)
     state.push(Route.Editor(note.id))
 }
 

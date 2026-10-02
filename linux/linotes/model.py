@@ -247,6 +247,11 @@ def empty_note_body():
     return [{"t": "title", "x": ""}]
 
 
+def is_empty_body(blocks):
+    """Nothing typed, no picture, file or divider (whitespace does not count)."""
+    return all(b.get("t", "body") not in ("image", "file", "divider") and not b.get("x", "").strip() for b in blocks)
+
+
 # --- folders ----------------------------------------------------
 
 def folder_parent(sync, folder):
