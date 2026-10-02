@@ -17,7 +17,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Graphene", "1.0")
 gi.require_version("Pango", "1.0")
 
-from gi.repository import Gdk, GdkPixbuf, GLib, GObject, Graphene, Gtk, Pango
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
 from . import calc, model
 
@@ -62,6 +62,8 @@ class NoteEditor(Gtk.TextView):
         # ">>" was typed: the window offers notes to link to.
         "link-requested": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "open-note": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        # A click on an attached file (argument: the file block).
+        "open-file": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
     }
 
     def __init__(self, image_loader=None):
@@ -1003,6 +1005,8 @@ class NoteEditor(Gtk.TextView):
                 self.add_image(anchor, block.get("f"), block.get("w"))
             elif kind == "divider":
                 self.add_divider(buffer.create_child_anchor(end))
+            elif kind == "file":
+                self.add_file(buffer.create_child_anchor(end), block)
             else:
                 block = model.refresh_note_links(block, self.note_title)
                 text = block.get("x", "")
@@ -1026,7 +1030,7 @@ class NoteEditor(Gtk.TextView):
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
             style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind in ("image", "divider"):
+            if kind in ("image", "divider", "file"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
             if block.get("a") in ALIGNMENTS:
@@ -1050,8 +1054,11 @@ class NoteEditor(Gtk.TextView):
             anchor = start.get_child_anchor()
             if anchor is not None and anchor in self.anchors:
                 image = self.anchors[anchor]
-                blocks.append({"t": "divider"} if image.get("divider")
-                              else {"t": "image", "f": image["file"], "w": image.get("width")})
+                if image.get("attachment"):
+                    blocks.append(dict(image["attachment"]))
+                else:
+                    blocks.append({"t": "divider"} if image.get("divider")
+                                  else {"t": "image", "f": image["file"], "w": image.get("width")})
                 # Text that ended up next to a divider or photo is kept as a line of its own.
                 extra = buffer.get_text(start, end, False).replace(OBJECT, "")
                 if extra.strip():
@@ -1146,7 +1153,44 @@ class NoteEditor(Gtk.TextView):
     def insert_divider(self):
         self.insert_image(None, divider=True)
 
-    def insert_image(self, file_id, divider=False):
+    def insert_file(self, block):
+        """Attach a file (block {"t": "file", "f", "n", "m", "b"}) on a line of its own."""
+        self.insert_image(None, attachment=block)
+
+    def add_file(self, anchor, block):
+        """A file as a card like in Notes: preview (first PDF page) or type icon, name, size."""
+        card = Gtk.Box(spacing=12, css_classes=["file-card"])
+        card.set_size_request(360, -1)
+        preview = Gtk.Image.new_from_gicon(Gio.content_type_get_icon(Gio.content_type_from_mime_type(block.get("m") or "")
+                                                                     or "application/octet-stream"))
+        preview.set_pixel_size(40)
+        holder = Gtk.Box(css_classes=["file-preview"], valign=Gtk.Align.CENTER)
+        holder.append(preview)
+        card.append(holder)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
+        text.append(Gtk.Label(label=block.get("n") or "Datei", xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=40,
+                              css_classes=["heading"]))
+        text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
+        card.append(text)
+        click = Gtk.GestureClick()
+        click.connect("released", lambda *_args: self.emit("open-file", dict(block)))
+        card.add_controller(click)
+        card.set_cursor_from_name("pointer")
+        card.set_tooltip_text("Öffnen")
+        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
+        self.add_child_at_anchor(card, anchor)
+        if (block.get("m") == "application/pdf") and self.image_loader and block.get("f"):
+            def render():
+                try:
+                    png = pdf_first_page(self.image_loader(block["f"]))
+                except Exception as error:
+                    print("LiNotes: PDF-Vorschau nicht möglich:", error)
+                    return
+                if png:
+                    GLib.idle_add(lambda: (preview.set_from_file(str(png)), preview.set_pixel_size(64)) and False)
+            threading.Thread(target=render, daemon=True).start()
+
+    def insert_image(self, file_id, divider=False, attachment=None):
         buffer = self.buffer
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
         if not cursor.starts_line():
@@ -1160,6 +1204,8 @@ class NoteEditor(Gtk.TextView):
         self.loading = False
         if divider:
             self.add_divider(anchor)
+        elif attachment:
+            self.add_file(anchor, attachment)
         else:
             self.add_image(anchor, file_id)
         line = cursor.get_line()
@@ -1169,11 +1215,39 @@ class NoteEditor(Gtk.TextView):
         self.set_line_style(line, "body", 0, checked=False)
         start, _end, with_break = self.line_bounds(line)
         buffer.apply_tag_by_name("image", start, with_break)
-        if divider:
+        if divider or attachment:
             # Typing goes on below the line.
             self.set_line_style(line + 1, "body", 0, checked=False)
             buffer.place_cursor(buffer.get_iter_at_line(line + 1)[1])
         self.on_changed(buffer)
+
+
+def file_details(block):
+    """"PDF-Dokument · 1,2 MB" for the card."""
+    size = int(block.get("b") or 0)
+    if size >= 1024 * 1024:
+        amount = f"{size / 1024 / 1024:.1f} MB".replace(".", ",")
+    elif size >= 1024:
+        amount = f"{round(size / 1024)} KB"
+    else:
+        amount = f"{size} Bytes"
+    kind = Gio.content_type_get_description(Gio.content_type_from_mime_type(block.get("m") or "") or "application/octet-stream")
+    return f"{kind} · {amount}"
+
+
+def pdf_first_page(path):
+    """A small PNG of the first page (pdftoppm from poppler-utils), cached next to the file."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+    png = Path(str(path) + ".preview.png")
+    if png.exists():
+        return png
+    if not shutil.which("pdftoppm"):
+        return None
+    subprocess.run(["pdftoppm", "-png", "-f", "1", "-l", "1", "-scale-to", "128", "-singlefile", str(path), str(png)[:-4]],
+                   check=True, timeout=20, capture_output=True)
+    return png if png.exists() else None
 
 
 def rgba(red, green, blue, alpha=1.0):

@@ -43,6 +43,8 @@ def text_size_step(keyval):
     return None
 
 
+MAX_ATTACHMENT = 24 * 1024 * 1024  # the server takes 25 MB including encryption
+
 HIGHLIGHT_MENU = [("h", "Gelb"), ("h:orange", "Orange"), ("h:pink", "Pink"), ("h:purple", "Lila"),
                   ("h:mint", "Mint"), ("h:blue", "Blau"), (None, "Markierung entfernen")]
 
@@ -185,6 +187,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         photo = icon_button("photo", "Foto einfügen")
         photo.set_action_name("win.insert-photo")
         self.note_tools.append(photo)
+        attach = Gtk.Button(icon_name="mail-attachment-symbolic", tooltip_text="Datei anhängen (PDF, Dokument …)")
+        attach.set_action_name("win.attach-file")
+        self.note_tools.append(attach)
         self.lock_button = icon_button("lock", "Notiz sperren")
         self.lock_button.set_action_name("win.lock-button")
         self.note_tools.append(self.lock_button)
@@ -214,6 +219,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_pane.editor.note_title = self.link_title
         self.note_pane.editor.connect("link-requested", lambda _editor: self.show_link_choice())
         self.note_pane.editor.connect("open-note", lambda _editor, note_id: self.open_linked_note(note_id))
+        self.note_pane.editor.connect("open-file", lambda _editor, block: self.open_attachment(block, self.note_pane.image_share))
+        # Drop files from the file manager into the note (like Apple): photos as photos, the rest attached.
+        drop = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY)
+        drop.connect("drop", lambda _target, file, _x, _y: self.drop_file(file))
+        self.note_pane.editor.add_controller(drop)
         self.note_pane.connect("unlock-requested", lambda _pane: self.unlock_current())
         self.note_pane.connect("restore-requested", lambda _pane: self.restore_current())
         paned.set_start_child(self.note_list)
@@ -817,7 +827,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def update_note_actions(self):
         note = self.sync.get(self.current_note) if self.current_note else None
         has = note is not None
-        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo",
+        for name in ("delete-note", "toggle-lock", "lock-button", "move-note", "pin-note", "duplicate-note", "insert-photo", "attach-file",
                      "export-note", "print-note"):
             self.lookup_action(name).set_enabled(has)
         if has:
@@ -828,6 +838,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.lock_button.set_tooltip_text("Jetzt sperren" if unlocked else "Entsperren" if locked else "Notiz sperren")
             self.lock_button.get_child().queue_draw()
             self.lookup_action("insert-photo").set_enabled(not locked and not note["data"].get("trashed"))
+            self.lookup_action("attach-file").set_enabled(not locked and not note["data"].get("trashed"))
             # A locked note can only be exported or printed while it is open.
             for name in ("export-note", "print-note"):
                 self.lookup_action(name).set_enabled(not locked or unlocked)
@@ -1078,6 +1089,74 @@ class LiNotesWindow(Adw.ApplicationWindow):
             run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
 
         dialog.open(self, None, chosen)
+
+    def attach_file(self, editor=None, note_id=None):
+        """Like Apple: attach a PDF or any other file; it is encrypted like photos."""
+        editor = editor or self.note_pane.editor
+        note = self.sync.get(note_id or self.current_note) if (note_id or self.current_note) else None
+        if note is None or note["data"].get("enc"):
+            return
+        dialog = Gtk.FileDialog(title="Datei anhängen")
+
+        def chosen(dialog, result):
+            try:
+                file = dialog.open_finish(result)
+            except GLib.Error:
+                return
+            self.attach_path(Path(file.get_path()), editor, note)
+
+        dialog.open(self, None, chosen)
+
+    def attach_path(self, path, editor, note):
+        size = path.stat().st_size
+        if size > MAX_ATTACHMENT:
+            self.toast(f"„{path.name}“ ist zu groß (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB).")
+            return
+        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        content = path.read_bytes()
+
+        def done(file_id, error):
+            if error is not None:
+                self.toast(error_text(error))
+                return
+            editor.insert_file({"t": "file", "f": file_id, "n": path.name, "m": mime, "b": size})
+        self.toast(f"„{path.name}“ wird angehängt …")
+        run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+
+    def drop_file(self, file):
+        note = self.sync.get(self.current_note) if self.current_note else None
+        path = Path(file.get_path() or "")
+        if note is None or note["data"].get("enc") or note["data"].get("trashed") or not path.is_file():
+            return False
+        if (mimetypes.guess_type(path.name)[0] or "").startswith("image/"):
+            content = path.read_bytes()
+
+            def done(file_id, error):
+                if error is not None:
+                    self.toast(error_text(error))
+                else:
+                    self.note_pane.editor.insert_image(file_id)
+            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+        else:
+            self.attach_path(path, self.note_pane.editor, note)
+        return True
+
+    def open_attachment(self, block, share):
+        """Decrypt the file into a private folder under its own name and open it with its app."""
+        def fetch():
+            source = self.sync.fetch_file(block["f"], share)
+            folder = Path(GLib.get_user_cache_dir()) / "linotes" / "open" / block["f"].partition(":")[2][:12]
+            folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+            target = folder / (Path(block.get("n") or "Datei").name)
+            shutil.copyfile(source, target)
+            return target
+
+        def done(target, error):
+            if error is not None:
+                self.toast(error_text(error))
+                return
+            Gtk.FileLauncher.new(Gio.File.new_for_path(str(target))).launch(self, None, None)
+        run_async(fetch, done)
 
     def format_target(self, editor):
         """The editor a format command goes to (None: the main editor, if a note is open)."""
@@ -1562,6 +1641,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "lock-button": self.on_lock_button,
             "lock-all": self.lock_all,
             "insert-photo": self.insert_photo,
+            "attach-file": self.attach_file,
             "new-folder": self.new_folder,
             "new-list": self.new_list,
             "new-board": self.new_board,

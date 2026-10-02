@@ -304,3 +304,13 @@ button.font-serif { font-family: Serif; }
   background-color: alpha(var(--accent-color), 0.25);
   border-radius: 8px;
 }
+
+.file-card {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background-color: alpha(currentColor, 0.06);
+  border: 1px solid alpha(currentColor, 0.12);
+}
+.file-preview image {
+  border-radius: 4px;
+}
