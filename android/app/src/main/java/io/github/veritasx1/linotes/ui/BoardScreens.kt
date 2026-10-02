@@ -37,8 +37,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +71,20 @@ val PRIORITY_MARKS = mapOf("niedrig" to "!", "mittel" to "!!", "hoch" to "!!!")
 
 /** One step of a card's status history. The column name is kept as it was,
  *  so the history stays readable after a column is renamed or deleted. */
+/** Attachments of a card: the same {f, n, m, b} entries as file blocks in notes. */
+fun cardFiles(data: JSONObject): List<JSONObject> {
+    val array = data.optJSONArray("files") ?: return emptyList()
+    return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+}
+
+fun isImageFile(item: JSONObject) = item.optString("m").startsWith("image/")
+
+fun humanSize(bytes: Long): String = when {
+    bytes < 1024 -> "$bytes Bytes"
+    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+    else -> "%.1f MB".format(java.util.Locale.GERMANY, bytes / 1024.0 / 1024.0)
+}
+
 fun historyEntry(column: SyncObject?, columnId: String, userId: Int): JSONObject =
     JSONObject().put("c", columnId).put("n", column?.data?.optString("name") ?: "").put("at", Model.now()).put("by", userId)
 
@@ -279,6 +298,12 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
             Box(Modifier.width(36.dp).height(5.dp).clip(CircleShape).background(color))
             Spacer(Modifier.height(6.dp))
         }
+        val files = cardFiles(data)
+        files.firstOrNull(::isImageFile)?.let { cover ->
+            // The first picture as a cover, as in Trello or Apple's Freeform.
+            Thumbnail(state.sync, cover.optString("f"), card.share, 96, Modifier.fillMaxWidth().height(96.dp))
+            Spacer(Modifier.height(8.dp))
+        }
         val mark = PRIORITY_MARKS[data.optString("priority")]
         Row {
             if (mark != null) {
@@ -293,9 +318,13 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
         val doneAt = data.optDouble("done_at", 0.0).takeIf { isLast && it > 0 }
         val assignee = data.optInt("assignee")
-        if (due != null || doneAt != null || assignee != 0 || dev) {
+        if (due != null || doneAt != null || assignee != 0 || dev || files.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (files.isNotEmpty()) {
+                    Text("📎 ${files.size}", style = Type.footnote, color = colors.secondary)
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (dev) {
                     Text(shortId(card.id), style = Type.caption.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
                         color = colors.tertiary)
@@ -346,7 +375,7 @@ private fun AddCardField(accent: Color, onAdd: (String) -> Unit) {
 }
 
 @Composable
-private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>, onDone: () -> Unit) {
+internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>, onDone: () -> Unit) {
     val colors = palette
     val sync = state.sync
     val context = LocalContext.current
@@ -364,6 +393,53 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
     var impact by remember { mutableStateOf(text("impact")) }
     var verification by remember { mutableStateOf(text("verification")) }
     var version by remember { mutableStateOf(text("version")) }
+    val scope = rememberCoroutineScope()
+    var filesRevision by remember { mutableIntStateOf(0) }
+    var attachMenu by remember { mutableStateOf(false) }
+    val files = remember(filesRevision) { sync.get(cardId)?.let { cardFiles(it.data) } ?: emptyList() }
+
+    fun attach(name: String, mime: String, bytes: ByteArray) {
+        scope.launch {
+            try {
+                val reference = withContext(Dispatchers.IO) { sync.uploadFile(bytes, card.share) }
+                sync.update(cardId) { data ->
+                    val array = data.optJSONArray("files") ?: org.json.JSONArray()
+                    array.put(JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size))
+                    data.put("files", array)
+                }
+                filesRevision++
+            } catch (error: Exception) {
+                state.showToast(errorText(error))
+            }
+        }
+    }
+
+    fun photoName(mime: String) = "Foto " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")) +
+        (if (mime == "image/png") ".png" else ".jpg")
+
+    fun removeFile(index: Int) {
+        sync.update(cardId) { data ->
+            val array = data.optJSONArray("files") ?: return@update
+            array.remove(index)
+            if (array.length() == 0) data.remove("files")
+        }
+        filesRevision++
+    }
+
+    fun openFile(item: JSONObject) {
+        scope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val source = sync.fetchFile(item.getString("f"), card.share)
+                    val folder = java.io.File(context.cacheDir, "attachments/" + item.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
+                    java.io.File(folder, java.io.File(item.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
+                }
+                state.openFile(file, item.optString("m", "application/octet-stream"))
+            } catch (error: Exception) {
+                state.showToast(errorText(error))
+            }
+        }
+    }
 
     fun save() {
         sync.update(cardId) { data ->
@@ -434,6 +510,28 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                         }
                     }
                 }
+                FormSection("Anhänge") {
+                    files.forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Öffnen") { openFile(item) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            if (isImageFile(item)) Thumbnail(sync, item.optString("f"), card.share, 40)
+                            else Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(colors.fill), contentAlignment = Alignment.Center) {
+                                GlyphIcon(Glyph.Notes, colors.secondary, 20.dp)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(item.optString("n", "Datei"), style = Type.body, color = colors.label, maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text(humanSize(item.optLong("b")), style = Type.footnote, color = colors.secondary)
+                            }
+                            Box(Modifier.size(44.dp).clickable(onClickLabel = "Anhang entfernen") { removeFile(index) }, contentAlignment = Alignment.Center) {
+                                GlyphIcon(Glyph.Trash, colors.red, 18.dp)
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(start = 68.dp), 0.5.dp, colors.separator)
+                    }
+                    GroupRow("Datei oder Bild hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = true }
+                }
                 if (dev) {
                     FormSection("Auswirkungsanalyse") { MultiLineField(impact, { impact = it }, "Was ist betroffen, welche Risiken?") }
                     FormSection("Verifikation") { MultiLineField(verification, { verification = it }, "Tests, Prüfungen und Nachweise") }
@@ -443,12 +541,23 @@ private fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject>
                 FormSection {
                     GroupRow("Karte löschen", chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
                 }
+                if (files.isEmpty()) {
+                    Text("Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen.", style = Type.footnote, color = colors.secondary,
+                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 8.dp))
+                }
                 val dates = cardDates(card, dev)
                 if (dates.isNotEmpty()) {
                     Text(dates, style = Type.footnote, color = colors.secondary, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 12.dp))
                 }
             }
         }
+    }
+    if (attachMenu) {
+        ActionSheet(null, listOf(
+            SheetAction("Foto aufnehmen") { state.takePhoto { bytes, mime -> attach(photoName(mime), mime, bytes) } },
+            SheetAction("Aus Fotos wählen") { state.pickImage { bytes, mime -> attach(photoName(mime), mime, bytes) } },
+            SheetAction("Datei wählen …") { state.pickFile { name, mime, bytes -> attach(name, mime, bytes) } },
+        )) { attachMenu = false }
     }
 }
 
