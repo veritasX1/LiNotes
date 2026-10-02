@@ -64,6 +64,7 @@ def note_tags(note):
 
 
 NOTE_LINK = "n:"
+MENTION = "m:"
 
 
 def link_target(span_name):
@@ -71,10 +72,23 @@ def link_target(span_name):
     return span_name[len(NOTE_LINK):] if isinstance(span_name, str) and span_name.startswith(NOTE_LINK) else None
 
 
-def refresh_note_links(block, title_of):
-    """Note links show the current title of the linked note (like Apple's Notes).
-    title_of(id) returns the title or None (note gone – the old text stays).
-    Returns the block itself when nothing changed, otherwise an updated copy."""
+def mention_target(span_name):
+    """The user id of an @-mention span ("m:<id>"), otherwise None."""
+    if isinstance(span_name, str) and span_name.startswith(MENTION) and span_name[len(MENTION):].isdigit():
+        return int(span_name[len(MENTION):])
+    return None
+
+
+def mentions_of(blocks, user_id):
+    """How often a user is @-mentioned in the blocks (for notifications)."""
+    return sum(1 for block in blocks for span in block.get("s") or []
+               if len(span) == 3 and mention_target(span[2]) == user_id)
+
+
+def refresh_note_links(block, title_of, name_of=None):
+    """Note links show the current title of the linked note (like Apple's Notes), mentions
+    the current name ("@Name"). title_of(id)/name_of(uid) return it or None (gone – the old
+    text stays). Returns the block itself when nothing changed, otherwise an updated copy."""
     spans = block.get("s") or []
     links = []
     for span in spans:
@@ -83,11 +97,14 @@ def refresh_note_links(block, title_of):
         except ValueError:
             continue
         target = link_target(name)
-        if target:
-            title = title_of(target)
-            text = block.get("x", "")
-            if title and title != text[int(start):int(end)]:
-                links.append((int(start), int(end), title))
+        person = mention_target(name)
+        title = title_of(target) if target else None
+        if person is not None and name_of:
+            title = name_of(person)
+            title = "@" + title if title and title != "?" else None
+        text = block.get("x", "")
+        if title and title != text[int(start):int(end)]:
+            links.append((int(start), int(end), title))
     if not links:
         return block
     text = block.get("x", "")
