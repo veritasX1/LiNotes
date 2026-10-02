@@ -22,6 +22,8 @@ fun SettingsScreen(state: AppState, revision: Long) {
     var keepChoice by remember { mutableStateOf(false) }
     var textChoice by remember { mutableStateOf(false) }
     var textSize by remember { mutableStateOf(sync.textSize) }
+    var justify by remember { mutableStateOf(sync.justify) }
+    var hyphenate by remember { mutableStateOf(sync.hyphenate) }
     var changeVault by remember { mutableStateOf(false) }
     var enableBiometric by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
@@ -47,8 +49,14 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 state.push(Route.People)
             }
         }
-        section("text", header = "Darstellung", compact = true, footer = "Gilt für den Text in Notizen, zusätzlich zur Schriftgröße in den Android-Einstellungen.") {
-            GroupRow("Textgröße", Glyph.Format, detail = io.github.veritasx1.linotes.data.TEXT_SIZES[textSize].second, divider = false) { textChoice = true }
+        section("text", header = "Darstellung", compact = true, footer = "Gilt für den Text in Notizen auf diesem Handy, zusätzlich zur Schriftgröße in den Android-Einstellungen. " +
+            "Blocksatz gilt für normal ausgerichtete Absätze, Silbentrennung nach der Sprache des Handys.") {
+            GroupRow("Textgröße", Glyph.Format, detail = io.github.veritasx1.linotes.data.TEXT_SIZES[textSize].second) { textChoice = true }
+            fun toggleJustify() { justify = !justify; sync.justify = justify }
+            fun toggleHyphenate() { hyphenate = !hyphenate; sync.hyphenate = hyphenate }
+            GroupRow("Blocksatz", Glyph.Format, chevron = false, trailing = { IosSwitch(justify, "Blocksatz") { toggleJustify() } }) { toggleJustify() }
+            GroupRow("Silbentrennung", Glyph.Format, chevron = false, divider = false,
+                trailing = { IosSwitch(hyphenate, "Silbentrennung") { toggleHyphenate() } }) { toggleHyphenate() }
         }
         if (!sync.isLocal) section("keep", header = "Auf diesem Handy", compact = true, footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
             "Danach liegt er nur noch verschlüsselt auf dem Server und wird beim Öffnen geladen. Angeheftete Notizen, Listen und Boards bleiben immer hier.") {

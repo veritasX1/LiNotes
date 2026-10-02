@@ -85,6 +85,14 @@ class SyncEngine(private val context: Context) {
         get() = try { org.json.JSONObject(uiPrefs.getString("mentions-seen", "{}") ?: "{}") } catch (error: Exception) { org.json.JSONObject() }
         set(value) = uiPrefs.edit().putString("mentions-seen", value.toString()).apply()
 
+    /** Justified text and hyphenation in notes – a choice per device like the text size. */
+    var justify: Boolean
+        get() = uiPrefs.getBoolean("justify", false)
+        set(value) = uiPrefs.edit().putBoolean("justify", value).apply()
+    var hyphenate: Boolean
+        get() = uiPrefs.getBoolean("hyphenate", false)
+        set(value) = uiPrefs.edit().putBoolean("hyphenate", value).apply()
+
     /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
     var noteGallery: Boolean
         get() = uiPrefs.getBoolean("note-gallery", false)

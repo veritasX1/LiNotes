@@ -38,3 +38,12 @@ def apply(level):
         Gtk.StyleContext.add_provider_for_display(display, _provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     size = round(BASE_PT * SIZES[level][0], 2)
     _provider.load_from_string(f".note-editor, .note-editor text {{ font-size: {size}pt; }}")
+
+
+def load_justify():
+    """Blocksatz in notes, per device (Android has the same switch in its settings)."""
+    return bool(uiprefs.get("justify", False))
+
+
+def save_justify(on):
+    uiprefs.put("justify", bool(on))
