@@ -290,20 +290,23 @@ def write_evidence(pdf, records):
     from gi.repository import Gdk, GdkPixbuf
     pdf.text("Nachweise", size=9, bold=True, space=2)
     for record in records:
-        facts = " · ".join(x for x in (record["size"], record["added"], record["by"]) if x)
-        pdf.text(f"📎 {record['name']}  ({facts})", size=8.5, space=1)
-        if record["sha256"]:
-            pdf.text(f"SHA-256 {record['sha256']}", size=7, color=GREY, space=3, mono=True)
+        pixbuf = None
         if record["image"]:
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file(record["image"])
                 pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
             except Exception as error:
                 print("LiNotes: Nachweis-Bild nicht im PDF:", error)
-                continue
+        if pixbuf is not None:
             width = min(pdf.width - 2 * MARGIN, 420)
             scale = min(width / pixbuf.get_width(), 240 / pixbuf.get_height(), 1.0)
             height = pixbuf.get_height() * scale
+            pdf.need(height + 40)   # name, checksum and picture stay on one page
+        facts = " · ".join(x for x in (record["size"], record["added"], record["by"]) if x)
+        pdf.text(f"📎 {record['name']}  ({facts})", size=8.5, space=1)
+        if record["sha256"]:
+            pdf.text(f"SHA-256 {record['sha256']}", size=7, color=GREY, space=3, mono=True)
+        if pixbuf is not None:
             pdf.need(height + 6)
             pdf.cr.save()
             pdf.cr.translate(MARGIN, pdf.y)
