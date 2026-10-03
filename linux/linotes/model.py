@@ -523,3 +523,10 @@ def grocery_category(text):
             if found and (best is None or len(key) > best[1]):
                 best = (name, len(key))
     return best[0] if best else OTHER_CATEGORY
+
+
+def evidence_fields(sync, content):
+    """Metadata of a verification record: integrity (SHA-256), when and by whom it was attached."""
+    import hashlib
+    import time
+    return {"h": hashlib.sha256(content).hexdigest(), "at": time.time(), "by": sync.user_id}

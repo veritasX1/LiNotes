@@ -20,6 +20,7 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py add <board> <spalte> <titel> [notizen]
     linotes-cli.py field <karte> <impact|verification|version> <text>   # Feld eines Entwicklungsprojekts setzen
     linotes-cli.py dump <board> [datei.json]     # alle Karten mit Spalte, Notizen, Feldern, Commits
+    linotes-cli.py evidence <karte> <datei> […]  # Nachweise (Prüfprotokolle, Screenshots) mit SHA-256 anhängen
 """
 
 import json
@@ -352,6 +353,29 @@ def cmd_dump(board_ref, path=None):
         print(f"{len(out['cards'])} Karten → {path}")
     else:
         print(text)
+
+
+def cmd_evidence(card_ref, *paths):
+    """Attach verification records to a card (encrypted like card attachments, with SHA-256)."""
+    import mimetypes
+    from pathlib import Path
+    if not paths:
+        sys.exit("Mindestens eine Datei angeben")
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    items = list(card["data"].get("evidence") or [])
+    for name in paths:
+        path = Path(name)
+        content = path.read_bytes()
+        if len(content) > 24 * 1024 * 1024:
+            sys.exit(f"{path.name}: zu groß (höchstens 24 MB)")
+        reference = eng.upload_file(content, card.get("share"))
+        items.append({"f": reference, "n": path.name, "m": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                      "b": len(content), **model.evidence_fields(eng, content)})
+        print(f"{path.name}: SHA-256 {items[-1]['h']}")
+    eng.update(card["id"], notify=False, evidence=items)
+    flush(eng)
+    print(f"„{card['data'].get('title')}“: {len(paths)} Nachweis(e) angehängt, insgesamt {len(items)}")
 
 
 def main():

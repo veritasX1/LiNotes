@@ -569,6 +569,15 @@ class CardDialog(Adw.Dialog):
                                           "Was ist betroffen, welche Risiken, was muss mitgeprüft werden?")
             self.verification = self.text_group(page, "Verifikation", card["data"].get("verification") or "",
                                                 "Tests, Prüfungen und Nachweise")
+            # Evidence right below the verification text, so test records travel with the card.
+            self.evidence_group = Adw.PreferencesGroup(title="Nachweise")
+            page.add(self.evidence_group)
+            self.evidence_rows = []
+            self.fill_files("evidence")
+            evidence_drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+            evidence_drop.connect("drop", lambda _t, value, _x, _y: self.add_paths(
+                [Path(f.get_path()) for f in value.get_files() if f.get_path()], "evidence") or True)
+            self.evidence_group.add_controller(evidence_drop)
             page.add(self.build_history(card))
 
         actions = Adw.PreferencesGroup()
@@ -594,18 +603,43 @@ class CardDialog(Adw.Dialog):
     def card(self):
         return self.sync.get(self.card_id)
 
-    def fill_files(self):
-        for row in self.file_rows:
-            self.files_group.remove(row)
-        self.file_rows = []
+    # Attachments ("files") and verification evidence ("evidence") share one implementation.
+    # Evidence also records its SHA-256, when and by whom it was added – a report can then
+    # prove that a test record is the one that was attached.
+    ATTACH_KINDS = {
+        "files": ("Datei oder Bild hinzufügen …", "Datei oder Bild anhängen",
+                  "Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen. Auch per Ziehen.",
+                  "Anhang entfernen"),
+        "evidence": ("Nachweis hinzufügen …", "Nachweis anhängen",
+                     "Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und "
+                     "erscheinen im Bericht mit Prüfsumme (SHA-256).",
+                     "Nachweis entfernen"),
+    }
+
+    def fill_files(self, key="files"):
+        group, rows = (self.files_group, self.file_rows) if key == "files" else (self.evidence_group, self.evidence_rows)
+        for row in rows:
+            group.remove(row)
+        rows.clear()
         card = self.card()
         if card is None:
             return
         share = card.get("share")
-        for index, item in enumerate(card["data"].get("files") or []):
+        add_label, _title, hint, remove_label = self.ATTACH_KINDS[key]
+        for index, item in enumerate(card["data"].get(key) or []):
+            subtitle = human_size(item.get("b") or 0)
+            if key == "evidence":
+                details = [subtitle]
+                if item.get("at"):
+                    details.append(datetime.datetime.fromtimestamp(item["at"]).strftime("%d.%m.%Y %H:%M"))
+                if item.get("by") is not None:
+                    details.append(self.sync.user_name(item["by"]))
+                if item.get("h"):
+                    details.append("SHA-256 " + item["h"][:12] + "…")
+                subtitle = " · ".join(details)
             row = Adw.ActionRow(title=GLib.markup_escape_text(item.get("n") or "Datei"),
-                                subtitle=human_size(item.get("b") or 0), activatable=True)
-            row.set_tooltip_text("Öffnen")
+                                subtitle=GLib.markup_escape_text(subtitle), activatable=True)
+            row.set_tooltip_text("Öffnen" + (f"\nSHA-256 {item['h']}" if item.get("h") else ""))
             if is_image(item):
                 from .notes import load_thumbnail
                 # A fixed 40 px square (a Picture would take the image's own width).
@@ -616,33 +650,32 @@ class CardDialog(Adw.Dialog):
                 row.add_prefix(picture)
             else:
                 row.add_prefix(Gtk.Image(icon_name="text-x-generic-symbolic", pixel_size=24))
-            remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Anhang entfernen")
+            remove = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER, tooltip_text=remove_label)
             remove.add_css_class("flat")
-            remove.update_property([Gtk.AccessibleProperty.LABEL], ["Anhang entfernen"])
-            remove.connect("clicked", lambda _b, i=index: self.remove_file(i))
+            remove.update_property([Gtk.AccessibleProperty.LABEL], [remove_label])
+            remove.connect("clicked", lambda _b, i=index: self.remove_file(i, key))
             row.add_suffix(remove)
             row.connect("activated", lambda _r, it=item: self.board.window.open_attachment(it, share))
-            self.files_group.add(row)
-            self.file_rows.append(row)
-        add = Adw.ButtonRow(title="Datei oder Bild hinzufügen …", start_icon_name="mail-attachment-symbolic")
-        add.connect("activated", lambda _r: self.choose_files())
-        self.files_group.add(add)
-        self.file_rows.append(add)
-        self.files_group.set_description(None if card["data"].get("files") else
-                                         "Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen. Auch per Ziehen.")
+            group.add(row)
+            rows.append(row)
+        add = Adw.ButtonRow(title=add_label, start_icon_name="mail-attachment-symbolic")
+        add.connect("activated", lambda _r: self.choose_files(key))
+        group.add(add)
+        rows.append(add)
+        group.set_description(None if card["data"].get(key) else hint)
 
-    def choose_files(self):
-        dialog = Gtk.FileDialog(title="Datei oder Bild anhängen")
+    def choose_files(self, key="files"):
+        dialog = Gtk.FileDialog(title=self.ATTACH_KINDS[key][1])
 
         def chosen(dialog, result):
             try:
                 files = dialog.open_multiple_finish(result)
             except GLib.Error:
                 return
-            self.add_paths([Path(f.get_path()) for f in files if f.get_path()])
+            self.add_paths([Path(f.get_path()) for f in files if f.get_path()], key)
         dialog.open_multiple(self.board.window, None, chosen)
 
-    def add_paths(self, paths):
+    def add_paths(self, paths, key="files"):
         card = self.card()
         if card is None:
             return
@@ -657,30 +690,33 @@ class CardDialog(Adw.Dialog):
                 continue
             mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             content = path.read_bytes()
+            entry = {"n": path.name, "m": mime, "b": size}
+            if key == "evidence":
+                entry.update(model.evidence_fields(self.sync, content))
 
-            def done(reference, error, path=path, mime=mime, size=size):
+            def done(reference, error, entry=entry):
                 if error is not None:
                     window.toast(error_text(error))
                     return
                 current = self.card()
                 if current is None:
                     return
-                files = list(current["data"].get("files") or [])
-                files.append({"f": reference, "n": path.name, "m": mime, "b": size})
-                self.sync.update(self.card_id, files=files)
-                self.fill_files()
+                items = list(current["data"].get(key) or [])
+                items.append({"f": reference, **entry})
+                self.sync.update(self.card_id, **{key: items})
+                self.fill_files(key)
             window.toast(f"„{path.name}“ wird angehängt …")
             run_async(lambda content=content: self.sync.upload_file(content, share), done)
 
-    def remove_file(self, index):
+    def remove_file(self, index, key="files"):
         card = self.card()
         if card is None:
             return
-        files = list(card["data"].get("files") or [])
-        if 0 <= index < len(files):
-            removed = files.pop(index)
-            self.sync.update(self.card_id, files=files)
-            self.fill_files()
+        items = list(card["data"].get(key) or [])
+        if 0 <= index < len(items):
+            removed = items.pop(index)
+            self.sync.update(self.card_id, **{key: items})
+            self.fill_files(key)
             self.board.window.toast(f"„{removed.get('n', 'Datei')}“ entfernt")
 
     def text_group(self, page, title, text, hint):

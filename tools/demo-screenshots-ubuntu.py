@@ -237,6 +237,36 @@ def seed(sync):
             "tour": tour["id"], "reisen": reisen, "board": board, "list": lst, **ids}
 
 
+def add_evidence(sync, card_id):
+    """Two verification records on the demo card: a test protocol (PDF) and a result picture."""
+    import cairo
+    picture = os.path.join(SCRATCH, "sil-ergebnis.png")
+    surface = cairo.ImageSurface(cairo.FORMAT_RGB24, 640, 300)
+    cr = cairo.Context(surface)
+    cr.set_source_rgb(1, 1, 1); cr.paint()
+    cr.set_source_rgb(0.13, 0.13, 0.15); cr.select_font_face("Sans", 0, 1); cr.set_font_size(26)
+    cr.move_to(28, 52); cr.show_text("SIL-Testlauf LKA – Abschaltgrenze")
+    cr.select_font_face("Sans", 0, 0); cr.set_font_size(19)
+    for i, case in enumerate(["TC-LKA-031", "TC-LKA-032", "TC-LKA-033", "TC-LKA-034", "TC-LKA-035", "TC-LKA-036"]):
+        cr.set_source_rgb(0.13, 0.13, 0.15); cr.move_to(28, 100 + i * 31); cr.show_text(case)
+        cr.set_source_rgb(0.18, 0.66, 0.31); cr.move_to(240, 100 + i * 31); cr.show_text("bestanden")
+    surface.write_to_png(picture)
+    card = sync.get(card_id)
+    items = []
+    for path, name, mime in ((os.path.join(SCRATCH, "tab.pdf"), "HIL-Protokoll 2026-09-30.pdf", "application/pdf"),
+                             (picture, "SIL-Ergebnis TC-LKA-031–036.png", "image/png")):
+        content = open(path, "rb").read()
+        reference = sync.upload_file(content, card.get("share"))
+        items.append({"f": reference, "n": name, "m": mime, "b": len(content), **model.evidence_fields(sync, content)})
+    sync.update(card_id, notify=False, evidence=items)
+
+
+def show_evidence(win):
+    """Scroll the open card dialog to its evidence."""
+    dialog = win._demo_dialog
+    dialog.evidence_rows[-1].grab_focus()
+
+
 def open_card(win, ids):
     from linotes.kanban import CardDialog
     dialog = CardDialog(win.board_view, win.sync.get(ids["dev_card"]))
@@ -263,6 +293,7 @@ def run(app):
     win.set_default_size(1280, 800)
     win.unmaximize()
     ids = seed(sync)
+    add_evidence(sync, ids["dev_card"])
     win.sidebar.refresh()
     steps = [
         ("01-notiz", lambda: (win.sidebar.select("folder:" + ids["reisen"]), win.select("folder:" + ids["reisen"]), win.open_note(ids["hero"]))),
@@ -279,6 +310,7 @@ def run(app):
         ("12-dienstplan", lambda: (win.sidebar.select("plan:" + ids["schicht"]), win.select("plan:" + ids["schicht"]))),
         ("13-entwicklung", lambda: (win.sidebar.select("board:" + ids["dev"]), win.select("board:" + ids["dev"]), win.split.set_show_sidebar(False), win.set_default_size(1480, 820))),
         ("14-karte", lambda: (win.set_default_size(1280, 800), win.split.set_show_sidebar(True), open_card(win, ids))),
+        ("14b-nachweise", lambda: (open_card(win, ids), GLib.timeout_add(500, lambda: show_evidence(win) and False))),
         ("15-bericht", lambda: report_image(sync, ids)),
     ]
     only = os.environ.get("DEMO_ONLY")

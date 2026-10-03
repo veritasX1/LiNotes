@@ -35,6 +35,31 @@ def german_date(iso):
 
 # --- data -------------------------------------------------------------
 
+def human_size(size):
+    for unit in ("Bytes", "KB", "MB"):
+        if size < 1024 or unit == "MB":
+            return f"{size:.0f} {unit}" if unit != "MB" else f"{size:.1f} MB".replace(".", ",")
+        size /= 1024
+
+
+def evidence_row(sync, item, share):
+    """One verification record; pictures are fetched (decrypted) so the PDF can embed them."""
+    image = None
+    if (item.get("m") or "").startswith("image/") and item.get("f"):
+        try:
+            image = str(sync.fetch_file(item["f"], share))
+        except Exception as error:  # offline, deleted on the server …
+            print("LiNotes: Nachweis-Bild nicht geladen:", error)
+    return {
+        "name": item.get("n") or "Datei",
+        "size": human_size(item.get("b") or 0),
+        "sha256": item.get("h") or "",
+        "added": stamp(item.get("at")),
+        "by": sync.user_name(item["by"]) if item.get("by") is not None else "",
+        "image": image,
+    }
+
+
 def build(sync, board_id):
     """Everything the report shows, independent of the output format."""
     board = sync.get(board_id)
@@ -66,6 +91,9 @@ def build(sync, board_id):
             "verification": data.get("verification") or "",
             "version": data.get("version") or "",
             "files": ", ".join(item.get("n", "") for item in data.get("files") or []),
+            "evidence": [evidence_row(sync, item, card.get("share")) for item in data.get("evidence") or []],
+            "evidence_text": "; ".join(f"{item.get('n') or 'Datei'} (SHA-256 {item.get('h') or '–'})"
+                                       for item in data.get("evidence") or []),
             "accepted": f"{sync.user_name(accepted.get('by'))}, {stamp(accepted.get('at'))}" if accepted else "",
             "history": [(step.get("n", ""), stamp(step.get("at")), sync.user_name(step.get("by"))) for step in history],
         })
@@ -84,7 +112,8 @@ def build(sync, board_id):
 CSV_FIELDS = [("id", "ID"), ("title", "Titel"), ("status", "Status"), ("priority", "Priorität"),
               ("assignee", "Zuständig"), ("due", "Fällig"), ("created", "Erstellt"), ("done", "Erledigt"),
               ("files", "Anhänge")]
-CSV_DEV_FIELDS = [("commits", "Commits"), ("verification", "Verifikation"), ("impact", "Auswirkungsanalyse"),
+CSV_DEV_FIELDS = [("commits", "Commits"), ("verification", "Verifikation"), ("evidence_text", "Nachweise"),
+                  ("impact", "Auswirkungsanalyse"),
                   ("version", "Version"), ("accepted", "Abnahme")]
 
 
@@ -212,7 +241,9 @@ def write_pdf(report, path):
         pdf.text("Traceability-Matrix", size=13, bold=True, space=6)
         pdf.table(["ID", "Titel", "Prio", "Status", "Commits", "Verifikation", "Version", "Abnahme"],
                   [8, 29, 6, 11, 11, 19, 8, 13],
-                  [[r["id"], r["title"], r["priority"], r["status"], r["commits"], r["verification"],
+                  [[r["id"], r["title"], r["priority"], r["status"], r["commits"],
+                    r["verification"] + (f"\n+ {len(r['evidence'])} Nachweis{'e' if len(r['evidence']) != 1 else ''}"
+                                         if r["evidence"] else ""),
                     r["version"], r["accepted"]] for r in rows], mono=(0, 4))
         pdf.text("Karten im Einzelnen", size=13, bold=True, space=6)
         for r in rows:
@@ -227,6 +258,8 @@ def write_pdf(report, path):
                 if r[key].strip():
                     pdf.text(label, size=9, bold=True, space=1)
                     pdf.text(r[key].strip(), size=9, space=5)
+            if r["evidence"]:
+                write_evidence(pdf, r["evidence"])
             if r["files"]:
                 pdf.text("Anhänge", size=9, bold=True, space=1)
                 pdf.text(r["files"], size=8.5, space=5)
@@ -249,6 +282,41 @@ def write_pdf(report, path):
             else:
                 pdf.text("Keine Karten", size=9, color=GREY, space=10)
     pdf.close()
+
+
+def write_evidence(pdf, records):
+    """Verification records: name, size, when/who, full SHA-256; pictures embedded."""
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, GdkPixbuf
+    pdf.text("Nachweise", size=9, bold=True, space=2)
+    for record in records:
+        facts = " · ".join(x for x in (record["size"], record["added"], record["by"]) if x)
+        pdf.text(f"📎 {record['name']}  ({facts})", size=8.5, space=1)
+        if record["sha256"]:
+            pdf.text(f"SHA-256 {record['sha256']}", size=7, color=GREY, space=3, mono=True)
+        if record["image"]:
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(record["image"])
+                pixbuf = pixbuf.apply_embedded_orientation() or pixbuf
+            except Exception as error:
+                print("LiNotes: Nachweis-Bild nicht im PDF:", error)
+                continue
+            width = min(pdf.width - 2 * MARGIN, 420)
+            scale = min(width / pixbuf.get_width(), 240 / pixbuf.get_height(), 1.0)
+            height = pixbuf.get_height() * scale
+            pdf.need(height + 6)
+            pdf.cr.save()
+            pdf.cr.translate(MARGIN, pdf.y)
+            pdf.cr.scale(scale, scale)
+            Gdk.cairo_set_source_pixbuf(pdf.cr, pixbuf, 0, 0)
+            pdf.cr.paint()
+            pdf.cr.restore()
+            pdf.cr.set_source_rgb(*LINE)
+            pdf.cr.set_line_width(0.5)
+            pdf.cr.rectangle(MARGIN, pdf.y, pixbuf.get_width() * scale, height)
+            pdf.cr.stroke()
+            pdf.y += height + 8
+    pdf.y += 2
 
 
 # --- single note ------------------------------------------------------
