@@ -18,6 +18,8 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py export <board> <datei.pdf|datei.csv>
     linotes-cli.py trace-commits <board> [repo]   # Commits mit [karten-id] an die Karten hängen
     linotes-cli.py add <board> <spalte> <titel> [notizen]
+    linotes-cli.py field <karte> <impact|verification|version> <text>   # Feld eines Entwicklungsprojekts setzen
+    linotes-cli.py dump <board> [datei.json]     # alle Karten mit Spalte, Notizen, Feldern, Commits
 """
 
 import json
@@ -318,6 +320,38 @@ def cmd_add(board_ref, column_ref, title, notes=""):
             board.get("share"), notify=False)
     flush(eng)
     print("ok")
+
+
+DEV_FIELDS = ("impact", "verification", "version")
+
+
+def cmd_field(card_ref, name, text):
+    """Fill a field of a development project card (as in the Ubuntu app's card dialog)."""
+    if name not in DEV_FIELDS:
+        sys.exit("Feld muss eines von " + ", ".join(DEV_FIELDS) + " sein")
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    eng.update(card["id"], notify=False, **{name: text.strip() or None})
+    flush(eng)
+    print(f"„{card['data'].get('title')}“: {name} gesetzt")
+
+
+def cmd_dump(board_ref, path=None):
+    eng = engine()
+    board = find(eng, "board", board_ref)
+    out = {"board": board["data"].get("name"), "dev": bool(board["data"].get("dev")), "cards": []}
+    for col in columns(eng, board["id"]):
+        for card in cards(eng, col["id"]):
+            d = card["data"]
+            out["cards"].append({"id": card["id"][:8], "column": col["data"].get("name"), "title": d.get("title"),
+                                 "notes": d.get("notes") or "", "commits": [c.get("s") for c in d.get("commits") or []],
+                                 **{k: d.get(k) for k in DEV_FIELDS}})
+    text = json.dumps(out, indent=1, ensure_ascii=False)
+    if path:
+        open(path, "w").write(text)
+        print(f"{len(out['cards'])} Karten → {path}")
+    else:
+        print(text)
 
 
 def main():
