@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.veritasx1.linotes.data.Model
+import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.data.SyncObject
 import org.json.JSONObject
 import java.time.LocalDate
@@ -78,6 +79,27 @@ fun cardFiles(data: JSONObject): List<JSONObject> {
 }
 
 fun isImageFile(item: JSONObject) = item.optString("m").startsWith("image/")
+
+/** Verification evidence of a development card: {f, n, m, b} plus SHA-256 (h), when (at) and who (by). */
+fun cardEvidence(data: JSONObject): List<JSONObject> {
+    val array = data.optJSONArray("evidence") ?: return emptyList()
+    return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+}
+
+fun sha256(bytes: ByteArray): String =
+    java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+fun evidenceDetails(sync: SyncEngine, item: JSONObject): String {
+    val parts = mutableListOf(humanSize(item.optLong("b")))
+    val at = item.optDouble("at", 0.0)
+    if (at > 0) {
+        val moment = java.time.Instant.ofEpochMilli((at * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
+        parts += "%02d.%02d.%d %02d:%02d".format(moment.dayOfMonth, moment.monthValue, moment.year, moment.hour, moment.minute)
+    }
+    if (item.has("by")) parts += sync.userName(item.optInt("by"))
+    item.optString("h").takeIf { it.isNotEmpty() }?.let { parts += "SHA-256 ${it.take(12)}…" }
+    return parts.joinToString(" · ")
+}
 
 fun humanSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes Bytes"
@@ -395,17 +417,21 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     var version by remember { mutableStateOf(text("version")) }
     val scope = rememberCoroutineScope()
     var filesRevision by remember { mutableIntStateOf(0) }
-    var attachMenu by remember { mutableStateOf(false) }
+    // Which list the attach menu adds to: "files" (attachments) or "evidence" (verification records).
+    var attachMenu by remember { mutableStateOf<String?>(null) }
     val files = remember(filesRevision) { sync.get(cardId)?.let { cardFiles(it.data) } ?: emptyList() }
+    val evidence = remember(filesRevision) { sync.get(cardId)?.let { cardEvidence(it.data) } ?: emptyList() }
 
-    fun attach(name: String, mime: String, bytes: ByteArray) {
+    fun attach(name: String, mime: String, bytes: ByteArray, key: String = "files") {
         scope.launch {
             try {
                 val reference = withContext(Dispatchers.IO) { sync.uploadFile(bytes, card.share) }
+                val entry = JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size)
+                if (key == "evidence") entry.put("h", sha256(bytes)).put("at", Model.now()).put("by", sync.userId)
                 sync.update(cardId) { data ->
-                    val array = data.optJSONArray("files") ?: org.json.JSONArray()
-                    array.put(JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size))
-                    data.put("files", array)
+                    val array = data.optJSONArray(key) ?: org.json.JSONArray()
+                    array.put(entry)
+                    data.put(key, array)
                 }
                 filesRevision++
             } catch (error: Exception) {
@@ -417,11 +443,11 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     fun photoName(mime: String) = "Foto " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")) +
         (if (mime == "image/png") ".png" else ".jpg")
 
-    fun removeFile(index: Int) {
+    fun removeFile(index: Int, key: String = "files") {
         sync.update(cardId) { data ->
-            val array = data.optJSONArray("files") ?: return@update
+            val array = data.optJSONArray(key) ?: return@update
             array.remove(index)
-            if (array.length() == 0) data.remove("files")
+            if (array.length() == 0) data.remove(key)
         }
         filesRevision++
     }
@@ -511,30 +537,23 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                     }
                 }
                 FormSection("Anhänge") {
-                    files.forEachIndexed { index, item ->
-                        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Öffnen") { openFile(item) }.padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            if (isImageFile(item)) Thumbnail(sync, item.optString("f"), card.share, 40)
-                            else Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(colors.fill), contentAlignment = Alignment.Center) {
-                                GlyphIcon(Glyph.Notes, colors.secondary, 20.dp)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(item.optString("n", "Datei"), style = Type.body, color = colors.label, maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                Text(humanSize(item.optLong("b")), style = Type.footnote, color = colors.secondary)
-                            }
-                            Box(Modifier.size(44.dp).clickable(onClickLabel = "Anhang entfernen") { removeFile(index) }, contentAlignment = Alignment.Center) {
-                                GlyphIcon(Glyph.Trash, colors.red, 18.dp)
-                            }
-                        }
-                        HorizontalDivider(Modifier.padding(start = 68.dp), 0.5.dp, colors.separator)
-                    }
-                    GroupRow("Datei oder Bild hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = true }
+                    AttachmentRows(sync, card.share, files, "Anhang entfernen", { humanSize(it.optLong("b")) }, ::openFile) { removeFile(it) }
+                    GroupRow("Datei oder Bild hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "files" }
                 }
                 if (dev) {
                     FormSection("Auswirkungsanalyse") { MultiLineField(impact, { impact = it }, "Was ist betroffen, welche Risiken?") }
                     FormSection("Verifikation") { MultiLineField(verification, { verification = it }, "Tests, Prüfungen und Nachweise") }
+                    // Evidence right below the verification text, so test records travel with the card.
+                    FormSection("Nachweise") {
+                        AttachmentRows(sync, card.share, evidence, "Nachweis entfernen", { evidenceDetails(sync, it) }, ::openFile) {
+                            removeFile(it, "evidence")
+                        }
+                        GroupRow("Nachweis hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "evidence" }
+                    }
+                    if (evidence.isEmpty()) {
+                        Text("Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und erscheinen im Bericht mit Prüfsumme (SHA-256).",
+                            style = Type.footnote, color = colors.secondary, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 6.dp))
+                    }
                     TraceSection(sync, card, version) { version = it }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -552,12 +571,40 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
             }
         }
     }
-    if (attachMenu) {
+    attachMenu?.let { key ->
         ActionSheet(null, listOf(
-            SheetAction("Foto aufnehmen") { state.takePhoto { bytes, mime -> attach(photoName(mime), mime, bytes) } },
-            SheetAction("Aus Fotos wählen") { state.pickImage { bytes, mime -> attach(photoName(mime), mime, bytes) } },
-            SheetAction("Datei wählen …") { state.pickFile { name, mime, bytes -> attach(name, mime, bytes) } },
-        )) { attachMenu = false }
+            SheetAction("Foto aufnehmen") { state.takePhoto { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
+            SheetAction("Aus Fotos wählen") { state.pickImage { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
+            SheetAction("Datei wählen …") { state.pickFile { name, mime, bytes -> attach(name, mime, bytes, key) } },
+        )) { attachMenu = null }
+    }
+}
+
+/** Rows of attachments or evidence: picture or document symbol, name, details, remove. */
+@Composable
+private fun AttachmentRows(
+    sync: SyncEngine, share: String?, items: List<JSONObject>, removeLabel: String,
+    details: (JSONObject) -> String, onOpen: (JSONObject) -> Unit, onRemove: (Int) -> Unit,
+) {
+    val colors = palette
+    items.forEachIndexed { index, item ->
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Öffnen") { onOpen(item) }.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            if (isImageFile(item)) Thumbnail(sync, item.optString("f"), share, 40)
+            else Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(colors.fill), contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.Notes, colors.secondary, 20.dp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.optString("n", "Datei"), style = Type.body, color = colors.label, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(details(item), style = Type.footnote, color = colors.secondary)
+            }
+            Box(Modifier.size(44.dp).clickable(onClickLabel = removeLabel) { onRemove(index) }, contentAlignment = Alignment.Center) {
+                GlyphIcon(Glyph.Trash, colors.red, 18.dp)
+            }
+        }
+        HorizontalDivider(Modifier.padding(start = 68.dp), 0.5.dp, colors.separator)
     }
 }
 
