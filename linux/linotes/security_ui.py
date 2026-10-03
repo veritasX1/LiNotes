@@ -757,10 +757,12 @@ HELP = [
          "Priorität, Farbe und Notizen."),
         ("Entwicklungsprojekt", "Rechtsklick auf ein Board → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten "
          "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche "
-         "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt."),
+         "Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. "
+         "Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). "
+         "Für einfache Boards bleibt alles wie gewohnt."),
         ("Bericht", "Export-Symbol (Kasten mit Pfeil) oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand "
          "als PDF (z. B. als Nachweis für Kunden) oder als CSV für Excel. Bei Entwicklungsprojekten mit "
-         "Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme)."),
+         "Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet."),
     ]),
     ("Datenschutz", [
         ("Was der Server weiß", "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, "
