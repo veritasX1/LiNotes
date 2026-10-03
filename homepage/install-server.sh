@@ -1,7 +1,7 @@
 #!/bin/bash
 # LiNotes-Server mit einem Befehl einrichten (Debian, Ubuntu, Raspberry Pi OS):
 #
-#   curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s notizen.example.org
+#   curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s notizen.example.org
 #
 # Lädt das Server-Paket, prüft die Prüfsumme und startet den Installer aus dem Paket
 # (Dienst, nginx mit HTTPS, nächtliche Sicherung, erster Einladungscode).
@@ -9,12 +9,12 @@
 set -euo pipefail
 
 VERSION=2.1.0
-BASE=https://linotes.goip.de/download
+BASE=https://lisoft.goip.de/linotes/download
 DOMAIN="${1:-}"
 DATA="${2:-/var/lib/linotes}"
 
 if [ -z "$DOMAIN" ]; then
-    echo "Aufruf: curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s <deine-domain>"
+    echo "Aufruf: curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s <deine-domain>"
     exit 1
 fi
 if [ "$(id -u)" != 0 ]; then
