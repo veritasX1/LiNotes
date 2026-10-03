@@ -222,14 +222,15 @@ object Report {
                 if (row.evidence.isNotEmpty()) {
                     pdf.text("Nachweise", 9f, true, space = 2f)
                     for (record in row.evidence) {
+                        val bitmap = record.image?.let { reference ->
+                            runCatching { fetch(reference, record.share) }.getOrNull()?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+                        }
+                        // Name, checksum and picture stay on one page.
+                        if (bitmap != null) pdf.need(bitmap.height * minOf(1f, 240f / bitmap.height) + 40f)
                         val facts = listOf(record.size, record.added, record.by).filter { it.isNotEmpty() }.joinToString(" · ")
                         pdf.text("📎 ${record.name}  ($facts)", 8.5f, space = 1f)
                         if (record.sha256.isNotEmpty()) pdf.text("SHA-256 ${record.sha256}", 7f, color = pdf.grey, space = 3f, mono = true)
-                        record.image?.let { reference ->
-                            runCatching { fetch(reference, record.share) }.getOrNull()?.let { picture ->
-                                android.graphics.BitmapFactory.decodeFile(picture.path)?.let { bitmap -> pdf.image(bitmap, 240f) }
-                            }
-                        }
+                        bitmap?.let { pdf.image(it, 240f) }
                     }
                 }
                 if (row.files.isNotEmpty()) {
