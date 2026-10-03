@@ -3,8 +3,8 @@
 Notizen, Listen, Aufgaben und Pläne für **Android** und **Ubuntu** – Ende-zu-Ende verschlüsselt,
 auf deinem eigenen Server oder ganz ohne. So einfach wie Apples Notizen, aber die Daten bleiben bei dir.
 
-**Website, Downloads und Hilfe:** https://linotes.goip.de
-**Eigener Server in einem Befehl:** https://linotes.goip.de/server.html
+**Website, Downloads und Hilfe:** https://lisoft.goip.de/linotes/
+**Eigener Server in einem Befehl:** https://lisoft.goip.de/linotes/server.html
 
 ## Funktionen
 

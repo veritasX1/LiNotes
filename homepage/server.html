@@ -12,9 +12,9 @@
 
 <div class="apps">
   <div class="wrap">
-    <a href="https://linotes.goip.de/" aria-current="page">LiNotes</a>
-    <a href="https://prevux.goip.de/">Prevux</a>
-    <a href="https://liboard.goip.de/">LiBoard</a>
+    <a href="https://lisoft.goip.de/linotes/" aria-current="page">LiNotes</a>
+    <a href="https://lisoft.goip.de/prevux/">Prevux</a>
+    <a href="https://lisoft.goip.de/liboard/">LiBoard</a>
   </div>
 </div>
 
@@ -111,9 +111,9 @@
     <section id="installieren">
       <h2>3 · Installieren – ein Befehl</h2>
       <p>Melde dich auf dem Raspberry Pi an (direkt oder per SSH) und gib diesen Befehl ein. Ersetze die Domain durch deine:</p>
-      <div class="terminal" data-copy="curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s familie-notizen.goip.de">
+      <div class="terminal" data-copy="curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi: ~</span></div>
-        <pre><span class="p">$</span> curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s <span class="b">familie-notizen.goip.de</span></pre>
+        <pre><span class="p">$</span> curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s <span class="b">familie-notizen.goip.de</span></pre>
       </div>
       <p>Daten auf einer USB-Festplatte? Hänge den Pfad an: <code class="inline">… | sudo bash -s familie-notizen.goip.de /media/usb/linotes</code></p>
       <p>Das Skript lädt den Server, prüft die Prüfsumme und richtet alles ein. Nach ein paar Minuten siehst du:</p>
@@ -177,9 +177,9 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
     <section id="update">
       <h2>Update</h2>
       <p>Einfach denselben Befehl noch einmal ausführen. Das Skript darf mehrfach laufen: Es spielt die neue Version ein, behält deine Daten und startet den Dienst neu. Die Apps merken davon nur eine kurze Pause.</p>
-      <div class="terminal" data-copy="curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s familie-notizen.goip.de">
+      <div class="terminal" data-copy="curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
-        <pre><span class="p">$</span> curl -fsSL https://linotes.goip.de/install-server.sh | sudo bash -s familie-notizen.goip.de</pre>
+        <pre><span class="p">$</span> curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de</pre>
       </div>
     </section>
 
@@ -202,13 +202,13 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
     <section id="manuell">
       <h2>Ohne Einzeiler</h2>
       <p>Lieber jeden Schritt selbst? Lade das Paket, prüfe es und starte den Installer von Hand:</p>
-      <div class="terminal" data-copy="wget https://linotes.goip.de/download/linotes-server-2.1.0.tar.gz https://linotes.goip.de/download/SHA256SUMS
+      <div class="terminal" data-copy="wget https://lisoft.goip.de/linotes/download/linotes-server-2.1.0.tar.gz https://lisoft.goip.de/linotes/download/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
 tar xzf linotes-server-2.1.0.tar.gz
 sudo linotes-server/install.sh familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
-        <pre><span class="p">$</span> wget https://linotes.goip.de/download/linotes-server-2.1.0.tar.gz \
-       https://linotes.goip.de/download/SHA256SUMS
+        <pre><span class="p">$</span> wget https://lisoft.goip.de/linotes/download/linotes-server-2.1.0.tar.gz \
+       https://lisoft.goip.de/linotes/download/SHA256SUMS
 <span class="p">$</span> sha256sum --ignore-missing -c SHA256SUMS
 <span class="p">$</span> tar xzf linotes-server-2.1.0.tar.gz
 <span class="p">$</span> sudo linotes-server/install.sh familie-notizen.goip.de</pre>

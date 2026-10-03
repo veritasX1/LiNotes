@@ -109,7 +109,7 @@ class LiNotesApplication(Adw.Application):
             developer_name="Olaf Winkler",
             comments="Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein.",
             copyright="© 2026 Olaf Winkler", license_type=Gtk.License.GPL_3_0,
-            website="https://linotes.goip.de", issue_url="https://github.com/veritasX1/LiNotes/issues",
+            website="https://lisoft.goip.de/linotes/", issue_url="https://github.com/veritasX1/LiNotes/issues",
         )
         dialog.present(self.get_active_window())
 
