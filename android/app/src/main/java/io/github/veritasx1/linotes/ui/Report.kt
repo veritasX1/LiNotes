@@ -26,7 +26,12 @@ object Report {
         val impact: String, val verification: String, val version: String, val accepted: String,
         val history: List<Triple<String, String, String>>, val columnId: String,
         val files: String = "",
+        val evidence: List<Evidence> = emptyList(),
     )
+
+    /** One verification record; [image] is the file reference when the record is a picture (fetched while writing the PDF). */
+    class Evidence(val name: String, val size: String, val sha256: String, val added: String, val by: String,
+                   val image: String?, val share: String?)
 
     class Data(val title: String, val dev: Boolean, val generated: String, val columns: List<Pair<String, List<Row>>>, val rows: List<Row>)
 
@@ -64,6 +69,11 @@ object Report {
                 history = steps.map { Triple(it.optString("n"), stamp(it.optDouble("at", 0.0)), sync.userName(it.optInt("by"))) },
                 columnId = card.data.optString("column"),
                 files = cardFiles(card.data).joinToString(", ") { it.optString("n") },
+                evidence = cardEvidence(card.data).map { item ->
+                    Evidence(item.optString("n", "Datei"), humanSize(item.optLong("b")), item.optString("h"),
+                        stamp(item.optDouble("at", 0.0)), if (item.has("by")) sync.userName(item.optInt("by")) else "",
+                        item.optString("f").takeIf { isImageFile(item) && it.isNotEmpty() }, card.share)
+                },
             )
         }
         val now = LocalDateTime.now()
@@ -136,8 +146,8 @@ object Report {
             y += layout.height + space
         }
 
-        fun image(bitmap: android.graphics.Bitmap) {
-            val scale = minOf((width - 2 * margin) / bitmap.width, 360f / bitmap.height, 1f)
+        fun image(bitmap: android.graphics.Bitmap, maxHeight: Float = 360f) {
+            val scale = minOf((width - 2 * margin) / bitmap.width, maxHeight / bitmap.height, 1f)
             val w = bitmap.width * scale
             val h = bitmap.height * scale
             need(h)
@@ -181,7 +191,8 @@ object Report {
         }
     }
 
-    fun writePdf(report: Data, file: File) {
+    /** [fetch] returns the decrypted file of an evidence picture (null: leave it out); runs off the main thread. */
+    fun writePdf(report: Data, file: File, fetch: (String, String?) -> File? = { _, _ -> null }) {
         val pdf = Pdf(report.dev, "${report.title} · Stand ${report.generated}")
         pdf.text((if (report.dev) "Entwicklungsprojekt – Nachverfolgung" else "Aufgaben-Board").uppercase(), 8f, true, pdf.accent, 2f)
         pdf.text(report.title, 20f, true, space = 2f)
@@ -193,7 +204,9 @@ object Report {
             pdf.table(listOf("ID", "Titel", "Prio", "Status", "Commits", "Verifikation", "Version", "Abnahme"),
                 listOf(8f, 29f, 6f, 11f, 11f, 19f, 8f, 13f),
                 report.rows.map { listOf(it.id, it.title, it.priority, it.status, it.commits.joinToString(", ") { c -> c.first },
-                    it.verification, it.version, it.accepted) }, mono = setOf(0, 4))
+                    it.verification + if (it.evidence.isEmpty()) "" else
+                        "\n+ ${it.evidence.size} Nachweis${if (it.evidence.size != 1) "e" else ""}",
+                    it.version, it.accepted) }, mono = setOf(0, 4))
             pdf.text("Karten im Einzelnen", 13f, true, space = 6f)
             for (row in report.rows) {
                 pdf.need(60f)
@@ -205,6 +218,19 @@ object Report {
                 pdf.text(facts.joinToString(" · "), 8.5f, color = pdf.grey, space = 6f)
                 for ((label, value) in listOf("Beschreibung" to row.notes, "Auswirkungsanalyse" to row.impact, "Verifikation" to row.verification)) {
                     if (value.isNotBlank()) { pdf.text(label, 9f, true, space = 1f); pdf.text(value.trim(), 9f, space = 5f) }
+                }
+                if (row.evidence.isNotEmpty()) {
+                    pdf.text("Nachweise", 9f, true, space = 2f)
+                    for (record in row.evidence) {
+                        val facts = listOf(record.size, record.added, record.by).filter { it.isNotEmpty() }.joinToString(" · ")
+                        pdf.text("📎 ${record.name}  ($facts)", 8.5f, space = 1f)
+                        if (record.sha256.isNotEmpty()) pdf.text("SHA-256 ${record.sha256}", 7f, color = pdf.grey, space = 3f, mono = true)
+                        record.image?.let { reference ->
+                            runCatching { fetch(reference, record.share) }.getOrNull()?.let { picture ->
+                                android.graphics.BitmapFactory.decodeFile(picture.path)?.let { bitmap -> pdf.image(bitmap, 240f) }
+                            }
+                        }
+                    }
                 }
                 if (row.files.isNotEmpty()) {
                     pdf.text("Anhänge", 9f, true, space = 1f)
@@ -234,11 +260,21 @@ object Report {
 
     /** Write the report into the cache and hand it to the share sheet. */
     fun share(state: AppState, context: android.content.Context, boardId: String) {
+        // In the background: evidence pictures may have to be downloaded first.
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
         val data = build(state.sync, boardId)
-        val folder = File(context.cacheDir, "reports").apply { mkdirs() }
-        val today = LocalDate.now()
-        val file = File(folder, "${data.title.replace(Regex("[/\\\\:*?\"<>|]"), "_")} – Stand %04d-%02d-%02d.pdf".format(today.year, today.monthValue, today.dayOfMonth))
-        writePdf(data, file)
-        state.shareFile(file, "application/pdf", "Bericht: ${data.title}")
+        Thread {
+            val result = runCatching {
+                val folder = File(context.cacheDir, "reports").apply { mkdirs() }
+                val today = LocalDate.now()
+                val file = File(folder, "${data.title.replace(Regex("[/\\\\:*?\"<>|]"), "_")} – Stand %04d-%02d-%02d.pdf".format(today.year, today.monthValue, today.dayOfMonth))
+                writePdf(data, file) { reference, share -> state.sync.fetchFile(reference, share) }
+                file to data.title
+            }
+            main.post {
+                result.onSuccess { (file, title) -> state.shareFile(file, "application/pdf", "Bericht: $title") }
+                    .onFailure { state.toastLater(errorText(it)) }
+            }
+        }.start()
     }
 }

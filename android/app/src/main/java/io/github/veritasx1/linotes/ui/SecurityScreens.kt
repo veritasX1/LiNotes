@@ -753,9 +753,11 @@ private val HELP = listOf(
         "Aufgaben-Board" to "Karte antippen für Fälligkeit, Zuständigkeit, Priorität, Farbe und Notizen; lange drücken zum Verschieben.",
         "Entwicklungsprojekt" to "Board in der Übersicht lange drücken → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten " +
             "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche " +
-            "Spalte geschoben hat. Für einfache Boards bleibt alles wie gewohnt.",
+            "Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. " +
+            "Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). " +
+            "Für einfache Boards bleibt alles wie gewohnt.",
         "Bericht" to "Board lange drücken → „Bericht teilen (PDF)“: der aktuelle Stand als PDF, z. B. als Nachweis für Kunden. " +
-            "Bei Entwicklungsprojekten mit Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme).",
+            "Bei Entwicklungsprojekten mit Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet.",
     ),
     "Datenschutz" to listOf(
         "Was der Server weiß" to "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, " +
