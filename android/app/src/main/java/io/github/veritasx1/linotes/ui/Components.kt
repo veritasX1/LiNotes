@@ -287,7 +287,8 @@ fun GroupRow(
 // ================================================================
 
 @Composable
-fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = "Suchen", modifier: Modifier = Modifier) {
+fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = "Suchen", modifier: Modifier = Modifier,
+                focus: androidx.compose.ui.focus.FocusRequester? = null) {
     val colors = palette
     Row(
         modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(10.dp)).background(colors.fill).padding(horizontal = 8.dp),
@@ -298,7 +299,8 @@ fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String =
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(placeholder, style = Type.body, color = colors.secondary)
             BasicTextField(value, onChange, singleLine = true, textStyle = Type.body.copy(color = colors.label),
-                cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier.fillMaxWidth().let { if (focus != null) it.focusRequester(focus) else it })
         }
         if (value.isNotEmpty()) {
             Box(Modifier.size(28.dp).clickable { onChange("") }, contentAlignment = Alignment.Center) {

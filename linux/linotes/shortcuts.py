@@ -10,7 +10,7 @@ SECTIONS = [
     ("Allgemein", [
         ("Neue Notiz", "<Control>n"),
         ("Neuer Ordner", "<Control><Shift>n"),
-        ("Suchen", "<Control>f"),
+        ("Suchen (im Board: Karten suchen)", "<Control>f"),
         ("Notiz duplizieren", "<Control>d"),
         ("Notiz in eigenem Fenster öffnen (oder Doppelklick)", "<Control>o"),
         ("Notizfenster schließen", "<Control>w"),
