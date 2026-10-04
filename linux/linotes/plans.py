@@ -12,8 +12,10 @@ Grid plan  {"name", "mode": "grid", "cols": {"type", "labels" | "count", "start"
     rot        Rotation (cleaning rota): with "weeks" columns, row r in week w gets
                people[(r + weeks since rot.start) % len(people)] unless the cell has its own text.
 
-Timeline plan  {"name", "mode": "timeline", "tasks": [{"x", "from", "to", "k", "m"}]}
+Timeline plan  {"name", "mode": "timeline", "tasks": [{"x", "from", "to", "k", "m", "moved"}]}
     from/to    "YYYY-MM-DD" (to inclusive); "m": milestone (one day, drawn as a diamond)
+    moved      milestones only: earlier days, oldest first, [{"was": "YYYY-MM-DD", "at": time, "by": user}] –
+               drawn faded and listed in the plan report (Terminverschiebungen)
 
 The same rules are in Android's Plans.kt (PlanTest has the same cases as tests/test_plans.py).
 """
@@ -192,6 +194,7 @@ def timeline_range(plan, today=None):
     for task in plan.get("tasks") or []:
         start, end = day(task.get("from")), day(task.get("to")) or day(task.get("from"))
         days += [d for d in (start, end) if d]
+        days += [d for d in (day(entry.get("was")) for entry in task.get("moved") or []) if d]  # faded earlier days
     first = monday(min(days) if days else today)
     last = max(days) if days else today
     last = max(last, first + datetime.timedelta(days=13))
@@ -207,6 +210,65 @@ def task_span(task):
     if task.get("m"):
         end = start
     return (start, max(start, end))
+
+
+# --- order and shifts ---------------------------------------------------
+
+def moved_list(items, at, to):
+    """`items` with the element at `at` moved to position `to` (clamped)."""
+    items = list(items)
+    if not 0 <= at < len(items):
+        return items
+    item = items.pop(at)
+    items.insert(max(0, min(to, len(items))), item)
+    return items
+
+
+def move_row(plan, at, to):
+    """A grid row with its cells to another place."""
+    rows = list(plan.get("rows") or [])
+    if not 0 <= at < len(rows):
+        return plan
+    return {**plan, "rows": moved_list(rows, at, to), "cells": moved_list(cells(plan), at, to)}
+
+
+def move_task(plan, at, to):
+    return {**plan, "tasks": moved_list(plan.get("tasks") or [], at, to)}
+
+
+def sort_tasks(plan):
+    """All tasks by start day (tasks without a day at the end); equal days keep their order."""
+    far = datetime.date.max
+    return {**plan, "tasks": sorted(plan.get("tasks") or [], key=lambda task: day(task.get("from")) or far)}
+
+
+def set_task_day(plan, index, key, value, by=None, at=None):
+    """Set "from" or "to" of a task (ISO day). A milestone keeps the day it had in "moved",
+    so the old date stays visible (faded) and the report lists the shift."""
+    tasks = [dict(task) for task in plan.get("tasks") or []]
+    if not 0 <= index < len(tasks):
+        return plan
+    task = tasks[index]
+    if task.get(key) == value:
+        return plan
+    if task.get("m"):
+        if task.get("from"):
+            task["moved"] = list(task.get("moved") or []) + [{"was": task["from"], "at": at, "by": by}]
+        task["from"] = task["to"] = value
+    else:
+        task[key] = value
+    return {**plan, "tasks": tasks}
+
+
+def shifts(plan):
+    """Every milestone shift, oldest first per milestone: (name, was, now, at, by)."""
+    result = []
+    for task in plan.get("tasks") or []:
+        moved = task.get("moved") or []
+        days = [entry.get("was") for entry in moved] + [task.get("from")]
+        for entry, new in zip(moved, days[1:]):
+            result.append((task.get("x") or "Meilenstein", entry.get("was"), new, entry.get("at"), entry.get("by")))
+    return result
 
 
 # --- templates ----------------------------------------------------------
