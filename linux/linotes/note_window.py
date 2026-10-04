@@ -36,6 +36,7 @@ class NoteWindow(Adw.ApplicationWindow):
         self.editor.connect("open-note", lambda _editor, target: (main.open_linked_note(target), main.present()))
         self.editor.connect("link-requested", lambda editor: main.show_link_choice(editor, exclude=self.note_id))
         self.editor.connect("open-file", lambda _editor, block: main.open_attachment(block, self.share))
+        self.editor.connect("link-line", lambda editor, url: main.make_link_preview(editor, self.note_id, url))
 
         header = Adw.HeaderBar()
         self.title = Adw.WindowTitle()

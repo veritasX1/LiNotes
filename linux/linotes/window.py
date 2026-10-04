@@ -18,7 +18,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 from . import model, vault
 from . import smoothscroll
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import activity, audio, security_ui, textsize, uiprefs, uploads
+from . import activity, audio, linkpreview, security_ui, textsize, uiprefs, uploads
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -181,6 +181,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         sort_menu.append_section("Textgröße (Strg + / Strg −)", sizes)
         layout = Gio.Menu()
         layout.append("Blocksatz", "win.justify")
+        # Off by default: a preview means fetching the page, the site then sees this computer's address.
+        layout.append("Link-Vorschau (Webseite abrufen)", "win.link-previews")
         sort_menu.append_section(None, layout)
         self.sort_button = icon_menu_button("more", "Sortieren und Darstellung", Gtk.PopoverMenu.new_from_model(sort_menu))
         header.pack_start(self.sort_button)
@@ -242,6 +244,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_pane.editor.connect("link-requested", lambda _editor: self.show_link_choice())
         self.note_pane.editor.connect("open-note", lambda _editor, note_id: self.open_linked_note(note_id))
         self.note_pane.editor.connect("open-file", lambda _editor, block: self.open_attachment(block, self.note_pane.image_share))
+        self.note_pane.editor.connect("link-line", lambda editor, url: self.make_link_preview(editor, self.current_note, url))
         # Drop files from the file manager into the note (like Apple): photos as photos, the rest attached.
         drop = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY)
         drop.connect("drop", lambda _target, file, _x, _y: self.drop_file(file))
@@ -1297,6 +1300,31 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.attach_path(path, self.note_pane.editor, note)
         return True
 
+    def make_link_preview(self, editor, note_id, url):
+        """A web address alone on a line becomes a preview card – only if switched on, never in
+        locked notes. Only this computer fetches the page; the card (with picture) is stored
+        encrypted in the note. Fails quietly: the address simply stays a link."""
+        if not uiprefs.get("link_previews", False) or not note_id:
+            return
+        note = self.sync.get(note_id)
+        if note is None or "enc" in note["data"] or note["data"].get("trashed"):
+            return
+        share = note.get("share")
+
+        def work():
+            found = linkpreview.fetch(url)
+            reference = self.sync.upload_file(found["picture"], share) if found.get("picture") else None
+            return linkpreview.block(url, found, reference)
+
+        def done(block, error):
+            if error is not None:
+                print("LiNotes: keine Link-Vorschau:", error)
+                return
+            still_there = editor.get_root() is not None and (editor is not self.note_pane.editor or self.current_note == note_id)
+            if still_there:
+                editor.replace_url_line(url, block)
+        run_async(work, done)
+
     def deliver_upload(self, note_id, editor, block):
         """A finished upload goes into the editor if it still shows that note – meanwhile one may
         have switched notes or closed the note window – otherwise to the end of the note."""
@@ -1911,6 +1939,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.text_size_action.connect("activate", lambda _action, value: self.set_text_size(int(value.get_string())))
         self.add_action(self.text_size_action)
         textsize.apply(textsize.load())
+        previews = Gio.SimpleAction.new_stateful("link-previews", None, GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))
+        previews.connect("activate", lambda action, _value: (uiprefs.put("link_previews", not action.get_state().get_boolean()),
+                                                             action.set_state(GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))))
+        self.add_action(previews)
         self.justify_action = Gio.SimpleAction.new_stateful("justify", None, GLib.Variant.new_boolean(textsize.load_justify()))
         self.justify_action.connect("activate", lambda action, _value: self.set_justified(not action.get_state().get_boolean()))
         self.add_action(self.justify_action)
