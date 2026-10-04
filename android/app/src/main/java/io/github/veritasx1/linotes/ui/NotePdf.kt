@@ -67,7 +67,12 @@ object NotePdf {
                     TEXT_COLORS.getValue(span.optString(2)) shr 8 and 0xFF, TEXT_COLORS.getValue(span.optString(2)) and 0xFF))
                 in FONTS -> android.text.style.TypefaceSpan(FONTS.getValue(span.optString(2)))
                 // Links to other notes look like links (accent color, underlined).
-                else -> if (span.optString(2).startsWith("n:")) {
+                // Footnote numbers: small, raised, accent color (the list follows at the end).
+                else -> if (span.optString(2).startsWith("fn:")) {
+                    result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    result.setSpan(android.text.style.RelativeSizeSpan(0.72f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    android.text.style.SuperscriptSpan()
+                } else if (span.optString(2).startsWith("n:")) {
                     result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     UnderlineSpan()
                 } else continue
@@ -166,6 +171,16 @@ object NotePdf {
                 color = if (kind == "quote" || done) pdf.grey else Color.BLACK, mono = kind == "mono" || kind == "code",
                 indent = 18f * level + (if (kind in marks) 18f else 0f) + (if (kind == "quote") 14f else 0f),
                 space = style.space, mark = mark, markColor = if (kind == "check") pdf.accent else Color.BLACK, bar = kind == "quote")
+        }
+        // Footnotes and sources at the end (numbered like in the text) – the same as Ubuntu.
+        val notes = io.github.veritasx1.linotes.data.Model.footnotes(blocks)
+        if (notes.isNotEmpty()) {
+            pdf.y += 10f
+            pdf.need(30f)
+            pdf.canvas.drawRect(pdf.margin, pdf.y, pdf.margin + 120f, pdf.y + 0.8f, android.graphics.Paint().apply { color = pdf.line })
+            pdf.y += 8f
+            pdf.text("Fußnoten und Quellen", 10.5f, true, space = 4f)
+            notes.forEachIndexed { index, note -> pdf.text("${index + 1}  $note", 9.5f, space = 3f) }
         }
         pdf.finish(file)
     }

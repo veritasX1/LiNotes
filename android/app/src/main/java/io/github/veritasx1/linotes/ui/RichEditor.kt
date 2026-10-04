@@ -65,6 +65,15 @@ class MentionSpan(val userId: Int, private val color: Int) : android.text.style.
     }
 }
 
+/** A footnote number (Profi-Funktion): small, raised, in the accent color; the text rides along. */
+class FootnoteSpan(val note: String, private val color: Int) : MetricAffectingSpan() {
+    override fun updateMeasureState(paint: TextPaint) { paint.textSize *= 0.72f; paint.baselineShift += (paint.ascent() * 0.45f).toInt() }
+    override fun updateDrawState(paint: TextPaint) {
+        paint.textSize *= 0.72f; paint.baselineShift += (paint.ascent() * 0.45f).toInt()
+        paint.color = color; paint.isFakeBoldText = true
+    }
+}
+
 class NoteLinkSpan(val noteId: String, private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
     override fun updateDrawState(paint: TextPaint) {
         paint.color = color
@@ -368,6 +377,12 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var onLinkRequested: (() -> Unit)? = null
     var onOpenNote: ((String) -> Unit)? = null
     var onOpenFile: ((JSONObject) -> Unit)? = null
+    /** A footnote number was tapped (edit or remove it). */
+    var onFootnote: ((FootnoteSpan) -> Unit)? = null
+    /** The footnote texts changed (reading order) – the screen lists them under the note. */
+    var onFootnotesChanged: ((List<String>) -> Unit)? = null
+    private var shownFootnotes: List<String>? = null
+
     /** A web address was finished alone on a line (Enter or pasted): the screen may make a preview. */
     var onLinkLine: ((String) -> Unit)? = null
     /** First page of an attached PDF for its card (null: no preview). */
@@ -430,6 +445,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 busy = true
                 try {
                     handleEdit(s, insertStart, insertCount)
+                    keepFootnotesClean(s, insertStart, insertCount)
+                    renumberFootnotes(s)
                     highlightCode(s)
                 } finally {
                     busy = false
@@ -810,6 +827,65 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         onStyleChanged?.invoke()
     }
 
+    // --- footnotes (Profi-Funktion) ---
+
+    /** Typed text never becomes part of a footnote number. */
+    private fun keepFootnotesClean(text: Editable, start: Int, count: Int) {
+        if (count <= 0) return
+        for (span in text.getSpans(start, start + count, FootnoteSpan::class.java)) {
+            val from = text.getSpanStart(span)
+            val to = text.getSpanEnd(span)
+            if (start <= from && start + count >= to) continue
+            text.removeSpan(span)
+            val number = (from until to).firstOrNull { it !in start until start + count && text[it].isDigit() } ?: continue
+            text.setSpan(span, number, number + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /** Footnote numbers follow the reading order (1, 2, 3 …). */
+    fun renumberFootnotes(text: Editable) {
+        val spans = text.getSpans(0, text.length, FootnoteSpan::class.java).sortedBy { text.getSpanStart(it) }
+        for ((index, span) in spans.withIndex().reversed()) {
+            val from = text.getSpanStart(span)
+            val to = text.getSpanEnd(span)
+            val number = (index + 1).toString()
+            if (text.substring(from, to) == number) continue
+            text.replace(from, to, number)
+            text.removeSpan(span)
+            text.setSpan(span, from, from + number.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val notes = spans.map { it.note }
+        if (notes != shownFootnotes) {
+            shownFootnotes = notes
+            post { onFootnotesChanged?.invoke(notes) }
+        }
+    }
+
+    fun insertFootnote(note: String) {
+        val text = text ?: return
+        val at = selectionStart.coerceAtLeast(0)
+        busy = true
+        text.insert(at, "0")
+        text.setSpan(FootnoteSpan(note.trim(), colors.accent), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        renumberFootnotes(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
+    /** Change the footnote's text (null: remove it). */
+    fun editFootnote(span: FootnoteSpan, note: String?) {
+        val text = text ?: return
+        val from = text.getSpanStart(span)
+        val to = text.getSpanEnd(span)
+        if (from < 0) return
+        busy = true
+        text.removeSpan(span)
+        if (note == null) text.delete(from, to) else text.setSpan(FootnoteSpan(note.trim(), colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        renumberFootnotes(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
     /** Format → Code (language), a Profi-Funktion: the selected paragraphs become a code block. */
     fun makeCode(lang: String) {
         val text = text ?: return
@@ -924,6 +1000,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val line = layout?.getLineForOffset(start)
             line != null && line == layout?.getLineForVertical(event.y.toInt() - totalPaddingTop + scrollY)
         }?.let { onOpenFile?.invoke(JSONObject(it.block.toString())); return true }
+        text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FootnoteSpan::class.java).firstOrNull()
+            ?.let { onFootnote?.invoke(it); return true }
         text.getSpans(offset, offset, NoteLinkSpan::class.java).firstOrNull {
             offset in text.getSpanStart(it) until text.getSpanEnd(it)
         }?.let { onOpenNote?.invoke(it.noteId); return true }
@@ -1146,11 +1224,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                     val name = item.optString(2)
                     val target = io.github.veritasx1.linotes.data.Model.linkTarget(name)
                     val person = io.github.veritasx1.linotes.data.Model.mentionTarget(name)
-                    if (name !in INLINE && target == null && person == null) continue
+                    val footnote = io.github.veritasx1.linotes.data.Model.footnoteText(name)
+                    if (name !in INLINE && target == null && person == null && footnote == null) continue
                     val from = (start + item.optInt(0)).coerceIn(start, start + text.length)
                     val to = (start + item.optInt(1)).coerceIn(from, start + text.length)
                     if (to <= from) continue
-                    if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (footnote != null) builder.setSpan(FootnoteSpan(footnote, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    else if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     else if (person != null) builder.setSpan(MentionSpan(person, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     else builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
                 }
@@ -1182,7 +1262,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
-        text?.let { markLinks(it); markFixedSpaces(it); highlightCode(it) }
+        text?.let { markLinks(it); markFixedSpaces(it); highlightCode(it); renumberFootnotes(it) }
         lineBlocks = origins
         busy = false
     }
@@ -1253,6 +1333,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 val from = text.getSpanStart(mention).coerceAtLeast(start)
                 val to = text.getSpanEnd(mention).coerceAtMost(end)
                 if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.MENTION + mention.userId))
+            }
+            for (note in text.getSpans(start, end, FootnoteSpan::class.java).sortedBy { text.getSpanStart(it) }) {
+                val from = text.getSpanStart(note).coerceAtLeast(start)
+                val to = text.getSpanEnd(note).coerceAtMost(end)
+                if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.FOOTNOTE + note.note))
             }
             for (link in text.getSpans(start, end, NoteLinkSpan::class.java).sortedBy { text.getSpanStart(it) }) {
                 val from = text.getSpanStart(link).coerceAtLeast(start)
