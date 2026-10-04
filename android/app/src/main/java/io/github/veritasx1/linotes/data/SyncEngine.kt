@@ -592,7 +592,8 @@ class SyncEngine(private val context: Context) {
         val body = data.optJSONArray("body") ?: return data
         for (index in 0 until body.length()) {
             val block = body.optJSONObject(index) ?: continue
-            if (block.optString("t") == "image" && block.optString("f").isNotEmpty()) {
+            // Pictures, attached files and link-preview pictures are encrypted with the share's key.
+            if (block.optString("t") in setOf("image", "file", "link") && block.optString("f").isNotEmpty()) {
                 try {
                     val content = fetchFile(block.getString("f"), item.share).readBytes()
                     block.put("f", uploadFile(content, newShare))
