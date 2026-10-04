@@ -2,6 +2,7 @@
 (project plan). The data model is plans.py; every change is saved after a short pause."""
 
 import datetime
+import time
 
 import gi
 
@@ -230,6 +231,8 @@ class PlanView(Gtk.Box):
                 item("Zeile darüber einfügen", lambda: self.change(plans.insert_row(self.data, row), True))
                 item("Zeile darunter einfügen", lambda: self.change(plans.insert_row(self.data, row + 1), True))
                 item("Zeile löschen", lambda: self.change(plans.remove_row(self.data, row), True), rows > 1)
+                item("Zeile nach oben", lambda: self.change(plans.move_row(self.data, row, row - 1), True), row > 0)
+                item("Zeile nach unten", lambda: self.change(plans.move_row(self.data, row, row + 1), True), row < rows - 1)
             if column is not None:
                 free = (self.data.get("cols") or {}).get("type", "free") == "free"
                 item("Spalte links einfügen" if free else "Spalte anhängen",
@@ -266,34 +269,59 @@ class PlanView(Gtk.Box):
     def build_timeline(self):
         self.tool("+ Aufgabe", lambda: self.add_task(False))
         self.tool("+ Meilenstein", lambda: self.add_task(True))
+        self.tool("Nach Datum sortieren", lambda: self.change(plans.sort_tasks(self.data), True),
+                  "Alle Aufgaben und Meilensteine nach ihrem Beginn ordnen")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_start=16, margin_end=16, margin_bottom=16)
         chart = Gtk.DrawingArea(content_height=max(120, 34 * len(self.data.get("tasks") or []) + 50), hexpand=True)
         chart.set_draw_func(self.draw_timeline)
         self.chart = chart
         box.append(chart)
         tasks = Gtk.Grid(column_spacing=8, row_spacing=4)
-        for col, title in enumerate(["Aufgabe", "Von", "Bis", "Farbe", ""]):
+        for col, title in enumerate(["", "Aufgabe", "Von", "Bis", "Farbe", ""]):
             tasks.attach(Gtk.Label(label=title, xalign=0, css_classes=["dim-label", "caption"]), col, 0, 1, 1)
-        for index, task in enumerate(self.data.get("tasks") or []):
+        all_tasks = self.data.get("tasks") or []
+        line = 1
+        for index, task in enumerate(all_tasks):
+            # Order one by one (the whole plan: "Nach Datum sortieren").
+            arrows = Gtk.Box(css_classes=["linked"], valign=Gtk.Align.CENTER)
+            for icon, tooltip, to in (("go-up-symbolic", "Nach oben", index - 1), ("go-down-symbolic", "Nach unten", index + 1)):
+                arrow = Gtk.Button(icon_name=icon, tooltip_text=tooltip, css_classes=["flat"], sensitive=0 <= to < len(all_tasks))
+                arrow.connect("clicked", lambda _b, i=index, to=to: self.change(plans.move_task(self.data, i, to), True))
+                arrows.append(arrow)
+            tasks.attach(arrows, 0, line, 1, 1)
             name = Gtk.Entry(text=task.get("x", ""), width_chars=24, placeholder_text="Meilenstein" if task.get("m") else "Aufgabe")
             name.connect("changed", lambda e, i=index: self.set_task(i, x=e.get_text()))
-            tasks.attach(name, 0, index + 1, 1, 1)
-            for col, key in ((1, "from"), (2, "to")):
+            tasks.attach(name, 1, line, 1, 1)
+            for col, key in ((2, "from"), (3, "to")):
                 if key == "to" and task.get("m"):
-                    tasks.attach(Gtk.Label(label="◆ Meilenstein", xalign=0, css_classes=["dim-label"]), col, index + 1, 1, 1)
+                    tasks.attach(Gtk.Label(label="◆ Meilenstein", xalign=0, css_classes=["dim-label"]), col, line, 1, 1)
                     continue
                 value = plans.day(task.get(key))
-                date = Gtk.Entry(text=value.strftime("%d.%m.%Y") if value else "", width_chars=10, placeholder_text="TT.MM.JJJJ")
-                date.connect("changed", lambda e, i=index, key=key: self.set_task_date(i, key, e))
-                tasks.attach(date, col, index + 1, 1, 1)
+                date = Gtk.Entry(text=value.strftime("%d.%m.%Y") if value else "", width_chars=10, placeholder_text="TT.MM.JJJJ",
+                                 tooltip_text="Mit Enter übernehmen")
+                date.shown = date.get_text()  # only a changed field counts (also after reordering)
+                # Taken on Enter or when leaving the field – not while typing, or every half-typed
+                # date would count as a milestone shift.
+                date.connect("activate", lambda e, i=index, key=key: self.set_task_date(i, key, e))
+                focus = Gtk.EventControllerFocus()
+                focus.connect("leave", lambda _c, e=date, i=index, key=key: self.set_task_date(i, key, e))
+                date.add_controller(focus)
+                tasks.attach(date, col, line, 1, 1)
             color = Gtk.DropDown.new_from_strings(list(plans.COLOR_NAMES.values()))
             names = list(plans.COLOR_NAMES)
             color.set_selected(names.index(task.get("k")) if task.get("k") in names else names.index("blue"))
             color.connect("notify::selected", lambda d, _p, i=index: self.set_task(i, k=names[d.get_selected()]))
-            tasks.attach(color, 3, index + 1, 1, 1)
+            tasks.attach(color, 4, line, 1, 1)
             remove = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], tooltip_text="Entfernen")
             remove.connect("clicked", lambda _b, i=index: self.remove_task(i))
-            tasks.attach(remove, 4, index + 1, 1, 1)
+            tasks.attach(remove, 5, line, 1, 1)
+            line += 1
+            if task.get("moved"):
+                days = [entry.get("was") for entry in task["moved"]] + [task.get("from")]
+                trail = " → ".join(d.strftime("%d.%m.%Y") for d in map(plans.day, days) if d)
+                history = Gtk.Label(label=f"verschoben: {trail}", xalign=0, css_classes=["dim-label", "caption"])
+                tasks.attach(history, 1, line, 4, 1)
+                line += 1
         box.append(tasks)
         self.scroller.set_child(box)
 
@@ -307,16 +335,25 @@ class PlanView(Gtk.Box):
         self.chart.queue_draw()
 
     def set_task_date(self, index, key, entry):
+        if index >= len(self.tasks()) or entry.get_text().strip() == entry.shown:
+            return
         try:
             value = datetime.datetime.strptime(entry.get_text().strip(), "%d.%m.%Y").date()
+            if value.year < 1000:
+                raise ValueError("Jahr vierstellig")
         except ValueError:
             entry.add_css_class("error")
             return
         entry.remove_css_class("error")
-        fields = {key: value.isoformat()}
-        if self.tasks()[index].get("m"):
-            fields["to"] = value.isoformat()
-        self.set_task(index, **fields)
+        entry.shown = entry.get_text().strip()
+        if self.tasks()[index].get(key) == value.isoformat():
+            return
+        moved = self.tasks()[index].get("m")
+        self.change(plans.set_task_day(self.data, index, key, value.isoformat(), by=self.sync.user_id, at=time.time()))
+        if moved:
+            GLib.idle_add(lambda: self.build() and False)  # show the "verschoben" line
+        else:
+            self.chart.queue_draw()
 
     def add_task(self, milestone):
         today = datetime.date.today()
@@ -373,6 +410,26 @@ class PlanView(Gtk.Box):
             start = label_width + (span[0] - first).days * scale
             if task.get("m"):
                 cx, cy, s = start + scale / 2, y + 14, 9
+                # Earlier days stay visible, faded, joined to the current one by a dashed line.
+                for entry in task.get("moved") or []:
+                    was = plans.day(entry.get("was"))
+                    if was is None or not first <= was <= last:
+                        continue
+                    ox = label_width + (was - first).days * scale + scale / 2
+                    cr.set_source_rgba(r, g, b, 0.3)
+                    cr.move_to(ox, cy - s)
+                    cr.line_to(ox + s, cy)
+                    cr.line_to(ox, cy + s)
+                    cr.line_to(ox - s, cy)
+                    cr.close_path()
+                    cr.fill()
+                    cr.set_dash([3, 3])
+                    cr.set_line_width(1.2)
+                    cr.move_to(ox + (s if cx > ox else -s), cy)
+                    cr.line_to(cx + (-s if cx > ox else s), cy)
+                    cr.stroke()
+                    cr.set_dash([])
+                cr.set_source_rgb(r, g, b)
                 cr.move_to(cx, cy - s)
                 cr.line_to(cx + s, cy)
                 cr.line_to(cx, cy + s)

@@ -1685,7 +1685,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             except GLib.Error:
                 return
             try:
-                report.write_plan_pdf(plan["data"], file.get_path())
+                report.write_plan_pdf(plan["data"], file.get_path(), self.sync.user_name)
             except Exception as error:
                 self.toast(f"PDF nicht möglich: {error}")
                 return

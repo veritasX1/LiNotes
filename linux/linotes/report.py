@@ -476,8 +476,9 @@ def write_note_pdf(blocks, path, header, image_path=None):
     pdf.close()
 
 
-def write_plan_pdf(plan, path):
-    """A plan on A4 landscape to hang up: the grid with colors, or the timeline with bars."""
+def write_plan_pdf(plan, path, user_name=None):
+    """A plan on A4 landscape to hang up: the grid with colors, or the timeline with bars (and
+    every milestone shift, for the project report)."""
     import datetime
     from . import plans
     name = plan.get("name") or "Plan"
@@ -505,19 +506,57 @@ def write_plan_pdf(plan, path):
                 pdf.cr.fill()
             span = plans.task_span(task)
             if span:
-                pdf.cr.set_source_rgb(*plans.COLORS.get(task.get("k"), plans.COLORS["blue"]))
+                color = plans.COLORS.get(task.get("k"), plans.COLORS["blue"])
                 x = MARGIN + label_width + (span[0] - first).days * scale
                 if task.get("m"):
                     cx, cy = x + scale / 2, pdf.y + 11
+                    # Earlier days faded, joined by a dashed line (as in the app).
+                    for entry in task.get("moved") or []:
+                        was = plans.day(entry.get("was"))
+                        if was is None:
+                            continue
+                        ox = MARGIN + label_width + (was - first).days * scale + scale / 2
+                        pdf.cr.set_source_rgba(*color, 0.3)
+                        pdf.cr.move_to(ox, cy - 8)
+                        pdf.cr.line_to(ox + 8, cy)
+                        pdf.cr.line_to(ox, cy + 8)
+                        pdf.cr.line_to(ox - 8, cy)
+                        pdf.cr.close_path()
+                        pdf.cr.fill()
+                        pdf.cr.set_dash([2.5, 2.5])
+                        pdf.cr.set_line_width(0.9)
+                        pdf.cr.move_to(ox + (8 if cx > ox else -8), cy)
+                        pdf.cr.line_to(cx + (-8 if cx > ox else 8), cy)
+                        pdf.cr.stroke()
+                        pdf.cr.set_dash([])
+                    pdf.cr.set_source_rgb(*color)
                     pdf.cr.move_to(cx, cy - 8)
                     pdf.cr.line_to(cx + 8, cy)
                     pdf.cr.line_to(cx, cy + 8)
                     pdf.cr.line_to(cx - 8, cy)
                     pdf.cr.close_path()
                 else:
+                    pdf.cr.set_source_rgb(*color)
                     pdf.cr.rectangle(x, pdf.y + 4, ((span[1] - span[0]).days + 1) * scale, 14)
                 pdf.cr.fill()
             pdf.y += 24
+        moves = plans.shifts(plan)
+        if moves:
+            pdf.y += 14
+            pdf.text("Terminverschiebungen", 12, bold=True, space=6)
+
+            def when(at):
+                return datetime.datetime.fromtimestamp(at).strftime("%d.%m.%Y %H:%M") if at else "–"
+
+            def date(text):
+                value = plans.day(text)
+                return value.strftime("%d.%m.%Y") if value else "–"
+
+            pdf.table(["Meilenstein", "Bisher", "Neu", "Verschiebung", "Geändert am", "Von"], [3, 1.4, 1.4, 1.2, 1.6, 1.8],
+                      [[name, date(was), date(new),
+                        (f"{(plans.day(new) - plans.day(was)).days:+d} Tage" if plans.day(new) and plans.day(was) else "–"),
+                        when(at), (user_name(by) if user_name and by is not None else "–")]
+                       for name, was, new, at, by in moves], size=9)
         pdf.close()
         return
     rows = plans.text_rows(plan)
