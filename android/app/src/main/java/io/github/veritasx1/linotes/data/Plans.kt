@@ -191,10 +191,70 @@ object Plans {
     }
 
     fun timelineRange(plan: JSONObject, today: LocalDate = LocalDate.now()): Pair<LocalDate, LocalDate> {
-        val days = tasks(plan).flatMap { listOfNotNull(day(it.optString("from")), day(it.optString("to")) ?: day(it.optString("from"))) }
+        val days = tasks(plan).flatMap { listOfNotNull(day(it.optString("from")), day(it.optString("to")) ?: day(it.optString("from"))) } +
+            tasks(plan).flatMap { task -> moved(task).mapNotNull { day(it.optString("was")) } }  // faded earlier days
         val first = monday(days.minOrNull() ?: today)
         val last = maxOf(days.maxOrNull() ?: today, first.plusDays(13))
         return first to monday(last).plusDays(6)
+    }
+
+    // --- order and shifts ---
+
+    private fun <T> movedList(items: List<T>, at: Int, to: Int): List<T> {
+        if (at !in items.indices) return items
+        val list = items.toMutableList()
+        val item = list.removeAt(at)
+        list.add(to.coerceIn(0, list.size), item)
+        return list
+    }
+
+    /** A grid row with its cells to another place. */
+    fun moveRow(plan: JSONObject, at: Int, to: Int): JSONObject {
+        val rows = rows(plan)
+        if (at !in rows.indices) return plan
+        return copy(plan).put("rows", JSONArray(movedList(rows, at, to))).put("cells", cellsJson(movedList(cells(plan), at, to)))
+    }
+
+    fun moveTask(plan: JSONObject, at: Int, to: Int): JSONObject =
+        copy(plan).put("tasks", JSONArray(movedList(tasks(plan), at, to).map { JSONObject(it.toString()) }))
+
+    /** All tasks by start day (tasks without a day at the end); equal days keep their order. */
+    fun sortTasks(plan: JSONObject): JSONObject =
+        copy(plan).put("tasks", JSONArray(tasks(plan).sortedBy { day(it.optString("from")) ?: LocalDate.MAX }.map { JSONObject(it.toString()) }))
+
+    fun moved(task: JSONObject): List<JSONObject> {
+        val array = task.optJSONArray("moved") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+    }
+
+    /** Set "from" or "to" of a task (ISO day). A milestone keeps the day it had in "moved", so the
+     *  old date stays visible (faded) and the report lists the shift. */
+    fun setTaskDay(plan: JSONObject, index: Int, key: String, value: String, by: Int? = null, at: Double? = null): JSONObject {
+        val list = tasks(plan).map { JSONObject(it.toString()) }
+        if (index !in list.indices) return plan
+        val task = list[index]
+        if (task.optString(key) == value) return plan
+        if (task.optBoolean("m")) {
+            val old = task.optString("from")
+            if (old.isNotEmpty()) {
+                val entry = JSONObject().put("was", old).put("at", at ?: JSONObject.NULL).put("by", by ?: JSONObject.NULL)
+                task.put("moved", (task.optJSONArray("moved") ?: JSONArray()).put(entry))
+            }
+            task.put("from", value).put("to", value)
+        } else task.put(key, value)
+        return copy(plan).put("tasks", JSONArray(list))
+    }
+
+    data class Shift(val name: String, val was: String, val now: String, val at: Double?, val by: Int?)
+
+    /** Every milestone shift, oldest first per milestone. */
+    fun shifts(plan: JSONObject): List<Shift> = tasks(plan).flatMap { task ->
+        val moved = moved(task)
+        val days = moved.map { it.optString("was") } + task.optString("from")
+        moved.mapIndexed { i, entry ->
+            Shift(task.optString("x").ifEmpty { "Meilenstein" }, entry.optString("was"), days[i + 1],
+                if (entry.isNull("at")) null else entry.optDouble("at"), if (entry.isNull("by")) null else entry.optInt("by"))
+        }
     }
 
     // --- templates ---

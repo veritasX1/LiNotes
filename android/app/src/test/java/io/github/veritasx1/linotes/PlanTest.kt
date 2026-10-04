@@ -54,6 +54,33 @@ class PlanTest {
         assertEquals(LocalDate.of(2026, 10, 5) to LocalDate.of(2026, 10, 18), Plans.timelineRange(JSONObject("""{"tasks":[]}"""), today))
         assertEquals(listOf("", "Mo", "Di", "Mi", "Do", "Fr"), Plans.textRows(week, today)[0])
         for ((key, _, _) in Plans.TEMPLATES) assertTrue(Plans.template(key, today).optString("mode") in setOf("grid", "timeline"))
+
+        // order: grid rows with their cells, tasks one by one and by date (same cases as test_plans.py)
+        val grid = JSONObject("""{"rows":["a","b","c"],"cols":{"type":"free","labels":["x"]},"cells":[[{"x":"1"}],[null],[{"x":"3"}]]}""")
+        val movedRow = Plans.moveRow(grid, 2, 0)
+        assertEquals(listOf("c", "a", "b"), Plans.rows(movedRow))
+        assertEquals("""[[{"x":"3"}],[{"x":"1"}],[null]]""", cellsJson(movedRow))
+        assertEquals(movedRow.toString(), Plans.moveRow(movedRow, 5, 0).toString())
+        assertEquals(listOf("Umsetzung", "Test", "Abnahme", "Konzept"), Plans.tasks(Plans.moveTask(timeline, 0, 9)).map { it.optString("x") })
+        val mixed = JSONObject("""{"tasks":[{"x":"c","from":"2026-10-20"},{"x":"ohne"},{"x":"a","from":"2026-10-01"},{"x":"b","from":"2026-10-20"}]}""")
+        assertEquals(listOf("a", "c", "b", "ohne"), Plans.tasks(Plans.sortTasks(mixed)).map { it.optString("x") })
+
+        // a milestone remembers where it was; ordinary tasks just change
+        var shifted = Plans.setTaskDay(timeline, 3, "from", "2026-11-02", by = 1, at = 100.0)
+        shifted = Plans.setTaskDay(shifted, 3, "from", "2026-11-09", by = 3, at = 200.0)
+        val stone = Plans.tasks(shifted)[3]
+        assertEquals("2026-11-09", stone.optString("from"))
+        assertEquals("2026-11-09", stone.optString("to"))
+        assertEquals(listOf("2026-10-26", "2026-11-02"), Plans.moved(stone).map { it.optString("was") })
+        assertEquals(shifted.toString(), Plans.setTaskDay(shifted, 3, "from", "2026-11-09", by = 1, at = 300.0).toString())
+        assertEquals(listOf(Plans.Shift("Abnahme", "2026-10-26", "2026-11-02", 100.0, 1), Plans.Shift("Abnahme", "2026-11-02", "2026-11-09", 200.0, 3)),
+            Plans.shifts(shifted))
+        val task = Plans.tasks(Plans.setTaskDay(timeline, 0, "to", "2026-10-12", by = 1, at = 1.0))[0]
+        assertEquals("2026-10-12", task.optString("to"))
+        assertTrue(!task.has("moved"))
+        assertTrue(Plans.timelineRange(shifted, today).second >= LocalDate.of(2026, 11, 9))
+        val back = Plans.setTaskDay(JSONObject("""{"tasks":[{"x":"M","from":"2026-09-14","to":"2026-09-14","m":true}]}"""), 0, "from", "2026-10-12", by = 1, at = 1.0)
+        assertEquals(LocalDate.of(2026, 9, 14), Plans.timelineRange(back, today).first)
     }
 
     private fun cellsJson(plan: JSONObject) = "[" + Plans.cells(plan).joinToString(",") { row -> "[" + row.joinToString(",") { it?.toString() ?: "null" } + "]" } + "]"
