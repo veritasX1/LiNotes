@@ -1592,10 +1592,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
                      body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
 
     def move_folder(self, folder_id):
-        """Move a folder (into another folder or to the top) or a list/board into a
+        """Move a folder (into another folder or to the top) or a list/board/plan into a
         folder (or out of it), like dragging in Notes."""
         folder = self.sync.get(folder_id)
-        if folder is None or folder["kind"] not in ("folder", "list", "board"):
+        if folder is None or folder["kind"] not in ("folder", "list", "board", "plan"):
             return
         is_folder = folder["kind"] == "folder"
         blocked = (model.folder_descendants(self.sync, folder_id) | {folder_id}) if is_folder else set()

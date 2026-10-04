@@ -11,7 +11,7 @@ from . import lists
 from . import model
 from . import smoothscroll
 from . import uiprefs
-from .icons import Icon, drag_source, drop_target
+from .icons import Icon, drag_autoscroll, drag_source, drop_target
 
 
 class SidebarRow(Gtk.ListBoxRow):
@@ -88,6 +88,7 @@ class Sidebar(Gtk.Box):
 
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.list)
         smoothscroll.enable(scroller)
+        drag_autoscroll(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
 
