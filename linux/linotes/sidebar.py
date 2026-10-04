@@ -7,6 +7,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
+from . import lists
 from . import model
 from . import smoothscroll
 from . import uiprefs
@@ -15,9 +16,10 @@ from .icons import Icon, drag_source, drop_target
 
 class SidebarRow(Gtk.ListBoxRow):
 
-    def __init__(self, key, icon, label, count=None, owner_hint=None, depth=0, expander=None):
+    def __init__(self, key, icon, label, count=None, owner_hint=None, depth=0, expander=None, badges=()):
         super().__init__()
         self.key = key
+        self.set_tooltip_text(label)
         box = Gtk.Box(spacing=10)
         box.set_margin_top(5)
         box.set_margin_bottom(5)
@@ -26,8 +28,17 @@ class SidebarRow(Gtk.ListBoxRow):
         symbol = Icon(icon, 16)
         symbol.add_css_class("accent-icon")
         box.append(symbol)
-        text = Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3)
+        # Long names wrap onto a second line instead of turning into a guessing game.
+        text = Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=3, wrap=True, lines=2,
+                         wrap_mode=2, max_width_chars=1)
         box.append(text)
+        # Where the item lives (folder, shared) as small symbols instead of text, so
+        # the name keeps its room; the tooltip spells it out.
+        for badge_icon, tooltip in badges:
+            badge = Icon(badge_icon, 12)
+            badge.add_css_class("sidebar-badge")
+            badge.set_tooltip_text(tooltip)
+            box.append(badge)
         if expander is not None:
             # Subfolders fold in and out like in Apple's Notes; the arrow sits on the
             # right so that all folder symbols of one level stay aligned.
@@ -39,8 +50,9 @@ class SidebarRow(Gtk.ListBoxRow):
             arrow.connect("clicked", lambda _button: on_toggle())
             box.append(arrow)
         if owner_hint:
-            hint = Gtk.Label(label=owner_hint)
-            hint.add_css_class("sidebar-count")
+            hint = Icon("person", 12)
+            hint.add_css_class("sidebar-badge")
+            hint.set_tooltip_text(owner_hint)
             box.append(hint)
         if count is not None:
             number = Gtk.Label(label=str(count))
@@ -184,17 +196,18 @@ class Sidebar(Gtk.Box):
         items = sync.objects("item")
         for shopping in sorted(sync.objects("list"), key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
             open_items = sum(1 for item in items if item["data"].get("list") == shopping["id"] and not item["data"].get("done"))
-            hint = self.place_hint(shopping)
-            self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items, hint), "Listen")
+            self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items,
+                                badges=self.place_badges(shopping)), "Listen")
 
         cards = sync.objects("card")
         for board in sorted(sync.objects("board"), key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
             open_cards = sum(1 for card in cards if card["data"].get("board") == board["id"] and not card["data"].get("archived"))
-            hint = self.place_hint(board)
-            self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards, hint), "Aufgaben")
+            self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards,
+                                badges=self.place_badges(board)), "Aufgaben")
 
         for plan in sorted(sync.objects("plan"), key=lambda p: (p["data"].get("order", 0), p["data"].get("name", ""))):
-            self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or "Plan", None, self.place_hint(plan)), "Pläne")
+            self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or "Plan", None,
+                                badges=self.place_badges(plan)), "Pläne")
 
         self.refresh_tags(live)
         self.updating = False
@@ -213,7 +226,7 @@ class Sidebar(Gtk.Box):
             shared = bool(folder.get("share"))
             owner_hint = None
             if shared and depth == 0 and folder["owner"] != self.sync.user_id:
-                owner_hint = f"von {self.sync.user_name(folder['owner'])}"
+                owner_hint = f"Von {self.sync.user_name(folder['owner'])} geteilt"
             self.add(SidebarRow(
                 "folder:" + folder["id"], "folder-shared" if shared and depth == 0 else "folder",
                 folder["data"].get("name", "Ordner"),
@@ -221,11 +234,15 @@ class Sidebar(Gtk.Box):
                 (expanded, lambda fid=folder["id"]: self.toggle_folder(fid)) if has_children else None,
             ), section)
 
-    def place_hint(self, obj):
-        """Folder name (if in a folder) and "geteilt" – the tabs stay grouped by place."""
+    def place_badges(self, obj):
+        """Symbols for "in a folder" and "shared"; the folder path and the people are in the tooltip."""
+        badges = []
         folder = self.sync.get(obj["data"].get("folder") or "")
-        parts = ([folder["data"].get("name", "Ordner")] if folder else []) + (["geteilt"] if obj.get("share") else [])
-        return " · ".join(parts) or None
+        if folder:
+            badges.append(("folder", "Im Ordner „" + model.folder_path(self.sync, folder) + "“"))
+        if obj.get("share"):
+            badges.append(("person", lists.share_label(self.sync, obj).capitalize()))
+        return badges
 
     def toggle_folder(self, folder_id):
         self.collapsed ^= {folder_id}

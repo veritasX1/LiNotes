@@ -57,6 +57,18 @@ def due_label(day):
     return day.strftime("%d.%m.")
 
 
+class CoverPicture(Gtk.Picture):
+    """A card cover of fixed height: a Picture would grow with a portrait image
+    (a long phone screenshot filled the whole column), so it is cropped instead."""
+
+    HEIGHT = 96
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.VERTICAL:
+            return self.HEIGHT, self.HEIGHT, -1, -1
+        return 0, 0, -1, -1
+
+
 class CardWidget(Gtk.Box):
 
     def __init__(self, board, card):
@@ -81,7 +93,7 @@ class CardWidget(Gtk.Box):
         if cover is not None:
             # The first picture as a cover, as in Trello or Apple's Freeform.
             from .notes import load_thumbnail
-            picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, height_request=96)
+            picture = CoverPicture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
             picture.add_css_class("card-cover")
             load_thumbnail(board.sync, cover["f"], picture, 360, share=card.get("share"))
             self.append(picture)
