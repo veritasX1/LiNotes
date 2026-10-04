@@ -362,3 +362,13 @@ ol.howto code { font-family: var(--mono); background: var(--accent-soft); paddin
 .report-pair .window { background: #fff; }
 .downloads.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 900px) { .downloads.two { grid-template-columns: 1fr; } }
+
+/* Agile manifesto, quoted in full on the help page */
+blockquote.manifest {
+  margin: 12px 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 10px 10px 0;
+}
+blockquote.manifest p { margin: 8px 0; }
