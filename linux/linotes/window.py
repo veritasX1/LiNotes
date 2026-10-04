@@ -601,6 +601,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if key == "trash":
             return [n for n in notes if n["data"].get("trashed")], "Zuletzt gelöscht"
         notes = [n for n in notes if not n["data"].get("trashed")]
+        if key == "archive":
+            return [n for n in notes if model.archived(n)], "Archiv"
+        if not getattr(self, "searching_archive", False):
+            notes = [n for n in notes if not model.archived(n)]
         if key == "locked":
             return [n for n in notes if n["data"].get("enc")], "Gesperrt"
         if key == "shared-notes":
@@ -623,17 +627,22 @@ class LiNotesWindow(Adw.ApplicationWindow):
             entries.append(("folder:" + folder["id"], "folder", folder["data"].get("name", "Ordner"),
                             sum(1 for n in live if n["data"].get("folder") == folder["id"]), "Ordner"))
         items = sync.objects("item")
-        for shopping in sorted((l for l in sync.objects("list") if l["data"].get("folder") == folder_id), key=lambda l: l["data"].get("name", "").lower()):
+        for shopping in sorted((l for l in sync.objects("list") if l["data"].get("folder") == folder_id and not model.archived(l)),
+                               key=lambda l: l["data"].get("name", "").lower()):
             entries.append(("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"),
                             sum(1 for i in items if i["data"].get("list") == shopping["id"] and not i["data"].get("done")), "Listen"))
         cards = sync.objects("card")
-        for board in sorted((b for b in sync.objects("board") if b["data"].get("folder") == folder_id), key=lambda b: b["data"].get("name", "").lower()):
+        for board in sorted((b for b in sync.objects("board") if b["data"].get("folder") == folder_id and not model.archived(b)),
+                            key=lambda b: b["data"].get("name", "").lower()):
             entries.append(("board:" + board["id"], "board", board["data"].get("name", "Board"),
                             sum(1 for c in cards if c["data"].get("board") == board["id"] and not c["data"].get("archived")), "Boards"))
         return entries
 
     def show_notes(self, keep_note=True):
+        # A search also finds what is in the archive (marked "im Archiv" in the list).
+        self.searching_archive = bool(self.note_list.search.get_text().strip())
         notes, title = self.notes_for(self.current_key)
+        self.searching_archive = False
         tags = self.sidebar.active_tags
         if tags:
             notes = [n for n in notes if tags <= model.note_tags(n)]
@@ -1300,6 +1309,18 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.attach_path(path, self.note_pane.editor, note)
         return True
 
+    def toggle_archive(self, object_id):
+        """Into the archive or back – for everyone the item is shared with (Olaf, 04.10.2026)."""
+        obj = self.sync.get(object_id) if object_id else None
+        if obj is None:
+            return
+        on = not model.archived(obj)
+        model.set_archived(self.sync, object_id, on)
+        self.toast("Ins Archiv verschoben" if on else "Aus dem Archiv geholt")
+        if obj["kind"] == "note" and on and self.current_key != "archive":
+            self.current_note = None
+        self.refresh_all()
+
     def make_link_preview(self, editor, note_id, url):
         """A web address alone on a line becomes a preview card – only if switched on, never in
         locked notes. Only this computer fetches the page; the card (with picture) is stored
@@ -1419,6 +1440,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Teilen …", "win.share-note")
             menu.append("Verschieben nach …", "win.move-note")
             menu.append("Duplizieren", "win.duplicate-note")
+            menu.append("Aus dem Archiv holen" if model.archived(note) else "Archivieren", "win.archive-note")
             menu.append("Als PDF exportieren …", "win.export-note")
             menu.append("Drucken …", "win.print-note")
             menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
@@ -1735,6 +1757,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Neues Board hier …", "win.new-board-here")
         if kind in ("folder", "list", "board", "plan"):
             menu.append("Verschieben nach …", "win.move-object")
+        if kind in ("list", "board", "plan"):
+            menu.append("Aus dem Archiv holen" if model.archived(obj) else "Archivieren", "win.archive-object")
         if kind == "plan":
             menu.append("Als PDF …", "win.export-plan")
         if kind == "board":
@@ -1927,6 +1951,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "sign-out": self.sign_out,
             "connect": self.connect_server,
             "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),
+            "archive-note": lambda: self.toggle_archive(self.current_note),
+            "archive-object": lambda: self.toggle_archive(self.menu_target),
             "list-view": lambda: self.list_mode.set_active(True),
             "gallery-view": lambda: self.gallery_mode.set_active(True),
         }

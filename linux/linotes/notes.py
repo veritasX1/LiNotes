@@ -46,7 +46,8 @@ class NoteRow(Gtk.ListBoxRow):
 
         meta = Gtk.Box()
         meta.add_css_class("note-row-meta")
-        date = Gtk.Label(label=model.short_date(stamp or model.modified(note)), xalign=0)
+        # Found by a search although archived: say so.
+        date = Gtk.Label(label=("im Archiv · " if model.archived(note) else "") + model.short_date(stamp or model.modified(note)), xalign=0)
         date.add_css_class("note-row-date")
         meta.append(date)
         preview_text = model.note_preview(note) or ("Gesperrt" if data.get("enc") else "Kein weiterer Text")
