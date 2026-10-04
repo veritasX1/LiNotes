@@ -1,6 +1,5 @@
 package io.github.veritasx1.linotes.ui
 
-import android.app.DatePickerDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -432,6 +431,7 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     var notes by remember { mutableStateOf(card.data.optString("notes")) }
     var due by remember { mutableStateOf(card.data.optString("due").takeIf { it.isNotEmpty() && it != "null" }) }
     var assignee by remember { mutableStateOf(card.data.optInt("assignee")) }
+    var calendarOpen by remember { mutableStateOf(false) }
     // Only people the board is shared with (and oneself) – not everyone one knows. Someone assigned
     // earlier who is no longer in the board stays visible, so it can be undone.
     val assignable = remember(card.share) {
@@ -545,14 +545,21 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                     PickerRow("Spalte", columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
                     PickerRow("Zuständig", listOf(0 to "Niemand") + assignable, assignee, divider = true) { assignee = it }
                     PickerRow("Priorität", PRIORITIES, priority, divider = true) { priority = it }
-                    val label = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "%02d.%02d.%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "Kein Datum"
-                    GroupRow("Fällig", detail = label, chevron = false, divider = due != null) {
-                        val start = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
-                        DatePickerDialog(context, { _, year, month, day ->
-                            due = "%04d-%02d-%02d".format(year, month + 1, day)
-                        }, start.year, start.monthValue - 1, start.dayOfMonth).show()
+                    // Like Reminders: a switch turns the date on, the calendar opens right in the form;
+                    // tapping the row folds it away (no Android date dialog).
+                    val dueDate = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                    val label = dueDate?.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", java.util.Locale.GERMAN))
+                    fun toggleDue() {
+                        if (due == null) { due = LocalDate.now().toString(); calendarOpen = true } else { due = null; calendarOpen = false }
                     }
-                    if (due != null) GroupRow("Datum entfernen", chevron = false, divider = false, titleColor = colors.red) { due = null }
+                    GroupRow("Fällig", detail = label, chevron = false, divider = false,
+                        trailing = { IosSwitch(due != null, "Fällig") { toggleDue() } }) {
+                        if (due == null) toggleDue() else calendarOpen = !calendarOpen
+                    }
+                    if (dueDate != null && calendarOpen) {
+                        HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
+                        InlineCalendar(dueDate) { due = it.toString() }
+                    }
                 }
                 FormSection("Farbe") {
                     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
