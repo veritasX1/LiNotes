@@ -171,12 +171,21 @@ class CardWidget(Gtk.Box):
 
 class ColumnWidget(Gtk.Box):
 
+    WIDTH = 280
+
+    def do_measure(self, orientation, for_size):
+        # Always 280 px wide – also alone (search hits), where the longest text would widen it.
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return self.WIDTH, self.WIDTH, -1, -1
+        return Gtk.Box.do_measure(self, orientation, for_size)
+
     def __init__(self, board, column, cards):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.board = board
         self.column_id = column["id"]
         self.add_css_class("board-column")
-        self.set_size_request(280, -1)
+        self.set_hexpand(False)  # the card titles' hexpand must not widen a lone column (search hits)
+        self.set_halign(Gtk.Align.START)
         self.set_valign(Gtk.Align.START)
 
         header = Gtk.Box(spacing=6)
