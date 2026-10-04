@@ -72,6 +72,26 @@ def link_target(span_name):
     return span_name[len(NOTE_LINK):] if isinstance(span_name, str) and span_name.startswith(NOTE_LINK) else None
 
 
+FOOTNOTE = "fn:"
+
+
+def footnote_text(span_name):
+    """The text of a footnote span ("fn:<text>") – a Profi-Funktion – otherwise None."""
+    return span_name[len(FOOTNOTE):] if isinstance(span_name, str) and span_name.startswith(FOOTNOTE) else None
+
+
+def footnotes(blocks):
+    """The footnote texts of a note in reading order (numbered 1, 2, … in the text) – for the list
+    under the note and the PDF (Android: Model.footnotes)."""
+    result = []
+    for block in blocks:
+        for span in sorted(block.get("s") or [], key=lambda span: span[0] if span else 0):
+            text = footnote_text(span[2]) if len(span) == 3 else None
+            if text is not None:
+                result.append(text)
+    return result
+
+
 def mention_target(span_name):
     """The user id of an @-mention span ("m:<id>"), otherwise None."""
     if isinstance(span_name, str) and span_name.startswith(MENTION) and span_name[len(MENTION):].isdigit():

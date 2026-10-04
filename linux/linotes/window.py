@@ -415,6 +415,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
             languages.append(button)
         code_row.append(languages)
         pro.append(code_row)
+        footnote = Gtk.Button(css_classes=["flat"], tooltip_text="Hochgestellte Nummer an der Cursorstelle, der Text steht unter der Notiz")
+        footnote_line = Gtk.Box(spacing=16)
+        footnote_line.append(Gtk.Label(label="Fußnote / Quelle …", xalign=0, hexpand=True))
+        footnote.set_child(footnote_line)
+        footnote.connect("clicked", lambda _b: (popover.popdown(), self.ask_footnote(editor or self.note_pane.editor)))
+        pro.append(footnote)
         box.append(pro)
         popover.connect("show", lambda _p: pro.set_visible(self.pro_features()))
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
@@ -2006,6 +2012,14 @@ class LiNotesWindow(Adw.ApplicationWindow):
         textsize.save(level)
         textsize.apply(level)
         self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def ask_footnote(self, editor):
+        """Format → Fußnote / Quelle (Profi-Funktion)."""
+        def done(text, _choice):
+            if text.strip():
+                editor.insert_footnote(text)
+        ask_text(self, "Fußnote oder Quelle", done, placeholder="z. B. Müller, Gartenbau, 2020, S. 41", action="Einfügen",
+                 body="An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF.")
 
     def set_pro_features(self, on):
         self.sync.set_pro_features(on)

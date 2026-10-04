@@ -16,8 +16,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Graphene", "1.0")
 gi.require_version("Pango", "1.0")
+gi.require_version("Adw", "1")
 
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
 from . import audio, calc, linkpreview, model, syntax, textsize
 from .table import NoteTable
@@ -57,6 +58,30 @@ OBJECT = "￼"
 ACCENT = (0.90, 0.64, 0.0)
 
 
+class FootnoteList(Gtk.Box):
+    """Under the note: "Fußnoten und Quellen" with the numbered texts (follows the editor)."""
+
+    def __init__(self, editor):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=36, margin_end=36,
+                         margin_bottom=24, visible=False)
+        self.add_css_class("footnote-list")
+        editor.connect("footnotes-changed", lambda _editor, texts: self.show(texts))
+
+    def show(self, texts):
+        while (child := self.get_first_child()) is not None:
+            self.remove(child)
+        if texts:
+            self.append(Gtk.Separator(margin_bottom=6))
+            self.append(Gtk.Label(label="Fußnoten und Quellen", xalign=0, css_classes=["heading"]))
+            for number, text in enumerate(texts, 1):
+                row = Gtk.Box(spacing=8)
+                row.append(Gtk.Label(label=f"{number}", xalign=1, width_chars=2, valign=Gtk.Align.START,
+                                     css_classes=["footnote-number"]))
+                row.append(Gtk.Label(label=text, xalign=0, wrap=True, hexpand=True, selectable=True))
+                self.append(row)
+        self.set_visible(bool(texts))
+
+
 class NoteEditor(Gtk.TextView):
     """Emits "changed" (debounced) when the content was edited."""
 
@@ -70,6 +95,8 @@ class NoteEditor(Gtk.TextView):
         "open-file": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
         # A web address was finished alone on a line (Enter or pasted): the window may make a preview.
         "link-line": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        # The footnotes changed (texts in reading order) – the note pane lists them under the note.
+        "footnotes-changed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
     }
 
     def __init__(self, image_loader=None):
@@ -327,6 +354,7 @@ class NoteEditor(Gtk.TextView):
         if self.loading:
             return
         self.highlight_code()
+        GLib.idle_add(lambda: self.renumber_footnotes() and False)
         self.mark_links()
         self.refold()
         if self.edit_source is not None:
@@ -735,7 +763,7 @@ class NoteEditor(Gtk.TextView):
         found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
         if found:
             for tag in iterator.get_tags():
-                if model.link_target(tag.get_property("name")):
+                if model.link_target(tag.get_property("name")) or model.footnote_text(tag.get_property("name")) is not None:
                     return tag.get_property("name")
         tag = self.get_buffer().get_tag_table().lookup("link")
         if not found or not iterator.has_tag(tag):
@@ -773,8 +801,104 @@ class NoteEditor(Gtk.TextView):
             table.add(tag)
         return tag
 
+    # --- footnotes (Profi-Funktion) ---
+
+    def footnote_tag(self, name):
+        """A small raised number in the accent color, named like the saved span ("fn:<text>")."""
+        table = self.buffer.get_tag_table()
+        tag = table.lookup(name)
+        if tag is None:
+            tag = Gtk.TextTag(name=name)
+            tag.set_property("rise", 5 * Pango.SCALE)
+            tag.set_property("scale", 0.72)
+            tag.set_property("weight", Pango.Weight.BOLD)
+            tag.set_property("foreground-rgba", rgba(0.72, 0.49, 0.0, 1.0))
+            table.add(tag)
+        return tag
+
+    def footnote_ranges(self):
+        """[(start offset, end offset, span name)] of all footnote numbers, in reading order."""
+        ranges = []
+        probe = self.buffer.get_start_iter()
+        while True:
+            for tag in probe.get_toggled_tags(True):
+                name = tag.get_property("name")
+                if model.footnote_text(name) is not None:
+                    finish = probe.copy()
+                    finish.forward_to_tag_toggle(tag)
+                    ranges.append((probe.get_offset(), finish.get_offset(), name))
+            if not probe.forward_to_tag_toggle(None):
+                break
+        return sorted(ranges)
+
+    def renumber_footnotes(self):
+        """Footnote numbers follow the reading order (1, 2, 3 …) – after loading and every edit."""
+        buffer = self.buffer
+        ranges = self.footnote_ranges()
+        changed = False
+        for number, (start, end, name) in reversed(list(enumerate(ranges, 1))):
+            begin, finish = buffer.get_iter_at_offset(start), buffer.get_iter_at_offset(end)
+            if buffer.get_text(begin, finish, False) == str(number):
+                continue
+            changed = True
+            self.loading = True
+            buffer.delete(begin, finish)
+            buffer.insert_with_tags(buffer.get_iter_at_offset(start), str(number), self.footnote_tag(name))
+            self.loading = False
+        texts = [model.footnote_text(name) for _start, _end, name in self.footnote_ranges()]
+        if texts != getattr(self, "shown_footnotes", None):
+            self.shown_footnotes = texts
+            self.emit("footnotes-changed", texts)
+        if changed:
+            self.emit("edited")
+        return False
+
+    def insert_footnote(self, text):
+        """Format → Fußnote: a number at the cursor, the text in the list under the note."""
+        name = model.FOOTNOTE + text.strip()
+        buffer = self.buffer
+        cursor = buffer.get_iter_at_mark(buffer.get_insert())
+        self.loading = True
+        buffer.insert_with_tags(cursor, "0", self.footnote_tag(name))
+        self.loading = False
+        self.renumber_footnotes()
+        self.emit("edited")
+
+    def edit_footnote(self, name):
+        """A click on a footnote number: change its text or remove it."""
+        dialog = Adw.AlertDialog(heading="Fußnote", body="Erscheint unten in der Liste „Fußnoten und Quellen“ und im PDF.")
+        entry = Gtk.Entry(text=model.footnote_text(name) or "", activates_default=True)
+        dialog.set_extra_child(entry)
+        dialog.add_response("delete", "Entfernen")
+        dialog.add_response("cancel", "Abbrechen")
+        dialog.add_response("save", "Sichern")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("save")
+
+        def answered(_dialog, response):
+            ranges = [(a, b) for a, b, n in self.footnote_ranges() if n == name]
+            if not ranges or response == "cancel":
+                return
+            start, end = ranges[0]
+            buffer = self.buffer
+            begin, finish = buffer.get_iter_at_offset(start), buffer.get_iter_at_offset(end)
+            buffer.begin_user_action()
+            if response == "delete":
+                buffer.delete(begin, finish)
+            elif entry.get_text().strip():
+                buffer.remove_tag(self.footnote_tag(name), begin, finish)
+                buffer.apply_tag(self.footnote_tag(model.FOOTNOTE + entry.get_text().strip()), begin, finish)
+            buffer.end_user_action()
+            self.renumber_footnotes()
+            self.emit("edited")
+        dialog.connect("response", answered)
+        dialog.present(self.get_root())
+
     def span_tag(self, name):
-        """The tag for a saved link span: note link or mention."""
+        """The tag for a saved link span: note link, mention or footnote."""
+        if model.footnote_text(name) is not None:
+            return self.footnote_tag(name)
         if model.link_target(name):
             return self.note_link_tag(model.link_target(name))
         return self.mention_tag(model.mention_target(name))
@@ -787,6 +911,10 @@ class NoteEditor(Gtk.TextView):
             names.update(tag.get_property("name") for tag in probe.get_tags())
             probe.forward_char()
         for name in names:
+            if model.footnote_text(name) is not None:
+                # A footnote number never takes typed text (it is renumbered by itself).
+                self.buffer.remove_tag(self.buffer.get_tag_table().lookup(name), start, end)
+                continue
             if not model.link_target(name) and model.mention_target(name) is None:
                 continue
             tag = self.buffer.get_tag_table().lookup(name)
@@ -991,7 +1119,9 @@ class NoteEditor(Gtk.TextView):
         url = self.link_at(x, y) if n_press == 1 else None
         if url:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            if model.link_target(url):
+            if model.footnote_text(url) is not None:
+                self.edit_footnote(url)
+            elif model.link_target(url):
                 self.emit("open-note", model.link_target(url))
             else:
                 Gtk.UriLauncher.new(url).launch(self.get_root(), None, None)
@@ -1138,7 +1268,8 @@ class NoteEditor(Gtk.TextView):
                         start_offset, end_offset, name = span
                     except ValueError:
                         continue
-                    if name in INLINE or model.link_target(name) or model.mention_target(name) is not None:
+                    if (name in INLINE or model.link_target(name) or model.mention_target(name) is not None
+                            or model.footnote_text(name) is not None):
                         if name not in INLINE:
                             self.span_tag(name)
                         buffer.apply_tag_by_name(
@@ -1164,6 +1295,7 @@ class NoteEditor(Gtk.TextView):
         buffer.end_irreversible_action()
         self.loading = False
         self.highlight_code()
+        self.renumber_footnotes()
         self.mark_links()
         self.refold()
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
@@ -1222,6 +1354,7 @@ class NoteEditor(Gtk.TextView):
         links = []
         table.foreach(lambda tag: links.append(tag.get_property("name"))
                       if model.link_target(tag.get_property("name")) or model.mention_target(tag.get_property("name")) is not None
+                      or model.footnote_text(tag.get_property("name")) is not None
                       else None)
         for name in INLINE + tuple(links):
             tag = table.lookup(name)
