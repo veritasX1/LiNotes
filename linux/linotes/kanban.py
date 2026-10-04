@@ -99,7 +99,9 @@ class CardWidget(Gtk.Box):
             load_thumbnail(board.sync, cover["f"], picture, 360, share=card.get("share"))
             self.append(picture)
 
-        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True)
+        # Long titles take at most two lines (the whole title: tooltip and card dialog).
+        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True, wrap_mode=2, lines=2,
+                          ellipsize=3, max_width_chars=1, tooltip_text=data.get("title") or None)
         title.add_css_class("card-title")
         mark = model.PRIORITY_MARKS.get(data.get("priority"))
         if mark:

@@ -352,7 +352,9 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
                 Text(mark, style = Type.headline.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = colors.accentText)
                 Spacer(Modifier.width(5.dp))
             }
-            Text(data.optString("title"), style = Type.headline, color = colors.label)
+            // Long titles take at most two lines; the whole title is in the card sheet.
+            Text(data.optString("title"), style = Type.headline, color = colors.label, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         if (data.optString("notes").isNotEmpty()) {
             // At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the notes
