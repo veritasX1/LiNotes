@@ -21,6 +21,8 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py field <karte> <impact|verification|version> <text>   # Feld eines Entwicklungsprojekts setzen
     linotes-cli.py dump <board> [datei.json]     # alle Karten mit Spalte, Notizen, Feldern, Commits
     linotes-cli.py evidence <karte> <datei> […]  # Nachweise (Prüfprotokolle, Screenshots) mit SHA-256 anhängen
+    linotes-cli.py rename-board <board> <neuer name>
+    linotes-cli.py dev-board <board>             # Board als Entwicklungsprojekt (Felder, Commits, Nachweise)
 """
 
 import json
@@ -207,6 +209,23 @@ def cmd_boards():
     for b in eng.objects("board"):
         owner = eng.user_name(b.get("owner"))
         print(f"{b['id'][:8]}  {b['data'].get('name', 'Board'):<30} von {owner}  ({b['space']})")
+
+
+def cmd_rename_board(ref, name):
+    eng = engine()
+    board = find(eng, "board", ref)
+    old = board["data"].get("name")
+    eng.update(board["id"], notify=False, name=name.strip())
+    flush(eng)
+    print(f"Board „{old}“ → „{name.strip()}“")
+
+
+def cmd_dev_board(ref):
+    eng = engine()
+    board = find(eng, "board", ref)
+    eng.update(board["id"], notify=False, dev=True)
+    flush(eng)
+    print(f"Board „{board['data'].get('name')}“ ist jetzt ein Entwicklungsprojekt")
 
 
 def cmd_board(ref):
