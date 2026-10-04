@@ -18,7 +18,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 from . import model, vault
 from . import smoothscroll
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import activity, audio, security_ui, textsize, uiprefs
+from . import activity, audio, security_ui, textsize, uiprefs, uploads
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -85,7 +85,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.toasts = Adw.ToastOverlay()
         self.set_content(self.toasts)
         self.pages = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.toasts.set_child(self.pages)
+        # Running uploads float at the bottom, the window stays usable meanwhile.
+        overlay = Gtk.Overlay(child=self.pages)
+        self.uploads_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER,
+                                   valign=Gtk.Align.END, margin_bottom=72, visible=False, css_classes=["upload-card"])
+        self.uploads_box.set_size_request(360, -1)
+        overlay.add_overlay(self.uploads_box)
+        self.toasts.set_child(overlay)
 
         self.login = security_ui.Onboarding(self)
         self.login.connect("signed-in", self.on_signed_in)
@@ -400,6 +406,21 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sort_checked = sort_checked
         popover.set_child(box)
         return popover
+
+    def add_upload(self, upload):
+        from .uploads import UploadRow
+        self.uploads_box.append(UploadRow(upload))
+        self.uploads_box.set_visible(True)
+
+    def remove_upload(self, upload):
+        child = self.uploads_box.get_first_child()
+        while child is not None:
+            following = child.get_next_sibling()
+            if child.upload is upload:
+                child.detach()
+                self.uploads_box.remove(child)
+            child = following
+        self.uploads_box.set_visible(self.uploads_box.get_first_child() is not None)
 
     def toast(self, text):
         toast = Adw.Toast(title=text)
@@ -1187,8 +1208,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if error is not None:
                     self.toast(error_text(error))
                     return
-                self.note_pane.editor.insert_image(file_id)
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                self.deliver_upload(note["id"], self.note_pane.editor, {"t": "image", "f": file_id})
+            uploads.start(self, path.name, content, note.get("share"), done)
 
         dialog.open(self, None, chosen)
 
@@ -1221,9 +1242,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if error is not None:
                 self.toast(error_text(error))
                 return
-            editor.insert_file({"t": "file", "f": file_id, "n": path.name, "m": mime, "b": size})
-        self.toast(f"„{path.name}“ wird angehängt …")
-        run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+            self.deliver_upload(note["id"], editor, {"t": "file", "f": file_id, "n": path.name, "m": mime, "b": size})
+        uploads.start(self, path.name, content, note.get("share"), done)
 
     def record_audio(self, editor=None, note_id=None):
         """Like Apple: record with the microphone; the recording is attached encrypted."""
@@ -1249,9 +1269,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if error is not None:
                     self.toast(error_text(error))
                     return
-                editor.insert_file({"t": "file", "f": file_id, "n": name, "m": audio.MIME, "b": len(content),
-                                    "d": round(length, 1)})
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                self.deliver_upload(note["id"], editor, {"t": "file", "f": file_id, "n": name, "m": audio.MIME,
+                                                         "b": len(content), "d": round(length, 1)})
+            uploads.start(self, name, content, note.get("share"), done)
         try:
             dialog = audio.RecordDialog(folder / name, recorded)
         except Exception as error:
@@ -1271,11 +1291,26 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if error is not None:
                     self.toast(error_text(error))
                 else:
-                    self.note_pane.editor.insert_image(file_id)
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                    self.deliver_upload(note["id"], self.note_pane.editor, {"t": "image", "f": file_id})
+            uploads.start(self, path.name, content, note.get("share"), done)
         else:
             self.attach_path(path, self.note_pane.editor, note)
         return True
+
+    def deliver_upload(self, note_id, editor, block):
+        """A finished upload goes into the editor if it still shows that note – meanwhile one may
+        have switched notes or closed the note window – otherwise to the end of the note."""
+        showing = editor.get_root() is not None and (editor is not self.note_pane.editor or self.current_note == note_id)
+        if showing:
+            if block["t"] == "image":
+                editor.insert_image(block["f"])
+            else:
+                editor.insert_file(block)
+            return
+        note = self.sync.get(note_id)
+        if note is None or "enc" in note["data"] or note["data"].get("trashed"):
+            return
+        self.sync.update(note_id, body=list(model.note_blocks(note)) + [block], modified=time.time())
 
     def open_attachment(self, block, share):
         """Decrypt the file into a private folder under its own name and show it in a quick look

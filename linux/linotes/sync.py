@@ -864,7 +864,7 @@ class SyncEngine:
             path.write_bytes(content)
         return path
 
-    def upload_file(self, content, share=None):
+    def upload_file(self, content, share=None, progress=None):
         # The file id is unknown before the upload, so the AAD is a
         # separate random name kept inside the encrypted note.
         name = new_id()
@@ -875,7 +875,7 @@ class SyncEngine:
             (LOCAL_FILES / name).write_bytes(blob)
             file_id = "local"
         else:
-            file_id = self.api.upload(blob, share)
+            file_id = self.api.upload(blob, share, progress=progress)
         path = self.file_path(name)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_bytes(content)

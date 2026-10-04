@@ -423,20 +423,16 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     val evidence = remember(filesRevision) { sync.get(cardId)?.let { cardEvidence(it.data) } ?: emptyList() }
 
     fun attach(name: String, mime: String, bytes: ByteArray, key: String = "files") {
-        scope.launch {
-            try {
-                val reference = withContext(Dispatchers.IO) { sync.uploadFile(bytes, card.share) }
-                val entry = JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size)
-                if (key == "evidence") entry.put("h", sha256(bytes)).put("at", Model.now()).put("by", sync.userId)
-                sync.update(cardId) { data ->
-                    val array = data.optJSONArray(key) ?: org.json.JSONArray()
-                    array.put(entry)
-                    data.put(key, array)
-                }
-                filesRevision++
-            } catch (error: Exception) {
-                state.showToast(errorText(error))
+        // Runs on in the background when the card is closed; the entry goes to the card either way.
+        state.upload(name, bytes, card.share, target = "$cardId/$key") { reference ->
+            val entry = JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size)
+            if (key == "evidence") entry.put("h", sha256(bytes)).put("at", Model.now()).put("by", sync.userId)
+            sync.update(cardId) { data ->
+                val array = data.optJSONArray(key) ?: org.json.JSONArray()
+                array.put(entry)
+                data.put(key, array)
             }
+            filesRevision++
         }
     }
 
@@ -538,6 +534,7 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                 }
                 FormSection("Anhänge") {
                     AttachmentRows(sync, card.share, files, "Anhang entfernen", { humanSize(it.optLong("b")) }, ::openFile) { removeFile(it) }
+                    UploadRows(state, "$cardId/files")
                     GroupRow("Datei oder Bild hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "files" }
                 }
                 if (dev) {
@@ -548,6 +545,7 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                         AttachmentRows(sync, card.share, evidence, "Nachweis entfernen", { evidenceDetails(sync, it) }, ::openFile) {
                             removeFile(it, "evidence")
                         }
+                        UploadRows(state, "$cardId/evidence")
                         GroupRow("Nachweis hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "evidence" }
                     }
                     if (evidence.isEmpty()) {
