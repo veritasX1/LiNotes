@@ -1,6 +1,7 @@
 """Audio in notes (like Apple's audio recordings, without transcription): record with the
 microphone into Opus/Ogg, attach it encrypted like any file, play it back inside the note."""
 
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,23 @@ def duration_text(seconds):
 
 def recording_name(moment=None):
     return (moment or datetime.now()).strftime("Aufnahme %Y-%m-%d %H-%M.ogg")
+
+
+MONTHS = ("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
+
+
+def recording_label(block, today=None):
+    """Title and line below it on the player card, like Apple's: ("Aufnahme", "4. Okt. 2026 · 0:07").
+    Same rules as AudioNotes.label on Android (test_audio.py / AudioLabelTest)."""
+    name = block.get("n") or ""
+    match = re.match(r"^(.*?)\s*(\d{4})-(\d{2})-(\d{2})[ _](\d{2})-(\d{2})\.\w+$", name)
+    duration = duration_text(block.get("d")) if block.get("d") else ""
+    if match and 1 <= int(match.group(3)) <= 12:
+        title = match.group(1).strip() or "Aufnahme"
+        date = f"{int(match.group(4))}. {MONTHS[int(match.group(3)) - 1]} {match.group(2)}, {match.group(5)}:{match.group(6)}"
+        return title, " · ".join(part for part in (date, duration) if part)
+    title = name.rsplit(".", 1)[0] if "." in name else name
+    return title or "Audioaufnahme", duration
 
 
 def is_audio(block):
@@ -122,16 +140,18 @@ class RecordDialog(Adw.Dialog):
 
 
 class Player:
-    """Plays one recording at a time inside a note."""
+    """Plays one recording at a time inside a note; pause, jump and seek like Apple's player."""
 
     def __init__(self):
         self.playbin = None
-        self.on_state = None  # callback(playing: bool)
+        self.on_state = None  # callback(state: "playing" | "paused" | "stopped")
+        self.paused = False
 
     def play(self, path, on_state):
         ensure_gst()
         self.stop()
         self.on_state = on_state
+        self.paused = False
         self.playbin = Gst.ElementFactory.make("playbin", None)
         self.playbin.set_property("uri", Path(path).resolve().as_uri())
         bus = self.playbin.get_bus()
@@ -139,13 +159,45 @@ class Player:
         bus.connect("message::eos", lambda *_args: self.stop())
         bus.connect("message::error", lambda *_args: self.stop())
         self.playbin.set_state(Gst.State.PLAYING)
-        on_state(True)
+        on_state("playing")
+
+    def toggle(self):
+        """Pause or go on."""
+        if self.playbin is None:
+            return
+        self.paused = not self.paused
+        self.playbin.set_state(Gst.State.PAUSED if self.paused else Gst.State.PLAYING)
+        if self.on_state is not None:
+            self.on_state("paused" if self.paused else "playing")
+
+    def position(self):
+        if self.playbin is None:
+            return 0.0
+        ok, value = self.playbin.query_position(Gst.Format.TIME)
+        return value / Gst.SECOND if ok else 0.0
+
+    def duration(self):
+        if self.playbin is None:
+            return 0.0
+        ok, value = self.playbin.query_duration(Gst.Format.TIME)
+        return value / Gst.SECOND if ok and value > 0 else 0.0
+
+    def seek(self, seconds):
+        if self.playbin is None:
+            return
+        length = self.duration()
+        seconds = max(0.0, min(seconds, length - 0.05) if length else seconds)
+        self.playbin.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, int(seconds * Gst.SECOND))
+
+    def jump(self, seconds):
+        self.seek(self.position() + seconds)
 
     def stop(self):
         if self.playbin is not None:
             self.playbin.get_bus().remove_signal_watch()
             self.playbin.set_state(Gst.State.NULL)
             self.playbin = None
+        self.paused = False
         if self.on_state is not None:
             callback, self.on_state = self.on_state, None
-            callback(False)
+            callback("stopped")

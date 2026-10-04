@@ -22,6 +22,7 @@ from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk
 
 from . import audio, calc, linkpreview, mathtex, model, syntax, textsize
 from .table import NoteTable
+from .icons import Icon
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -1425,6 +1426,13 @@ class NoteEditor(Gtk.TextView):
         picture.set_size_request(360, 220)
         self.anchors[anchor] = {"file": file_id, "width": width, "picture": picture}
         self.add_child_at_anchor(picture, anchor)
+        # A click opens the picture in the quick look instead of putting the cursor before it (900036dc).
+        click = Gtk.GestureClick()
+        click.connect("released", lambda gesture, *_args: (gesture.set_state(Gtk.EventSequenceState.CLAIMED),
+                                                           self.emit("open-file", {"t": "image", "f": file_id, "n": "Bild", "m": "image/*"})))
+        picture.add_controller(click)
+        picture.set_cursor_from_name("zoom-in")
+        picture.set_tooltip_text("Ansehen")
         if self.image_loader and file_id:
             def load():
                 try:
@@ -1619,24 +1627,71 @@ class NoteEditor(Gtk.TextView):
             threading.Thread(target=render, daemon=True).start()
 
     def add_recording(self, anchor, block):
-        """An audio recording as a card with a play button; plays inside the note."""
-        card = Gtk.Box(spacing=12, css_classes=["file-card", "audio-card"])
+        """An audio recording as a player card like Apple's, playing inside the note: round
+        play/pause button, title, date · length; while loaded also ±15 s and a bar to seek. A click
+        anywhere on the card plays or pauses – it never puts the cursor in front of it (900036dc)."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["file-card", "audio-card"])
         card.set_size_request(360, -1)
-        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "suggested-action"],
+        top = Gtk.Box(spacing=12)
+        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "suggested-action", "audio-play"],
                             valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
-        card.append(button)
+        button.set_size_request(40, 40)
+        top.append(button)
+        title, subtitle = audio.recording_label(block)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
-        text.append(Gtk.Label(label="Audioaufnahme", xalign=0, css_classes=["heading"]))
-        text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
-        card.append(text)
+        text.append(Gtk.Label(label=title, xalign=0, ellipsize=Pango.EllipsizeMode.END, max_width_chars=28, css_classes=["heading"]))
+        details = Gtk.Label(label=subtitle or file_details(block), xalign=0, css_classes=["dim-label", "caption"])
+        text.append(details)
+        top.append(text)
+        back = Gtk.Button(child=Icon("skip-back", 22), css_classes=["flat", "circular"], valign=Gtk.Align.CENTER, tooltip_text="15 Sekunden zurück",
+                          visible=False)
+        forward = Gtk.Button(child=Icon("skip-forward", 22), css_classes=["flat", "circular"], valign=Gtk.Align.CENTER,
+                             tooltip_text="15 Sekunden vor", visible=False)
+        top.append(back)
+        top.append(forward)
+        card.append(top)
+        bar = Gtk.Box(spacing=8, visible=False)
+        elapsed = Gtk.Label(label="0:00", css_classes=["caption", "numeric", "dim-label"], width_chars=5, xalign=0)
+        scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, hexpand=True, draw_value=False,
+                          adjustment=Gtk.Adjustment(lower=0, upper=max(1.0, float(block.get("d") or 1.0)), step_increment=1))
+        remaining = Gtk.Label(label="", css_classes=["caption", "numeric", "dim-label"], width_chars=6, xalign=1)
+        bar.append(elapsed)
+        bar.append(scale)
+        bar.append(remaining)
+        card.append(bar)
+        state = {"timer": None, "moving": False, "path": None}
+
+        def refresh():
+            if self.player.on_state is not show:
+                return False
+            length = self.player.duration() or float(block.get("d") or 0)
+            position = self.player.position()
+            if length:
+                scale.get_adjustment().set_upper(length)
+            state["moving"] = True
+            scale.set_value(position)
+            state["moving"] = False
+            elapsed.set_label(audio.duration_text(position))
+            remaining.set_label("−" + audio.duration_text(max(0.0, length - position)))
+            return True
 
         def show(playing):
-            button.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
-            button.set_tooltip_text("Stopp" if playing else "Abspielen")
+            loaded = playing in ("playing", "paused")
+            running = playing == "playing"
+            button.set_icon_name("media-playback-pause-symbolic" if running else "media-playback-start-symbolic")
+            button.set_tooltip_text("Pause" if running else "Abspielen")
+            for widget in (back, forward, bar):
+                widget.set_visible(loaded)
+            if loaded and state["timer"] is None:
+                state["timer"] = GLib.timeout_add(200, lambda: refresh() or state.update(timer=None))
+                refresh()
+            if not loaded and state["timer"] is not None:
+                GLib.source_remove(state["timer"])
+                state["timer"] = None
 
-        def toggle(_button):
+        def toggle(*_args):
             if self.player.on_state is show:
-                self.player.stop()
+                self.player.toggle()
                 return
             if not self.image_loader or not block.get("f"):
                 return
@@ -1650,8 +1705,18 @@ class NoteEditor(Gtk.TextView):
                     path = None
                 GLib.idle_add(lambda: (button.set_sensitive(True), path and self.player.play(path, show)) and False)
             threading.Thread(target=fetch, daemon=True).start()
+
         button.connect("clicked", toggle)
-        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
+        back.connect("clicked", lambda _b: (self.player.jump(-15), refresh()))
+        forward.connect("clicked", lambda _b: (self.player.jump(15), refresh()))
+        scale.connect("value-changed", lambda widget: None if state["moving"] or self.player.on_state is not show
+                      else self.player.seek(widget.get_value()))
+        # The whole card: a click plays/pauses (the buttons and the bar handle their own clicks).
+        click = Gtk.GestureClick()
+        click.connect("released", lambda gesture, *_args: (gesture.set_state(Gtk.EventSequenceState.CLAIMED), toggle()))
+        card.add_controller(click)
+        card.set_cursor_from_name("pointer")
+        self.anchors[anchor] = {"attachment": dict(block), "picture": card, "player": (toggle, show)}
         self.add_child_at_anchor(card, anchor)
 
     def add_table(self, anchor, block):
