@@ -15,7 +15,7 @@ from . import model
 from . import smoothscroll
 from . import uploads
 from .dialogs import ask_text, confirm, error_text
-from .icons import icon_button
+from .icons import drag_autoscroll, icon_button
 from .lists import share_label
 
 
@@ -288,6 +288,8 @@ class BoardView(Gtk.Box):
         self.columns_box.set_margin_bottom(20)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.columns_box)
         smoothscroll.enable(scroller)
+        # Dragging a card to the edge scrolls on – to a far column or the top of a long one.
+        drag_autoscroll(scroller, sideways=True)
         self.scroller = scroller
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)

@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Graphene", "1.0")
 
-from gi.repository import Gdk, GObject, Graphene, Gtk
+from gi.repository import Gdk, GLib, GObject, Graphene, Gtk
 
 
 LINE = 1.35
@@ -464,3 +464,47 @@ def drop_target(widget, accept, on_drop):
     target.connect("leave", lambda *_args: widget.remove_css_class("drop-hover"))
     target.connect("drop", dropped)
     widget.add_controller(target)
+
+
+def drag_autoscroll(scroller, edge=56, fastest=22, sideways=False):
+    """While something is dragged over `scroller`, scroll when the pointer nears an edge (top and
+    bottom; left and right too with `sideways`) – GTK does not do this by itself, so a far-away
+    folder or column was out of reach. The closer to the edge, the faster."""
+    speed = {"x": 0.0, "y": 0.0}
+    state = {"tick": None}
+
+    def edge_speed(position, size):
+        if position < edge:
+            return -fastest * (edge - position) / edge
+        if position > size - edge:
+            return fastest * (position - (size - edge)) / edge
+        return 0.0
+
+    def nudge(adjustment, delta):
+        if delta:
+            top = adjustment.get_upper() - adjustment.get_page_size()
+            adjustment.set_value(min(max(adjustment.get_value() + delta, adjustment.get_lower()), top))
+
+    def step():
+        if not speed["x"] and not speed["y"]:
+            state["tick"] = None
+            return False
+        nudge(scroller.get_vadjustment(), speed["y"])
+        nudge(scroller.get_hadjustment(), speed["x"])
+        return True
+
+    def moved(_controller, x, y):
+        speed["y"] = edge_speed(y, scroller.get_height())
+        speed["x"] = edge_speed(x, scroller.get_width()) if sideways else 0.0
+        if (speed["x"] or speed["y"]) and state["tick"] is None:
+            state["tick"] = GLib.timeout_add(16, step)
+
+    def stopped(*_args):
+        speed["x"] = speed["y"] = 0.0
+
+    motion = Gtk.DropControllerMotion()
+    motion.connect("enter", moved)
+    motion.connect("motion", moved)
+    motion.connect("leave", stopped)
+    scroller.add_controller(motion)
+    return speed
