@@ -22,6 +22,7 @@ class NoteRow(Gtk.ListBoxRow):
         super().__init__()
         self.note_id = note["id"]
         self.group = group
+        self.signature = self.signature_of(note, group, stamp, unread)
         data = note["data"]
         drag_source(self, "note:" + note["id"])
 
@@ -72,6 +73,11 @@ class NoteRow(Gtk.ListBoxRow):
             box.append(thumb)
             load_thumbnail(sync, image, thumb, share=note.get("share"))
         self.set_child(box)
+
+    @staticmethod
+    def signature_of(note, group, stamp, unread):
+        """Everything the row shows comes from these; equal signature, equal row."""
+        return (note["id"], group, stamp, unread, note.get("share"), note.get("updated_by"), note["data"])
 
 
 # Finished thumbnails by (file id, size). The list is rebuilt on every edit; loading them again
@@ -221,12 +227,23 @@ class NoteList(Gtk.Box):
 
     def set_mode(self, mode):
         self.mode = mode
+        if mode == "gallery":
+            self.fill_gallery()
 
     def show(self, title, notes, selected_id=None, empty_text="Keine Notizen"):
         self.updating = True
         self.heading.set_label(title)
         count = len(notes)
         self.count.set_label("1 Notiz" if count == 1 else f"{count} Notizen")
+        ordered = list(model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")))
+        if self.update_rows(ordered, selected_id):
+            self.stack.set_visible_child_name(self.mode)
+            self.shown_notes = notes
+            self.gallery_dirty = True
+            if self.mode == "gallery":
+                self.fill_gallery()
+            self.updating = False
+            return
         self.list.remove_all()
         child = self.gallery.get_first_child()
         while child is not None:
@@ -235,12 +252,16 @@ class NoteList(Gtk.Box):
             child = following
 
         select_row = None
-        for note, group, stamp in model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")):
+        for note, group, stamp in ordered:
             row = NoteRow(note, group, self.sync, stamp, unread=self.is_unread(note))
             self.list.append(row)
             if note["id"] == selected_id:
                 select_row = row
-            self.gallery.append(self.gallery_card(note))
+        # Gallery cards only when the gallery is shown (building 300 of them on every save was slow).
+        self.shown_notes = notes
+        self.gallery_dirty = True
+        if self.mode == "gallery":
+            self.fill_gallery()
 
         if not notes:
             self.empty.set_title(empty_text)
@@ -251,6 +272,38 @@ class NoteList(Gtk.Box):
             self.list.select_row(select_row)
         self.selected_id = selected_id if select_row is not None else None
         self.updating = False
+
+    def update_rows(self, ordered, selected_id):
+        """Same notes in the same order as shown: rebuild only the rows whose note changed. Saving
+        an edit rebuilt all rows (0.45 s with 300 notes) although only one had changed (b9046682)."""
+        rows = []
+        while (row := self.list.get_row_at_index(len(rows))) is not None:
+            rows.append(row)
+        if not rows or len(rows) != len(ordered) or any(row.note_id != note["id"] or row.group != group
+                                                        for row, (note, group, _stamp) in zip(rows, ordered)):
+            return False
+        for position, (row, (note, group, stamp)) in enumerate(zip(rows, ordered)):
+            unread = self.is_unread(note)
+            if row.signature == NoteRow.signature_of(note, group, stamp, unread):
+                continue
+            fresh = NoteRow(note, group, self.sync, stamp, unread=unread)
+            self.list.remove(row)
+            self.list.insert(fresh, position)
+        wanted = next((self.list.get_row_at_index(index) for index, (note, _g, _s) in enumerate(ordered) if note["id"] == selected_id), None)
+        if wanted is None:
+            self.list.unselect_all()
+        elif self.list.get_selected_row() is not wanted:
+            self.list.select_row(wanted)
+        self.selected_id = selected_id if wanted is not None else None
+        self.list.invalidate_headers()
+        return True
+
+    def fill_gallery(self):
+        if not getattr(self, "gallery_dirty", False):
+            return
+        self.gallery_dirty = False
+        for note, _group, _stamp in model.sort_notes(self.shown_notes, self.sync.settings().get("note_sort", "modified")):
+            self.gallery.append(self.gallery_card(note))
 
     def gallery_card(self, note):
         child = Gtk.FlowBoxChild()
