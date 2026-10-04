@@ -10,7 +10,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Graphene", "1.0")
 
-from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk
 
 from . import e2e, pairing
 from . import smoothscroll
@@ -760,6 +760,11 @@ HELP = [
          "Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. "
          "Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). "
          "Für einfache Boards bleibt alles wie gewohnt."),
+        ("Pläne", "„+“ über der Seitenleiste → „Neuer Plan …“ und eine Vorlage wählen: Stundenplan, Schichtplan, Putzplan, "
+         "OP-/Raumplan oder Projektplan. Raster: direkt in die Zellen schreiben, Rechtsklick für Farbe sowie Zeilen und "
+         "Spalten (einfügen, verschieben, löschen). Projektplan: Aufgaben mit den Pfeilen ordnen oder „Nach Datum sortieren“; "
+         "verschiebst du einen Meilenstein, bleibt der alte Termin blass sichtbar und das Plan-PDF listet die Verschiebung. "
+         "„PDF …“ speichert den Plan zum Aushängen."),
         ("Bericht", "Export-Symbol (Kasten mit Pfeil) oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand "
          "als PDF (z. B. als Nachweis für Kunden) oder als CSV für Excel. Bei Entwicklungsprojekten mit "
          "Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet."),
@@ -777,10 +782,23 @@ HELP = [
 ]
 
 
+HELP_PICTURES = Path(__file__).resolve().parent.parent / "data" / "help"
+
+
+def help_pictures(title):
+    """Screenshots for a help entry (tools/help-images.json), light or dark like the app."""
+    try:
+        index = json.loads((HELP_PICTURES / "index.json").read_text())
+    except (OSError, ValueError):
+        return []
+    dark = Adw.StyleManager.get_default().get_dark()
+    return [HELP_PICTURES / (entry["dark"] if dark and entry.get("dark") else entry["light"]) for entry in index.get(title, [])]
+
+
 def show_help(parent):
     dialog = Adw.Dialog(title="Hilfe")
-    dialog.set_content_width(560)
-    dialog.set_content_height(640)
+    dialog.set_content_width(680)  # room for the screenshots
+    dialog.set_content_height(760)
     view = Adw.ToolbarView()
     view.add_top_bar(Adw.HeaderBar())
     page_widget = Adw.PreferencesPage()
@@ -793,7 +811,24 @@ def show_help(parent):
             label.set_margin_bottom(10)
             label.set_margin_start(12)
             label.set_margin_end(12)
-            row.add_row(Adw.PreferencesRow(child=label, activatable=False))
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_bottom=6)
+            box.append(label)
+            for path in help_pictures(title):
+                # Click: large in the quick look.
+                from .quicklook import PagePicture, QuickLook
+                try:
+                    # Via GdkPixbuf: Gtk.Picture(file=…) only knows PNG/JPEG/TIFF and would show a placeholder for WebP.
+                    texture = Gdk.Texture.new_from_filename(str(path))
+                except GLib.Error:
+                    continue
+                picture = PagePicture(paintable=texture, can_shrink=True, margin_start=12, margin_end=12,
+                                      tooltip_text="Groß ansehen", css_classes=["help-picture"])
+                picture.set_cursor_from_name("zoom-in")
+                click = Gtk.GestureClick()
+                click.connect("released", lambda *_a, path=path: QuickLook(parent, path, title).present(dialog))
+                picture.add_controller(click)
+                box.append(picture)
+            row.add_row(Adw.PreferencesRow(child=box, activatable=False))
             group.add(row)
         page_widget.add(group)
     view.set_content(page_widget)

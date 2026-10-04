@@ -756,6 +756,10 @@ private val HELP = listOf(
             "Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. " +
             "Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). " +
             "Für einfache Boards bleibt alles wie gewohnt.",
+        "Pläne" to "Reiter „Pläne“ → „+“ und eine Vorlage wählen: Stundenplan, Schichtplan, Putzplan, OP-/Raumplan oder Projektplan. " +
+            "Raster: Zelle antippen für Text und Farbe, Zeilen- und Spaltenköpfe zum Einfügen, Verschieben und Löschen. " +
+            "Projektplan: „…“ → „Reihenfolge ändern“ oder „Nach Datum sortieren“; verschiebst du einen Meilenstein, bleibt der alte " +
+            "Termin blass sichtbar und das Plan-PDF listet die Verschiebung. „…“ → „Als PDF teilen …“ zum Aushängen.",
         "Bericht" to "Board lange drücken → „Bericht teilen (PDF)“: der aktuelle Stand als PDF, z. B. als Nachweis für Kunden. " +
             "Bei Entwicklungsprojekten mit Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet.",
     ),
@@ -783,10 +787,42 @@ fun HelpScreen(state: AppState) {
                         detail = if (open == title) "−" else "+") { open = if (open == title) null else title }
                     if (open == title) {
                         Text(text, style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
+                        HelpPictures(state, title)
                         if (index < entries.lastIndex) HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
                     }
                 }
             }
+        }
+    }
+}
+
+/** Screenshots for a help entry (tools/help-images.json → assets/help), light or dark like the app;
+ *  tapping one shows it large in the quick look. */
+@Composable
+private fun HelpPictures(state: AppState, title: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dark = palette.dark
+    val names = remember(title, dark) {
+        try {
+            val index = org.json.JSONObject(context.assets.open("help/index.json").bufferedReader().use { it.readText() })
+            val list = index.optJSONArray(title) ?: return@remember emptyList<String>()
+            (0 until list.length()).map { i -> list.getJSONObject(i).let { if (dark && !it.isNull("dark")) it.getString("dark") else it.getString("light") } }
+        } catch (error: Exception) { emptyList() }
+    }
+    names.forEachIndexed { index, name ->
+        val bitmap = remember(name) {
+            try { context.assets.open("help/$name").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (error: Exception) { null }
+        } ?: return@forEachIndexed
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.Image(bitmap.asImageBitmap(), "Bildschirmfoto: $title",
+                Modifier.fillMaxWidth(if (bitmap.height > bitmap.width) 0.6f else 1f).clip(RoundedCornerShape(10.dp)).clickable {
+                    // Named after the help entry, so the quick look shows "Aufgaben-Board", not the asset name.
+                    val label = title + if (names.size > 1) " (${index + 1})" else ""
+                    val file = java.io.File(java.io.File(context.cacheDir, "help").apply { mkdirs() }, "$label.webp")
+                    context.assets.open("help/$name").use { input -> file.outputStream().use { input.copyTo(it) } }
+                    state.quickLook = LookFile(file, "image/webp")
+                })
         }
     }
 }

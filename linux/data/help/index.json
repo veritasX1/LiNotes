@@ -1,0 +1,52 @@
+{
+ "Formatieren": [
+  {
+   "light": "ubuntu-02-rezept.webp",
+   "dark": "ubuntu-dark-02-rezept.webp"
+  }
+ ],
+ "Checklisten": [
+  {
+   "light": "ubuntu-01-notiz.webp",
+   "dark": "ubuntu-dark-01-notiz.webp"
+  }
+ ],
+ "Listen": [
+  {
+   "light": "ubuntu-07-liste.webp",
+   "dark": "ubuntu-dark-07-liste.webp"
+  }
+ ],
+ "Aufgaben-Board": [
+  {
+   "light": "ubuntu-08-board.webp",
+   "dark": "ubuntu-dark-08-board.webp"
+  }
+ ],
+ "Entwicklungsprojekt": [
+  {
+   "light": "ubuntu-13-entwicklung.webp",
+   "dark": null
+  },
+  {
+   "light": "ubuntu-14-karte.webp",
+   "dark": null
+  }
+ ],
+ "Bericht": [
+  {
+   "light": "ubuntu-15-bericht-seite-1.webp",
+   "dark": null
+  }
+ ],
+ "Pläne": [
+  {
+   "light": "ubuntu-12-dienstplan.webp",
+   "dark": "ubuntu-dark-12-dienstplan.webp"
+  },
+  {
+   "light": "ubuntu-11-projektplan.webp",
+   "dark": "ubuntu-dark-11-projektplan.webp"
+  }
+ ]
+}
