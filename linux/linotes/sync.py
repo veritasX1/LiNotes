@@ -611,6 +611,14 @@ class SyncEngine:
         data.update(fields)
         self.put("settings", data, None, f"settings-{self.user_id}")
 
+    def pro_features(self):
+        """Profi-Funktionen (code colors, footnotes …): off by default so the app stays simple
+        ("Tante Erna" first); a setting of the account, so every device follows."""
+        return bool(self.settings().get("pro"))
+
+    def set_pro_features(self, on):
+        self.update_settings(pro=bool(on))
+
     def keyfile_saved(self):
         return bool(self.settings().get("keyfile_saved"))
 

@@ -183,6 +183,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         layout.append("Blocksatz", "win.justify")
         # Off by default: a preview means fetching the page, the site then sees this computer's address.
         layout.append("Link-Vorschau (Webseite abrufen)", "win.link-previews")
+        # Off by default ("Tante Erna" first): code colors, footnotes … only when switched on (all devices).
+        layout.append("Profi-Funktionen", "win.pro-features")
         sort_menu.append_section(None, layout)
         self.sort_button = icon_menu_button("more", "Sortieren und Darstellung", Gtk.PopoverMenu.new_from_model(sort_menu))
         header.pack_start(self.sort_button)
@@ -401,6 +403,20 @@ class LiNotesWindow(Adw.ApplicationWindow):
         divider.set_tooltip_text("Oder auf einer leeren Zeile --- tippen und Enter drücken")
         divider.connect("clicked", lambda _button: (popover.popdown(), self.insert_divider(editor)))
         box.append(divider)
+        # Profi-Funktionen: only shown when switched on (Tante Erna sees a calm menu).
+        pro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        code_row = Gtk.Box(spacing=6, margin_start=10, margin_top=2)
+        code_row.append(Gtk.Label(label="Code", xalign=0, hexpand=True, css_classes=["monospace"]))
+        languages = Gtk.Box(css_classes=["linked"])
+        from . import syntax
+        for lang, label in syntax.LANGUAGES.items():
+            button = Gtk.Button(label=label, tooltip_text=f"Markierte Zeilen als {label}-Code mit Syntaxfarben")
+            button.connect("clicked", lambda _b, lang=lang: (popover.popdown(), (editor or self.note_pane.editor).make_code(lang)))
+            languages.append(button)
+        code_row.append(languages)
+        pro.append(code_row)
+        box.append(pro)
+        popover.connect("show", lambda _p: pro.set_visible(self.pro_features()))
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
         sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
         sort_checked.connect("toggled", lambda button: setattr(editor or self.note_pane.editor, "auto_sort_checked", button.get_active()))
@@ -555,6 +571,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ========================================================
 
     def refresh_all(self):
+        self.pro_features()  # the menu check follows the account setting (other devices)
         self.sidebar.refresh()
         self.select(self.current_key, keep_note=True)
 
@@ -1965,6 +1982,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.text_size_action.connect("activate", lambda _action, value: self.set_text_size(int(value.get_string())))
         self.add_action(self.text_size_action)
         textsize.apply(textsize.load())
+        self.pro_action = Gio.SimpleAction.new_stateful("pro-features", None, GLib.Variant.new_boolean(False))
+        self.pro_action.connect("activate", lambda action, _value: self.set_pro_features(not action.get_state().get_boolean()))
+        self.add_action(self.pro_action)
         previews = Gio.SimpleAction.new_stateful("link-previews", None, GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))
         previews.connect("activate", lambda action, _value: (uiprefs.put("link_previews", not action.get_state().get_boolean()),
                                                              action.set_state(GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))))
@@ -1986,6 +2006,18 @@ class LiNotesWindow(Adw.ApplicationWindow):
         textsize.save(level)
         textsize.apply(level)
         self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def set_pro_features(self, on):
+        self.sync.set_pro_features(on)
+        self.pro_action.set_state(GLib.Variant.new_boolean(on))
+        self.toast("Profi-Funktionen an" if on else "Profi-Funktionen aus")
+
+    def pro_features(self):
+        """Current state (the menu check follows syncs from other devices when asked)."""
+        on = self.sync.pro_features() if self.sync.user_id is not None else False
+        if self.pro_action.get_state().get_boolean() != on:
+            self.pro_action.set_state(GLib.Variant.new_boolean(on))
+        return on
 
     def set_justified(self, on):
         textsize.save_justify(on)

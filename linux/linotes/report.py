@@ -327,7 +327,24 @@ def write_evidence(pdf, records):
 NOTE_STYLES = {  # size, bold, italic, space after
     "title": (20, True, False, 8), "heading": (15, True, False, 5), "subheading": (12.5, True, False, 4),
     "body": (10.5, False, False, 3), "mono": (9.5, False, False, 3), "quote": (10.5, False, True, 3),
+    "code": (9.5, False, False, 0),
 }
+CODE_COLORS = {"keyword": "#9C52E0", "string": "#1A9452", "comment": "#85858C", "number": "#E07A00"}
+
+
+def code_markup(block):
+    """A code line with its syntax colors (the same tokenizer as the editor)."""
+    from gi.repository import GLib
+    from . import syntax
+    text = block.get("x", "")
+    parts, position = [], 0
+    for start, end, kind in syntax.tokens(text, block.get("lang")):
+        parts.append(GLib.markup_escape_text(text[position:start]))
+        style = " style='italic'" if kind == "comment" else ""
+        parts.append(f"<span foreground='{CODE_COLORS[kind]}'{style}>{GLib.markup_escape_text(text[start:end])}</span>")
+        position = end
+    parts.append(GLib.markup_escape_text(text[position:]))
+    return "".join(parts)
 NOTE_MARKUP = {"b": ("<b>", "</b>"), "i": ("<i>", "</i>"), "u": ("<u>", "</u>"), "s": ("<s>", "</s>"),
                "h": ("<span background='#FFE680'>", "</span>"),
                "h:orange": ("<span background='#FFCF85'>", "</span>"), "h:pink": ("<span background='#FFB7D3'>", "</span>"),
@@ -455,12 +472,12 @@ def write_note_pdf(blocks, path, header, image_path=None):
         indent = 18 * level + (18 if kind in LIST_MARKS else 0) + (14 if kind == "quote" else 0)
         layout, color = pdf.layout("", size, bold, pdf.width - 2 * MARGIN - indent,
                                    GREY if kind == "quote" or (kind == "check" and block.get("c")) else (0, 0, 0),
-                                   mono=kind == "mono")
+                                   mono=kind in ("mono", "code"))
         if italic:
             font = layout.get_font_description().copy()
             font.set_style(Pango.Style.ITALIC)
             layout.set_font_description(font)
-        markup = block_markup(block) or " "
+        markup = (code_markup(block) if kind == "code" else block_markup(block)) or " "
         if kind == "check" and block.get("c"):
             markup = f"<s>{markup}</s>"
         layout.set_markup(markup, -1)
@@ -475,6 +492,11 @@ def write_note_pdf(blocks, path, header, image_path=None):
                 mark = "☑"
             mark_layout = pdf.layout(mark, size, color=ACCENT if kind == "check" else (0, 0, 0))
             pdf.draw(mark_layout, x - 16, pdf.y)
+        if kind == "code":
+            # The tinted code background, line by line (consecutive lines join up).
+            pdf.cr.set_source_rgb(0.95, 0.95, 0.96)
+            pdf.cr.rectangle(x - 6, pdf.y - 1, pdf.width - 2 * MARGIN - indent + 12, height + 2)
+            pdf.cr.fill()
         if kind == "quote":
             pdf.cr.set_source_rgb(*LINE)
             pdf.cr.rectangle(x - 10, pdf.y, 2.5, height)

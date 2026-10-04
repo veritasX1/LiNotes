@@ -630,6 +630,12 @@ class SyncEngine(private val context: Context) {
 
     fun setNoteSort(order: String) = updateSettings { it.put("note_sort", order) }
 
+    /** Profi-Funktionen (code colors, footnotes …): off by default so the app stays simple
+     *  ("Tante Erna" first); a setting of the account, so every device follows. */
+    var proFeatures: Boolean
+        get() = settings().optBoolean("pro", false)
+        set(value) = updateSettings { it.put("pro", value) }
+
     fun keyfileSaved(): Boolean = settings().optDouble("keyfile_saved", 0.0) > 0
 
     fun markKeyfileSaved() = updateSettings { it.put("keyfile_saved", System.currentTimeMillis() / 1000.0) }
