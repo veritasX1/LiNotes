@@ -22,7 +22,6 @@ from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk
 
 from . import audio, calc, linkpreview, mathtex, model, syntax, textsize
 from .table import NoteTable
-from .icons import Icon
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -81,6 +80,10 @@ class FootnoteList(Gtk.Box):
                 row.append(Gtk.Label(label=text, xalign=0, wrap=True, hexpand=True, selectable=True))
                 self.append(row)
         self.set_visible(bool(texts))
+
+
+# Waveforms of recordings by file id (file ids never change content).
+WAVEFORMS = {}
 
 
 class NoteEditor(Gtk.TextView):
@@ -1627,52 +1630,47 @@ class NoteEditor(Gtk.TextView):
             threading.Thread(target=render, daemon=True).start()
 
     def add_recording(self, anchor, block):
-        """An audio recording as a player card like Apple's, playing inside the note: round
-        play/pause button, title, date · length; while loaded also ±15 s and a bar to seek. A click
-        anywhere on the card plays or pauses – it never puts the cursor in front of it (900036dc)."""
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["file-card", "audio-card"])
-        card.set_size_request(360, -1)
-        top = Gtk.Box(spacing=12)
-        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "suggested-action", "audio-play"],
-                            valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
-        button.set_size_request(40, 40)
-        top.append(button)
+        """A recording as a message bubble like a voice message in Apple's Messages (Olaf's choice of
+        five designs, 900036dc): play/pause, the recording's waveform (a click jumps there) and its
+        length. A click anywhere on the bubble plays or pauses – the cursor stays where it is."""
         title, subtitle = audio.recording_label(block)
-        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
-        text.append(Gtk.Label(label=title, xalign=0, ellipsize=Pango.EllipsizeMode.END, max_width_chars=28, css_classes=["heading"]))
-        details = Gtk.Label(label=subtitle or file_details(block), xalign=0, css_classes=["dim-label", "caption"])
-        text.append(details)
-        top.append(text)
-        back = Gtk.Button(child=Icon("skip-back", 22), css_classes=["flat", "circular"], valign=Gtk.Align.CENTER, tooltip_text="15 Sekunden zurück",
-                          visible=False)
-        forward = Gtk.Button(child=Icon("skip-forward", 22), css_classes=["flat", "circular"], valign=Gtk.Align.CENTER,
-                             tooltip_text="15 Sekunden vor", visible=False)
-        top.append(back)
-        top.append(forward)
-        card.append(top)
-        bar = Gtk.Box(spacing=8, visible=False)
-        elapsed = Gtk.Label(label="0:00", css_classes=["caption", "numeric", "dim-label"], width_chars=5, xalign=0)
-        scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, hexpand=True, draw_value=False,
-                          adjustment=Gtk.Adjustment(lower=0, upper=max(1.0, float(block.get("d") or 1.0)), step_increment=1))
-        remaining = Gtk.Label(label="", css_classes=["caption", "numeric", "dim-label"], width_chars=6, xalign=1)
-        bar.append(elapsed)
-        bar.append(scale)
-        bar.append(remaining)
-        card.append(bar)
-        state = {"timer": None, "moving": False, "path": None}
+        bubble = Gtk.Box(spacing=10, css_classes=["audio-bubble"], halign=Gtk.Align.START,
+                         tooltip_text=" · ".join(part for part in (title, subtitle) if part))
+        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "audio-bubble-play"],
+                            valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
+        bubble.append(button)
+        wave = Gtk.DrawingArea(content_width=audio.BARS * 5, content_height=28, valign=Gtk.Align.CENTER)
+        wave.set_cursor_from_name("pointer")
+        bubble.append(wave)
+        length = float(block.get("d") or 0)
+        time_label = Gtk.Label(label=audio.duration_text(length), css_classes=["audio-bubble-time", "numeric"], width_chars=4, xalign=1)
+        bubble.append(time_label)
+        state = {"timer": None, "fraction": 0.0, "peaks": WAVEFORMS.get(block.get("f")), "pending": None}
+
+        def draw(widget, cr, width, height):
+            color = widget.get_color()
+            peaks = state["peaks"] or [0.08] * audio.BARS
+            step = width / len(peaks)
+            for index, value in enumerate(peaks):
+                played = (index + 0.5) / len(peaks) <= state["fraction"]
+                cr.set_source_rgba(color.red, color.green, color.blue, 1.0 if played else 0.45)
+                bar = max(3.0, value * height)
+                x = index * step + (step - 3) / 2
+                cr.move_to(x + 1.5, (height - bar) / 2 + 1.5)
+                cr.line_to(x + 1.5, (height + bar) / 2 - 1.5)
+                cr.set_line_width(3)
+                cr.set_line_cap(1)
+                cr.stroke()
+        wave.set_draw_func(draw)
 
         def refresh():
             if self.player.on_state is not show:
                 return False
-            length = self.player.duration() or float(block.get("d") or 0)
+            total = self.player.duration() or length
             position = self.player.position()
-            if length:
-                scale.get_adjustment().set_upper(length)
-            state["moving"] = True
-            scale.set_value(position)
-            state["moving"] = False
-            elapsed.set_label(audio.duration_text(position))
-            remaining.set_label("−" + audio.duration_text(max(0.0, length - position)))
+            state["fraction"] = position / total if total else 0.0
+            time_label.set_label(audio.duration_text(max(0.0, total - position)))
+            wave.queue_draw()
             return True
 
         def show(playing):
@@ -1680,14 +1678,19 @@ class NoteEditor(Gtk.TextView):
             running = playing == "playing"
             button.set_icon_name("media-playback-pause-symbolic" if running else "media-playback-start-symbolic")
             button.set_tooltip_text("Pause" if running else "Abspielen")
-            for widget in (back, forward, bar):
-                widget.set_visible(loaded)
+            if running and state["pending"] is not None:
+                # A click on the waveform before playing: jump there once the recording runs.
+                target, state["pending"] = state["pending"], None
+                GLib.timeout_add(150, lambda: (self.player.seek(target * (self.player.duration() or length)), refresh()) and False)
             if loaded and state["timer"] is None:
-                state["timer"] = GLib.timeout_add(200, lambda: refresh() or state.update(timer=None))
-                refresh()
-            if not loaded and state["timer"] is not None:
-                GLib.source_remove(state["timer"])
-                state["timer"] = None
+                state["timer"] = GLib.timeout_add(100, lambda: refresh() or state.update(timer=None))
+            if not loaded:
+                if state["timer"] is not None:
+                    GLib.source_remove(state["timer"])
+                    state["timer"] = None
+                state["fraction"] = 0.0
+                time_label.set_label(audio.duration_text(length))
+                wave.queue_draw()
 
         def toggle(*_args):
             if self.player.on_state is show:
@@ -1706,18 +1709,43 @@ class NoteEditor(Gtk.TextView):
                 GLib.idle_add(lambda: (button.set_sensitive(True), path and self.player.play(path, show)) and False)
             threading.Thread(target=fetch, daemon=True).start()
 
+        def seek(gesture, _n, x, _y):
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            fraction = max(0.0, min(1.0, x / max(1, wave.get_width())))
+            if self.player.on_state is show:
+                self.player.seek(fraction * (self.player.duration() or length))
+                if self.player.paused:
+                    self.player.toggle()
+                refresh()
+            else:
+                state["pending"] = fraction
+                toggle()
+
         button.connect("clicked", toggle)
-        back.connect("clicked", lambda _b: (self.player.jump(-15), refresh()))
-        forward.connect("clicked", lambda _b: (self.player.jump(15), refresh()))
-        scale.connect("value-changed", lambda widget: None if state["moving"] or self.player.on_state is not show
-                      else self.player.seek(widget.get_value()))
-        # The whole card: a click plays/pauses (the buttons and the bar handle their own clicks).
+        wave_click = Gtk.GestureClick()
+        wave_click.connect("released", seek)
+        wave.add_controller(wave_click)
+        # The whole bubble: a click plays/pauses (button and waveform handle their own clicks).
         click = Gtk.GestureClick()
         click.connect("released", lambda gesture, *_args: (gesture.set_state(Gtk.EventSequenceState.CLAIMED), toggle()))
-        card.add_controller(click)
-        card.set_cursor_from_name("pointer")
-        self.anchors[anchor] = {"attachment": dict(block), "picture": card, "player": (toggle, show)}
-        self.add_child_at_anchor(card, anchor)
+        bubble.add_controller(click)
+        bubble.set_cursor_from_name("pointer")
+        self.anchors[anchor] = {"attachment": dict(block), "picture": bubble, "player": (toggle, show)}
+        self.add_child_at_anchor(bubble, anchor)
+        if state["peaks"] is None and self.image_loader and block.get("f"):
+            def measure():
+                try:
+                    peaks = audio.waveform(self.image_loader(block["f"]))
+                except Exception as error:
+                    print("LiNotes: Wellenform nicht lesbar:", error)
+                    return
+                WAVEFORMS[block["f"]] = peaks
+
+                def done():
+                    state["peaks"] = peaks
+                    wave.queue_draw()
+                GLib.idle_add(lambda: done() and False)
+            threading.Thread(target=measure, daemon=True).start()
 
     def add_table(self, anchor, block):
         """A table (like Apple's): cells edited in place, saved with the note."""

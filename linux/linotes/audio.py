@@ -33,6 +33,53 @@ def recording_name(moment=None):
     return (moment or datetime.now()).strftime("Aufnahme %Y-%m-%d %H-%M.ogg")
 
 
+BARS = 36          # bars of the waveform in the message bubble
+WAVE_RATE = 4000   # samples per second read for the waveform
+
+
+def peaks(samples, bars=BARS):
+    """Loudness per bar of the waveform, 0.08…1 (square root, so quiet speech still shows), like the
+    bars of a voice message in Apple's Messages. Same rules as AudioNotes.peaks on Android."""
+    count = len(samples)
+    if count == 0:
+        return [0.08] * bars
+    values = []
+    for index in range(bars):
+        start = index * count // bars
+        end = max(start + 1, (index + 1) * count // bars)
+        values.append(max(abs(sample) for sample in samples[start:end]))
+    top = max(values) or 1
+    return [round(max(0.08, (value / top) ** 0.5), 3) for value in values]
+
+
+def waveform(path, bars=BARS):
+    """Read a recording (any format GStreamer knows) and give its waveform – blocking, run it in a
+    thread. Only loudness leaves this function, nothing is stored."""
+    from array import array
+    ensure_gst()
+    pipeline = Gst.parse_launch("filesrc name=source ! decodebin ! audioconvert ! audioresample ! "
+                                f"audio/x-raw,format=S16LE,channels=1,rate={WAVE_RATE} ! appsink name=sink sync=false")
+    pipeline.get_by_name("source").set_property("location", str(path))
+    sink = pipeline.get_by_name("sink")
+    pipeline.set_state(Gst.State.PLAYING)
+    data = bytearray()
+    try:
+        while True:
+            sample = sink.emit("try-pull-sample", 5 * Gst.SECOND)
+            if sample is None:
+                break
+            buffer = sample.get_buffer()
+            ok, info = buffer.map(Gst.MapFlags.READ)
+            if ok:
+                data += info.data
+                buffer.unmap(info)
+    finally:
+        pipeline.set_state(Gst.State.NULL)
+    samples = array("h")
+    samples.frombytes(bytes(data[:len(data) // 2 * 2]))
+    return peaks(samples, bars)
+
+
 MONTHS = ("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
 
 
@@ -140,7 +187,7 @@ class RecordDialog(Adw.Dialog):
 
 
 class Player:
-    """Plays one recording at a time inside a note; pause, jump and seek like Apple's player."""
+    """Plays one recording at a time inside a note; pause and seek (the message bubble in the note)."""
 
     def __init__(self):
         self.playbin = None
@@ -188,9 +235,6 @@ class Player:
         length = self.duration()
         seconds = max(0.0, min(seconds, length - 0.05) if length else seconds)
         self.playbin.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, int(seconds * Gst.SECOND))
-
-    def jump(self, seconds):
-        self.seek(self.position() + seconds)
 
     def stop(self):
         if self.playbin is not None:

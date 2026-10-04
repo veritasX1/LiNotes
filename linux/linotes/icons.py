@@ -356,35 +356,6 @@ def icon_back(cr):
     _stroke(cr, 1.8)
 
 
-def _skip(cr, forward):
-    """A circular arrow with "15" inside – Apple's 15-second jump buttons. The arrow head sits at
-    the top and points the way the time goes (right: forward, left: back)."""
-    cx, cy, r = 8.0, 8.6, 6.4
-    if forward:
-        cr.arc(cx, cy, r, -math.pi / 2 + 0.6, 1.5 * math.pi)
-    else:
-        cr.arc_negative(cx, cy, r, -math.pi / 2 - 0.6, -2.5 * math.pi)
-    _stroke(cr)
-    side = -1 if forward else 1
-    cr.move_to(cx + side * 2.4, cy - r - 2.4)
-    cr.line_to(cx + side * -0.2, cy - r)
-    cr.line_to(cx + side * 2.4, cy - r + 2.4)
-    _stroke(cr)
-    cr.select_font_face("sans-serif", 0, 1)
-    cr.set_font_size(5.6)
-    extents = cr.text_extents("15")
-    cr.move_to(cx - extents.width / 2 - extents.x_bearing, cy - extents.height / 2 - extents.y_bearing)
-    cr.show_text("15")
-
-
-def icon_skip_back(cr):
-    _skip(cr, False)
-
-
-def icon_skip_forward(cr):
-    _skip(cr, True)
-
-
 ICONS = {
     name[5:].replace("_", "-"): function
     for name, function in list(globals().items())
