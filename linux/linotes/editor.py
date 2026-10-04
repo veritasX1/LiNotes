@@ -19,12 +19,15 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import audio, calc, linkpreview, model, textsize
+from . import audio, calc, linkpreview, model, syntax, textsize
 from .table import NoteTable
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
-              "bullet", "dash", "number", "check")
+              "bullet", "dash", "number", "check", "code")
+# Code colors (Profi-Funktion; only displayed, never stored as spans).
+SYNTAX_COLORS = {"keyword": (0.61, 0.32, 0.88), "string": (0.10, 0.58, 0.32), "comment": (0.52, 0.52, 0.55),
+                 "number": (0.88, 0.48, 0.0)}
 LISTS = ("bullet", "dash", "number", "check")
 # Headings that can be collapsed (like Apple): rank – a section ends at the next heading of the same or a higher rank.
 FOLDABLE = {"heading": 1, "subheading": 2}
@@ -140,6 +143,13 @@ class NoteEditor(Gtk.TextView):
         tag("subheading", scale=1.18, weight=Pango.Weight.SEMIBOLD, pixels_above_lines=4, justification=Gtk.Justification.LEFT)
         tag("body")
         tag("mono", family="Monospace", scale=0.92)
+        tag("code", family="Monospace", scale=0.92, paragraph_background_rgba=rgba(0.5, 0.5, 0.55, 0.12),
+            left_margin=48, right_margin=48, justification=Gtk.Justification.LEFT)
+        for lang in syntax.LANGUAGES:
+            tag("lang-" + lang)
+        for kind, color in SYNTAX_COLORS.items():
+            tag("syn-" + kind, foreground_rgba=rgba(*color))
+        self.get_buffer().get_tag_table().lookup("syn-comment").set_property("style", Pango.Style.ITALIC)
         tag("quote", left_margin=20, foreground_rgba=rgba(0.45, 0.45, 0.48), style=Pango.Style.ITALIC)
         for name in LISTS:
             tag(name)
@@ -316,6 +326,7 @@ class NoteEditor(Gtk.TextView):
         self.queue_draw()
         if self.loading:
             return
+        self.highlight_code()
         self.mark_links()
         self.refold()
         if self.edit_source is not None:
@@ -430,6 +441,12 @@ class NoteEditor(Gtk.TextView):
             self.emit_style()
             return True
 
+        if style == "code" and not text.strip():
+            # An empty code line ends the code block (like an empty list item ends a list).
+            self.set_line_style(line, "body", 0, checked=False)
+            self.emit_style()
+            return True
+
         if style in LISTS and not text.strip():
             # An empty list item ends the list (or outdents first).
             if level:
@@ -449,9 +466,11 @@ class NoteEditor(Gtk.TextView):
         # The old line keeps its style; the new one continues lists, but
         # titles and headings are followed by normal text.
         self.set_line_style(line, style, level)
-        next_style = style if style in LISTS + ("mono", "quote", "body") else "body"
+        next_style = style if style in LISTS + ("mono", "quote", "body", "code") else "body"
         # Inline styles of the split text stay where they were; new text is plain.
         self.set_line_style(new_line, next_style, level if next_style in LISTS else 0, checked=False)
+        if style == "code":
+            self.set_code_language(self.line_language(line), [new_line])
         # Like Notes: the alignment carries on to the next line.
         first = buffer.get_iter_at_mark(line_start)
         buffer.delete_mark(line_start)
@@ -559,6 +578,47 @@ class NoteEditor(Gtk.TextView):
     def set_justified(self, on):
         """Blocksatz (per device, like the text size): running text fills the line."""
         self.set_justification(Gtk.Justification.FILL if on else Gtk.Justification.LEFT)
+
+    # --- code (Profi-Funktion) ---
+
+    def line_language(self, line):
+        start = self.line_bounds(line)[0]
+        table = self.buffer.get_tag_table()
+        return next((lang for lang in syntax.LANGUAGES if start.has_tag(table.lookup("lang-" + lang))), None)
+
+    def set_code_language(self, lang, lines=None):
+        for line in (lines if lines is not None else self.selected_lines()):
+            start, _end, with_break = self.line_bounds(line)
+            for other in syntax.LANGUAGES:
+                self.buffer.remove_tag_by_name("lang-" + other, start, with_break)
+            if lang in syntax.LANGUAGES:
+                self.buffer.apply_tag_by_name("lang-" + lang, start, with_break)
+        self.highlight_code()
+
+    def make_code(self, lang, lines=None):
+        """Format → Code (language): the selected lines become a code block."""
+        lines = list(lines if lines is not None else self.selected_lines())
+        for line in lines:
+            self.set_line_style(line, "code", 0, checked=False)
+        self.set_code_language(lang, lines)
+        self.emit_style()
+        self.emit("edited")
+
+    def highlight_code(self):
+        """Color keywords, strings, comments and numbers in code lines (display only)."""
+        buffer = self.buffer
+        table = buffer.get_tag_table()
+        code = table.lookup("code")
+        for line in range(buffer.get_line_count()):
+            start, end, _with_break = self.line_bounds(line)
+            for kind in SYNTAX_COLORS:
+                buffer.remove_tag_by_name("syn-" + kind, start, end)
+            if not start.has_tag(code):
+                continue
+            text = buffer.get_slice(start, end, True)
+            base = start.get_offset()
+            for begin, finish, kind in syntax.tokens(text, self.line_language(line)):
+                buffer.apply_tag_by_name("syn-" + kind, buffer.get_iter_at_offset(base + begin), buffer.get_iter_at_offset(base + finish))
 
     def set_alignment(self, name, lines=None):
         """Align the selected lines left (None), centered or right, like Format → Text in Notes."""
@@ -1096,11 +1156,14 @@ class NoteEditor(Gtk.TextView):
                 buffer.apply_tag_by_name("image", start, with_break)
             if block.get("a") in ALIGNMENTS:
                 self.set_alignment(block["a"], [line])
+            if kind == "code" and block.get("lang") in syntax.LANGUAGES:
+                self.set_code_language(block["lang"], [line])
             if kind in FOLDABLE and block.get("z"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("collapsed", start, with_break)
         buffer.end_irreversible_action()
         self.loading = False
+        self.highlight_code()
         self.mark_links()
         self.refold()
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
@@ -1141,6 +1204,8 @@ class NoteEditor(Gtk.TextView):
                 block["z"] = True
             if self.line_alignment(line):
                 block["a"] = self.line_alignment(line)
+            if block["t"] == "code" and self.line_language(line):
+                block["lang"] = self.line_language(line)
             spans = self.spans(start, end)
             if spans:
                 block["s"] = spans

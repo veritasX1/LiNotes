@@ -25,6 +25,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
     var justify by remember { mutableStateOf(sync.justify) }
     var hyphenate by remember { mutableStateOf(sync.hyphenate) }
     var linkPreviews by remember { mutableStateOf(sync.linkPreviews) }
+    var pro by remember { mutableStateOf(sync.proFeatures) }
     var changeVault by remember { mutableStateOf(false) }
     var enableBiometric by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
@@ -58,6 +59,13 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow("Blocksatz", Glyph.Format, chevron = false, trailing = { IosSwitch(justify, "Blocksatz") { toggleJustify() } }) { toggleJustify() }
             GroupRow("Silbentrennung", Glyph.Format, chevron = false, divider = false,
                 trailing = { IosSwitch(hyphenate, "Silbentrennung") { toggleHyphenate() } }) { toggleHyphenate() }
+        }
+        section("pro", header = "Profi-Funktionen", compact = true, footer = "Zusätzliche Werkzeuge für Fortgeschrittene, z. B. Code mit Syntaxfarben " +
+            "sowie Fußnoten und Literaturverzeichnis. Ab Werk aus, damit LiNotes einfach bleibt. Gilt für dein Konto auf allen Geräten; " +
+            "Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt.") {
+            fun togglePro() { pro = !pro; sync.proFeatures = pro }
+            GroupRow("Profi-Funktionen", Glyph.Gear, chevron = false, divider = false,
+                trailing = { IosSwitch(pro, "Profi-Funktionen") { togglePro() } }) { togglePro() }
         }
         section("links", header = "Link-Vorschau", compact = true, footer = "Steht eine Webadresse allein in einer Zeile, wird sie zur Vorschau mit Titel und Bild. " +
             "Dafür ruft dieses Handy die Seite ab – der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz; " +
