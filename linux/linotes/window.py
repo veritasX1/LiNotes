@@ -422,6 +422,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         footnote.set_child(footnote_line)
         footnote.connect("clicked", lambda _b: (popover.popdown(), self.ask_footnote(editor or self.note_pane.editor)))
         pro.append(footnote)
+        formula = Gtk.Button(css_classes=["flat"], tooltip_text="Mathematische Formel in LaTeX-Schreibweise, z. B. \\frac{a}{b}")
+        formula_line = Gtk.Box(spacing=16)
+        formula_line.append(Gtk.Label(label="Formel (LaTeX) …", xalign=0, hexpand=True))
+        formula.set_child(formula_line)
+        formula.connect("clicked", lambda _b: (popover.popdown(), self.insert_math(editor)))
+        pro.append(formula)
         box.append(pro)
         popover.connect("show", lambda _p: pro.set_visible(self.pro_features()))
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
@@ -2095,7 +2101,15 @@ class LiNotesWindow(Adw.ApplicationWindow):
         level = max(0, min(len(textsize.SIZES) - 1, level))
         textsize.save(level)
         textsize.apply(level)
+        # Formulas are set once at a size taken from the text – set them again at the new one.
+        GLib.idle_add(lambda: [editor.refresh_math() for editor in [self.note_pane.editor] + [w.editor for w in self.note_windows]] and False)
         self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def insert_math(self, editor=None):
+        editor = editor or self.note_pane.editor
+        if not self.pro_features() or not editor.get_editable():
+            return
+        editor.insert_math()
 
     def ask_footnote(self, editor):
         """Format → Fußnote / Quelle (Profi-Funktion)."""

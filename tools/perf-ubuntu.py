@@ -56,6 +56,12 @@ def make_data(sync):
         kind = ("heading", "body", "body", "check", "bullet", "body")[k % 6]
         long_body.append({"t": kind, "x": text(14, k)})
     long_note = sync.put("note", {"folder": folders[0]["id"], "body": long_body, "created": now, "modified": now + 10})
+    formulas = [r"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}", r"\sum_{k=1}^{n} k^2 = \frac{n(n+1)(2n+1)}{6}",
+                r"A = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}", r"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}"]
+    math_body = [{"t": "title", "x": "Formelsammlung"}]
+    for k in range(40):
+        math_body += [{"t": "body", "x": text(10, k)}, {"t": "math", "x": formulas[k % 4]}]
+    math_note = sync.put("note", {"folder": folders[1]["id"], "body": math_body, "created": now, "modified": now + 5})
     board = sync.put("board", {"name": "Großes Board", "order": 1})
     columns = [sync.put("column", {"board": board["id"], "name": name, "order": i}) for i, name in enumerate(("Offen", "In Arbeit", "Erledigt"))]
     for i in range(120):
@@ -64,7 +70,7 @@ def make_data(sync):
     for i in range(6):
         sync.put("list", {"name": f"Liste {i}", "grocery": True, "order": i})
     sync.save()
-    return long_note, board
+    return long_note, board, math_note
 
 
 def settle():
@@ -110,7 +116,7 @@ class App(Adw.Application):
     def measure(self):
         sync = sync_module.SyncEngine()
         sync.start_local("Messlauf")
-        long_note, board = make_data(sync)
+        long_note, board, math_note = make_data(sync)
         results = {}
         start = time.perf_counter()
         window = window_module.LiNotesWindow(self, sync)
@@ -120,6 +126,7 @@ class App(Adw.Application):
         results["Fenster öffnen"] = (time.perf_counter() - start) * 1000
         results["Seitenleiste neu aufbauen"] = timed(window.sidebar.refresh)
         results["Alle Notizen anzeigen"] = timed(lambda: window.show_notes(), name="notes")
+        results["Notiz mit 40 Formeln öffnen"] = timed(lambda: (setattr(window, "current_note", None), window.open_note(math_note["id"])), runs=5, name="math")
         results["Lange Notiz öffnen (1500 Absätze)"] = timed(lambda: (setattr(window, "current_note", None), window.open_note(long_note["id"])), runs=5, name="open")
         editor = window.note_pane.editor
         buffer = editor.get_buffer()
