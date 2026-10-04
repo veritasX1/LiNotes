@@ -21,7 +21,10 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py field <karte> <impact|verification|version> <text>   # Feld eines Entwicklungsprojekts setzen
     linotes-cli.py dump <board> [datei.json]     # alle Karten mit Spalte, Notizen, Feldern, Commits
     linotes-cli.py evidence <karte> <datei> […]  # Nachweise (Prüfprotokolle, Screenshots) mit SHA-256 anhängen
+    linotes-cli.py evidence-remove <karte> <name> […]  # Nachweise mit diesem Dateinamen von der Karte nehmen
     linotes-cli.py rename-board <board> <neuer name>
+    linotes-cli.py share-board <board> <person …>  # Personen zu einem eigenen Board hinzufügen
+    linotes-cli.py new-board <name> [person …]   # neues Board (Entwicklungsprojekt), geteilt mit den Personen
     linotes-cli.py dev-board <board>             # Board als Entwicklungsprojekt (Felder, Commits, Nachweise)
 """
 
@@ -220,6 +223,30 @@ def cmd_rename_board(ref, name):
     print(f"Board „{old}“ → „{name.strip()}“")
 
 
+def cmd_new_board(name, *people):
+    """A new board with the usual columns, shared with these people (e.g. Olaf), as a development project."""
+    eng = engine()
+    board = eng.put("board", {"name": name.strip(), "order": time.time(), "dev": True})
+    for order, (_key, column) in enumerate(model.DEFAULT_COLUMNS):
+        eng.put("column", {"board": board["id"], "name": column, "order": order}, notify=False)
+    if people:
+        eng.set_sharing(board["id"], [person(eng, ref)["id"] for ref in people])
+    flush(eng)
+    print(f"Board „{name.strip()}“ angelegt [{board['id'][:8]}], geteilt mit: {', '.join(people) or 'niemandem'}")
+
+
+def cmd_share_board(ref, *people):
+    """Add people to a board's sharing (the ones already in it stay); the key is renewed for the new circle."""
+    eng = engine()
+    board = find(eng, "board", ref)
+    current = [uid for uid in eng.share_members(board.get("share")) if uid != eng.user_id] if board.get("share") else []
+    added = [person(eng, name)["id"] for name in people]
+    eng.set_sharing(board["id"], sorted(set(current) | set(added)))
+    flush(eng)
+    names = [u["name"] for u in eng.users() if u["id"] in set(current) | set(added)]
+    print(f"Board „{board['data'].get('name')}“ geteilt mit: {', '.join(names)}")
+
+
 def cmd_dev_board(ref):
     eng = engine()
     board = find(eng, "board", ref)
@@ -395,6 +422,22 @@ def cmd_evidence(card_ref, *paths):
     eng.update(card["id"], notify=False, evidence=items)
     flush(eng)
     print(f"„{card['data'].get('title')}“: {len(paths)} Nachweis(e) angehängt, insgesamt {len(items)}")
+
+
+def cmd_evidence_remove(card_ref, *names):
+    """Take verification records off a card by file name (as the app's "Entfernen": the card no longer refers to them)."""
+    if not names:
+        sys.exit("Mindestens einen Dateinamen angeben")
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    items = list(card["data"].get("evidence") or [])
+    kept = [item for item in items if item.get("n") not in names]
+    missing = set(names) - {item.get("n") for item in items}
+    if missing:
+        sys.exit("Nicht an der Karte: " + ", ".join(sorted(missing)))
+    eng.update(card["id"], notify=False, evidence=kept)
+    flush(eng)
+    print(f"„{card['data'].get('title')}“: {len(items) - len(kept)} Nachweis(e) entfernt, noch {len(kept)}")
 
 
 def main():
