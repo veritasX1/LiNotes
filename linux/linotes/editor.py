@@ -19,7 +19,7 @@ gi.require_version("Pango", "1.0")
 
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import audio, calc, model, textsize
+from . import audio, calc, linkpreview, model, textsize
 from .table import NoteTable
 
 
@@ -65,6 +65,8 @@ class NoteEditor(Gtk.TextView):
         "open-note": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         # A click on an attached file (argument: the file block).
         "open-file": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        # A web address was finished alone on a line (Enter or pasted): the window may make a preview.
+        "link-line": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
     def __init__(self, image_loader=None):
@@ -286,6 +288,8 @@ class NoteEditor(Gtk.TextView):
         if self.pending_alignment and self.pending_alignment[0] == line:
             self.set_alignment(self.pending_alignment[1], range(line, end_line + 1))
         self.pending_alignment = None
+        if not self.loading:
+            self.check_link_lines(line, end_line, text)
         if text == "=" and location.ends_line():
             # Like Apple's Math Notes: "12,5 * 4 =" gets its result.
             mark = buffer.create_mark(None, location, False)
@@ -1060,7 +1064,7 @@ class NoteEditor(Gtk.TextView):
                 self.add_image(anchor, block.get("f"), block.get("w"))
             elif kind == "divider":
                 self.add_divider(buffer.create_child_anchor(end))
-            elif kind == "file":
+            elif kind in ("file", "link"):
                 self.add_file(buffer.create_child_anchor(end), block)
             elif kind == "table":
                 self.add_table(buffer.create_child_anchor(end), block)
@@ -1087,7 +1091,7 @@ class NoteEditor(Gtk.TextView):
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
             style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind in ("image", "divider", "file", "table"):
+            if kind in ("image", "divider", "file", "link", "table"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
             if block.get("a") in ALIGNMENTS:
@@ -1221,8 +1225,123 @@ class NoteEditor(Gtk.TextView):
         """Attach a file (block {"t": "file", "f", "n", "m", "b"}) on a line of its own."""
         self.insert_image(None, attachment=block)
 
+    # ========================================================
+    # LINK PREVIEWS (web address alone on a line → card)
+    # ========================================================
+
+    def check_link_lines(self, first_line, last_line, text):
+        """After Enter (or pasting a lone address): every finished line that is just a web address."""
+        lines = range(first_line, last_line) if "\n" in text else ([first_line] if linkpreview.lone_url(text) else [])
+        for number in lines:
+            start, end, _with_break = self.line_bounds(number)
+            if start.get_child_anchor() is not None:
+                continue
+            url = linkpreview.lone_url(self.buffer.get_text(start, end, False))
+            if url:
+                GLib.idle_add(lambda url=url: self.emit("link-line", url) and False)
+
+    def replace_url_line(self, url, block):
+        """The line that still holds only `url` becomes the preview card; the cursor stays where it is."""
+        buffer = self.buffer
+        for number in range(buffer.get_line_count()):
+            start, end, _with_break = self.line_bounds(number)
+            if start.get_child_anchor() is None and buffer.get_text(start, end, False).strip() == url:
+                break
+        else:
+            return False
+        cursor = buffer.create_mark(None, buffer.get_iter_at_mark(buffer.get_insert()), False)
+        buffer.begin_user_action()
+        buffer.delete(start, end)
+        buffer.place_cursor(buffer.get_iter_at_line(number)[1])
+        self.insert_image(None, attachment=block)
+        # insert_image leaves an empty line after the card – it replaces the old one.
+        after = buffer.get_iter_at_line(number + 1)[1]
+        following = after.copy()
+        if following.forward_line() and not buffer.get_text(after, following, False).strip("\n"):
+            buffer.delete(after, following)
+        buffer.end_user_action()
+        buffer.place_cursor(buffer.get_iter_at_mark(cursor))
+        buffer.delete_mark(cursor)
+        self.emit("edited")
+        return True
+
+    def unlink_preview(self, anchor):
+        """Back to the plain address (right click → "Nur als Adresse")."""
+        entry = self.anchors.get(anchor)
+        if not entry or not entry.get("attachment"):
+            return
+        url = entry["attachment"].get("u") or entry["attachment"].get("x") or ""
+        buffer = self.buffer
+        start = buffer.get_iter_at_child_anchor(anchor)
+        end = start.copy()
+        end.forward_char()
+        buffer.begin_user_action()
+        buffer.remove_tag_by_name("image", start, end)
+        del self.anchors[anchor]
+        buffer.delete(start, end)
+        # Inserted as "loading", or the lone address would right away ask for a preview again.
+        self.loading = True
+        buffer.insert(buffer.get_iter_at_offset(start.get_offset()), url)
+        self.loading = False
+        buffer.end_user_action()
+        self.mark_links()
+        self.emit("edited")
+
+    def add_link(self, anchor, block):
+        """A preview card like Apple's: picture, title, domain; a click opens the page."""
+        card = Gtk.Box(spacing=12, css_classes=["file-card", "link-card"])
+        card.set_size_request(360, -1)
+        thumb = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, css_classes=["link-thumb"])
+        thumb.set_size_request(72, 72)
+        icon = Gtk.Image(icon_name="web-browser-symbolic", pixel_size=32, css_classes=["dim-label"])
+        holder = Gtk.Stack(valign=Gtk.Align.CENTER)
+        holder.add_named(icon, "icon")
+        holder.add_named(thumb, "picture")
+        card.append(holder)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True, spacing=2)
+        text.append(Gtk.Label(label=block.get("n") or block.get("dm") or block.get("u", ""), xalign=0, wrap=True, lines=2,
+                              ellipsize=Pango.EllipsizeMode.END, max_width_chars=40, css_classes=["heading"]))
+        if block.get("ds"):
+            text.append(Gtk.Label(label=block["ds"], xalign=0, wrap=True, lines=2, ellipsize=Pango.EllipsizeMode.END,
+                                  max_width_chars=48, css_classes=["caption"]))
+        text.append(Gtk.Label(label=block.get("dm") or linkpreview.domain(block.get("u", "")), xalign=0,
+                              css_classes=["dim-label", "caption"]))
+        card.append(text)
+        url = block.get("u") or block.get("x") or ""
+        click = Gtk.GestureClick()
+        click.connect("released", lambda *_args: Gtk.UriLauncher(uri=url).launch(self.get_root(), None, None))
+        card.add_controller(click)
+        menu = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
+
+        def pressed(gesture, _n, x, y):
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            popover = Gtk.Popover()
+            plain = Gtk.Button(label="Nur als Adresse zeigen", css_classes=["flat"])
+            plain.connect("clicked", lambda _b: (popover.popdown(), GLib.idle_add(lambda: self.unlink_preview(anchor) and False)))
+            popover.set_child(plain)
+            popover.set_parent(card)
+            popover.connect("closed", lambda p: GLib.idle_add(lambda: p.unparent() and False))
+            popover.popup()
+        menu.connect("pressed", pressed)
+        card.add_controller(menu)
+        card.set_cursor_from_name("pointer")
+        card.set_tooltip_text(url)
+        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
+        self.add_child_at_anchor(card, anchor)
+        if self.image_loader and block.get("f"):
+            def load():
+                try:
+                    texture = Gdk.Texture.new_from_filename(str(self.image_loader(block["f"])))
+                except Exception:
+                    return
+                GLib.idle_add(lambda: (thumb.set_paintable(texture), holder.set_visible_child_name("picture")) and False)
+            threading.Thread(target=load, daemon=True).start()
+
     def add_file(self, anchor, block):
         """A file as a card like in Notes: preview (first PDF page) or type icon, name, size."""
+        if block.get("t") == "link":
+            self.add_link(anchor, block)
+            return
         if audio.is_audio(block):
             self.add_recording(anchor, block)
             return
