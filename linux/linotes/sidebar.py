@@ -175,6 +175,8 @@ class Sidebar(Gtk.Box):
         user_id = sync.user_id
         notes = [note for note in sync.objects("note")]
         live = [note for note in notes if not note["data"].get("trashed")]
+        archived_notes = [note for note in live if model.archived(note)]
+        live = [note for note in live if not model.archived(note)]
 
         def count(predicate):
             return sum(1 for note in live if predicate(note))
@@ -195,21 +197,25 @@ class Sidebar(Gtk.Box):
             self.add(SidebarRow("shared-notes", "person", "Mit mir geteilt", len(loose)), "Geteilt")
 
         items = sync.objects("item")
-        for shopping in sorted(sync.objects("list"), key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
+        for shopping in sorted((l for l in sync.objects("list") if not model.archived(l)),
+                               key=lambda l: (l["data"].get("order", 0), l["data"].get("name", ""))):
             open_items = sum(1 for item in items if item["data"].get("list") == shopping["id"] and not item["data"].get("done"))
             self.add(SidebarRow("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"), open_items,
                                 badges=self.place_badges(shopping)), "Listen")
 
         cards = sync.objects("card")
-        for board in sorted(sync.objects("board"), key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
+        for board in sorted((b for b in sync.objects("board") if not model.archived(b)),
+                            key=lambda b: (b["data"].get("order", 0), b["data"].get("name", ""))):
             open_cards = sum(1 for card in cards if card["data"].get("board") == board["id"] and not card["data"].get("archived"))
             self.add(SidebarRow("board:" + board["id"], "board", board["data"].get("name", "Board"), open_cards,
                                 badges=self.place_badges(board)), "Aufgaben")
 
-        for plan in sorted(sync.objects("plan"), key=lambda p: (p["data"].get("order", 0), p["data"].get("name", ""))):
+        for plan in sorted((p for p in sync.objects("plan") if not model.archived(p)),
+                           key=lambda p: (p["data"].get("order", 0), p["data"].get("name", ""))):
             self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or "Plan", None,
                                 badges=self.place_badges(plan)), "Pläne")
 
+        self.add_archive(archived_notes)
         self.refresh_tags(live)
         self.updating = False
         self.select(selected or "all", emit=False)
@@ -234,6 +240,26 @@ class Sidebar(Gtk.Box):
                 count(lambda note, fid=folder["id"]: note["data"].get("folder") == fid), owner_hint, depth,
                 (expanded, lambda fid=folder["id"]: self.toggle_folder(fid)) if has_children else None,
             ), section)
+
+    def add_archive(self, archived_notes):
+        """Folded away by default: "Archiv" with the number of archived things; unfolded it lists the
+        archived lists, boards and plans; the row itself shows the archived notes."""
+        sync = self.sync
+        containers = [(kind, icon, obj) for kind, icon in (("list", "cart"), ("board", "board"), ("plan", "table"))
+                      for obj in sync.objects(kind) if model.archived(obj)]
+        total = len(archived_notes) + len(containers)
+        if not total:
+            return
+        open_ = bool(uiprefs.get("archive_open", False))
+
+        def toggle():
+            uiprefs.put("archive_open", not bool(uiprefs.get("archive_open", False)))
+            self.refresh()
+        self.add(SidebarRow("archive", "archive", "Archiv", total, expander=(open_, toggle) if containers else None), "Archiv")
+        if open_:
+            for kind, icon, obj in sorted(containers, key=lambda entry: (entry[0], (entry[2]["data"].get("name") or "").lower())):
+                self.add(SidebarRow(f"{kind}:{obj['id']}", icon, obj["data"].get("name") or "Ohne Namen", None, depth=1,
+                                    badges=self.place_badges(obj)), "Archiv")
 
     def place_badges(self, obj):
         """Symbols for "in a folder" and "shared"; the folder path and the people are in the tooltip."""

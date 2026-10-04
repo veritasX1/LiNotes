@@ -382,6 +382,23 @@ def is_dev_board(sync, board_id):
     return bool(board and board["data"].get("dev"))
 
 
+def archived(obj):
+    """In the archive (notes, lists, boards, plans) – a mark on the object, so for everyone it is shared with."""
+    return bool(obj and obj["data"].get("archived"))
+
+
+def set_archived(sync, object_id, on):
+    obj = sync.get(object_id)
+    if obj is None:
+        return
+    data = dict(obj["data"])
+    if on:
+        data["archived"] = time.time()
+    else:
+        data.pop("archived", None)
+    sync.put(obj["kind"], data, obj.get("share"), object_id)
+
+
 def short_id(object_id):
     return object_id[:8]
 

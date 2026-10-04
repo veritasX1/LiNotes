@@ -211,6 +211,20 @@ def icon_folder_shared(cr):
     _stroke(cr, 1.0)
 
 
+def icon_archive(cr):
+    """Apple's archive box: a lid, the box below it, a handle slot."""
+    rounded_rectangle(cr, 1.5, 2.5, 13, 3.5, 1.2)
+    _stroke(cr)
+    cr.move_to(2.7, 6)
+    cr.line_to(2.7, 13.5)
+    cr.line_to(13.3, 13.5)
+    cr.line_to(13.3, 6)
+    _stroke(cr)
+    cr.move_to(6.3, 8.8)
+    cr.line_to(9.7, 8.8)
+    _stroke(cr)
+
+
 def icon_cart(cr):
     """A receipt (Kassenzettel) – a cart would suggest buying in the app."""
     cr.move_to(3, 14.5)
