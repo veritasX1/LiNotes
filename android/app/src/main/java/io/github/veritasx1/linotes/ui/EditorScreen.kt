@@ -90,6 +90,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var recording by remember { mutableStateOf(false) }
     // The table being edited (its block as it is in the note).
     var tableEditing by remember { mutableStateOf<JSONObject?>(null) }
+    var mathEditing by remember { mutableStateOf<JSONObject?>(null) }
     val player = remember(noteId) { AudioPlayer() }
     DisposableEffect(noteId) { onDispose { player.stop() } }
     // Text typed after ">>" while the note choice is shown (null: no choice open).
@@ -285,6 +286,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 linkMenu = block
             } else if (block.optString("t") == "table") {
                 if (!trashed) tableEditing = block
+            } else if (block.optString("t") == "math") {
+                if (!trashed) mathEditing = block
             } else if (AudioNotes.isAudio(block)) {
                 val fileId = block.getString("f")
                 if (player.playing == fileId) player.stop()
@@ -437,7 +440,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     editor.finishLink(id, title)
                 }) { linkQuery = null; editor.finishLink(null, null) }
             }
-            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures, onFootnote = { showFormat = false; footnoteNew = true }) { showFormat = false }
+            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures, onFootnote = { showFormat = false; footnoteNew = true },
+                onMath = { showFormat = false; JSONObject().put("t", "math").put("x", "").let { block -> editor.insertMath(block); mathEditing = block } }) { showFormat = false }
             if (!trashed) EditorToolbar(
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
@@ -552,6 +556,16 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
             },
         )) { photoMenu = false }
+    }
+    mathEditing?.let { block ->
+        MathEditor(block, onDone = { changed ->
+            editor.replaceBlock(block, changed)
+            mathEditing = null
+        }, onCancel = {
+            // A new formula left empty is not kept.
+            if (block.optString("x").isBlank()) editor.replaceBlock(block, null)
+            mathEditing = null
+        })
     }
     tableEditing?.let { block ->
         TableEditor(block) { changed ->
@@ -725,7 +739,7 @@ private fun LinkPanel(heading: String, glyph: Glyph, empty: String, choices: Lis
 }
 
 @Composable
-private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote: () -> Unit, onClose: () -> Unit) {
+private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote: () -> Unit, onMath: () -> Unit = {}, onClose: () -> Unit) {
     val colors = palette
     val current = remember(tick) { editor.currentStyle() }
     val inline = remember(tick) { editor.activeInline() }
@@ -845,9 +859,14 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text("Fußnote / Quelle …", fontSize = 14.sp, color = colors.label,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onFootnote)
-                    .padding(horizontal = 10.dp, vertical = 8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Fußnote / Quelle …", fontSize = 14.sp, color = colors.label,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onFootnote)
+                        .padding(horizontal = 10.dp, vertical = 8.dp))
+                Text("Formel (LaTeX) …", fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Serif,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onMath)
+                        .padding(horizontal = 10.dp, vertical = 8.dp))
+            }
         }
     }
 }

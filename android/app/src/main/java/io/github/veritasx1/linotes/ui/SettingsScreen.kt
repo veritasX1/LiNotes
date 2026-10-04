@@ -60,8 +60,8 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow("Silbentrennung", Glyph.Format, chevron = false, divider = false,
                 trailing = { IosSwitch(hyphenate, "Silbentrennung") { toggleHyphenate() } }) { toggleHyphenate() }
         }
-        section("pro", header = "Profi-Funktionen", compact = true, footer = "Zusätzliche Werkzeuge für Fortgeschrittene, z. B. Code mit Syntaxfarben " +
-            "sowie Fußnoten und Literaturverzeichnis. Ab Werk aus, damit LiNotes einfach bleibt. Gilt für dein Konto auf allen Geräten; " +
+        section("pro", header = "Profi-Funktionen", compact = true, footer = "Zusätzliche Werkzeuge für Fortgeschrittene, z. B. Code mit Syntaxfarben, " +
+            "Fußnoten und Literaturverzeichnis sowie Formeln (LaTeX). Ab Werk aus, damit LiNotes einfach bleibt. Gilt für dein Konto auf allen Geräten; " +
             "Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt.") {
             fun togglePro() { pro = !pro; sync.proFeatures = pro }
             GroupRow("Profi-Funktionen", Glyph.Gear, chevron = false, divider = false,
