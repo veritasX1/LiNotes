@@ -436,6 +436,16 @@ button.font-serif { font-family: Serif; }
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 
+.footnote-number {
+  color: #b87d00;
+  font-weight: 700;
+  font-size: 0.85em;
+}
+
+.footnote-list label {
+  font-size: 0.95em;
+}
+
 .help-picture {
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);

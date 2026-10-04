@@ -50,6 +50,8 @@ class NoteWindow(Adw.ApplicationWindow):
         column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         column.append(self.date)
         column.append(self.editor)
+        from .editor import FootnoteList
+        column.append(FootnoteList(self.editor))
         scroller = Gtk.ScrolledWindow(vexpand=True, child=Adw.Clamp(maximum_size=820, child=column))
         smoothscroll.enable(scroller)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)

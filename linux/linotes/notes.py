@@ -354,6 +354,8 @@ class NotePane(Gtk.Stack):
         self.activity.set_margin_bottom(6)
         column.append(self.activity)
         column.append(self.editor)
+        from .editor import FootnoteList
+        column.append(FootnoteList(self.editor))
         clamp = Adw.Clamp(maximum_size=820, tightening_threshold=600, child=column)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=clamp)
         smoothscroll.enable(scroller)

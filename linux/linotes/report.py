@@ -370,6 +370,8 @@ def block_markup(block):
             continue
         # Links to other notes look like links (accent color, underlined).
         markup = NOTE_MARKUP.get(name) or (NOTE_LINK_MARKUP if isinstance(name, str) and name.startswith("n:") else None)
+        if isinstance(name, str) and name.startswith("fn:"):
+            markup = ("<sup><span foreground='#B87D00' weight='bold'>", "</span></sup>")  # footnote number
         if markup and int(start) < int(end):
             opening.setdefault(int(start), []).append(markup[0])
             closing.setdefault(min(int(end), len(text)), []).insert(0, markup[1])
@@ -503,6 +505,24 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.cr.fill()
         pdf.draw((layout, color), x, pdf.y)
         pdf.y += height + space
+    # Footnotes and sources at the end (numbered like in the text).
+    from . import model
+    notes = model.footnotes(blocks)
+    if notes:
+        pdf.y += 10
+        pdf.need(30)
+        pdf.cr.set_source_rgb(*LINE)
+        pdf.cr.rectangle(MARGIN, pdf.y, 120, 0.8)
+        pdf.cr.fill()
+        pdf.y += 8
+        heading = pdf.layout("Fußnoten und Quellen", 10.5, bold=True)
+        pdf.draw(heading, MARGIN, pdf.y)
+        pdf.y += pdf.height(heading) + 4
+        for number, text in enumerate(notes, 1):
+            layout = pdf.layout(f"{number}  {text}", 9.5, width=pdf.width - 2 * MARGIN)
+            pdf.need(pdf.height(layout))
+            pdf.draw(layout, MARGIN, pdf.y)
+            pdf.y += pdf.height(layout) + 3
     pdf.close()
 
 
