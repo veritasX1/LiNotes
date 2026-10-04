@@ -29,6 +29,12 @@ def human_size(size):
         size /= 1024
 
 
+# About two lines in a 280 px column (titles are larger than the notes preview). Cut in Python: GTK's
+# own line limit with "…" (lines=2, ellipsize) made a board four times slower (card b9046682).
+TITLE_CHARS = 58
+NOTES_CHARS = 72
+
+
 def is_image(item):
     return (item.get("m") or "").startswith("image/")
 
@@ -100,8 +106,8 @@ class CardWidget(Gtk.Box):
             self.append(picture)
 
         # Long titles take at most two lines (the whole title: tooltip and card dialog).
-        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True, wrap_mode=2, lines=2,
-                          ellipsize=3, max_width_chars=1, tooltip_text=data.get("title") or None)
+        title = Gtk.Label(label=model.clip_text(data.get("title", ""), TITLE_CHARS), xalign=0, wrap=True, hexpand=True,
+                          wrap_mode=2, tooltip_text=data.get("title") or None)
         title.add_css_class("card-title")
         mark = model.PRIORITY_MARKS.get(data.get("priority"))
         if mark:
@@ -117,8 +123,7 @@ class CardWidget(Gtk.Box):
         if data.get("notes"):
             # At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the
             # notes become spaces so no line is wasted. The whole text is in the card dialog.
-            preview = " ".join(data["notes"].split())[:400]
-            notes = Gtk.Label(label=preview, xalign=0, wrap=True, wrap_mode=2, lines=2, ellipsize=3, max_width_chars=1)
+            notes = Gtk.Label(label=model.clip_text(data["notes"], NOTES_CHARS), xalign=0, wrap=True, wrap_mode=2)
             notes.add_css_class("card-meta")
             self.append(notes)
 

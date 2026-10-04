@@ -1149,6 +1149,40 @@ class NoteEditor(Gtk.TextView):
     def marker_x(self, line):
         return self.get_left_margin() + LIST_MARGIN - 16 + INDENT * self.line_level(line)
 
+    def list_numbers(self, first, last):
+        """Numbers of the "1." list lines from first to last. Counting starts at the top of the numbered
+        run that first lies in, not at the top of the note: every drawn frame walked the whole note
+        (card b9046682)."""
+        top = first
+        while top > 0 and self.line_style(top - 1) in LISTS:
+            top -= 1
+        numbers, counter = {}, {}
+        for line in range(top, last + 1):
+            style = self.line_style(line)
+            if style == "number":
+                level = self.line_level(line)
+                counter[level] = counter.get(level, 0) + 1
+                for deeper in [key for key in counter if key > level]:
+                    del counter[deeper]
+                numbers[line] = counter[level]
+            elif style not in LISTS:
+                counter = {}
+        return numbers
+
+    def has_section_body(self, line):
+        """Whether the heading on line has text below it to fold – section_end(line) > line, but
+        stopping at the first such line instead of walking the whole section on every frame."""
+        rank = FOLDABLE.get(self.line_style(line))
+        if rank is None:
+            return False
+        for other in range(line + 1, self.buffer.get_line_count()):
+            other_rank = RANKS.get(self.line_style(other))
+            if other_rank is not None and other_rank <= rank:
+                return False
+            if self.buffer.get_text(*self.line_bounds(other)[:2], True).strip():
+                return True
+        return False
+
     def do_snapshot_layer(self, layer, snapshot):
         if layer != Gtk.TextViewLayer.ABOVE_TEXT:
             return
@@ -1157,26 +1191,14 @@ class NoteEditor(Gtk.TextView):
         last = self.get_line_at_y(visible.y + visible.height)[0].get_line()
 
         color = self.get_color()
-        numbers = {}
-        counter = {}
-        # Numbering has to start at the top of each numbered run.
-        for line in range(0, last + 1):
-            style = self.line_style(line)
-            level = self.line_level(line)
-            if style == "number":
-                counter[level] = counter.get(level, 0) + 1
-                for deeper in [key for key in counter if key > level]:
-                    del counter[deeper]
-                numbers[line] = counter[level]
-            elif style not in LISTS:
-                counter = {}
+        numbers = self.list_numbers(first, last)
 
         cr = snapshot.append_cairo(Graphene.Rect().init(visible.x, visible.y, visible.width, visible.height))
         folded = self.buffer.get_tag_table().lookup("folded")
         for line in range(first, last + 1):
             if self.buffer.get_iter_at_line(line)[1].has_tag(folded):
                 continue  # inside a collapsed section
-            if self.line_style(line) in FOLDABLE and self.section_end(line) > line:
+            if self.line_style(line) in FOLDABLE and self.has_section_body(line):
                 self.draw_chevron(cr, line, color)
                 continue
             if self.is_divider(line):
@@ -1308,6 +1330,7 @@ class NoteEditor(Gtk.TextView):
     def to_blocks(self):
         buffer = self.buffer
         blocks = []
+        names = self.span_names()  # once, not per line
         for line in range(buffer.get_line_count()):
             start, end, _with_break = self.line_bounds(line)
             anchor = start.get_child_anchor()
@@ -1338,7 +1361,7 @@ class NoteEditor(Gtk.TextView):
                 block["a"] = self.line_alignment(line)
             if block["t"] == "code" and self.line_language(line):
                 block["lang"] = self.line_language(line)
-            spans = self.spans(start, end)
+            spans = self.spans(start, end, names)
             if spans:
                 block["s"] = spans
             blocks.append(block)
@@ -1347,26 +1370,41 @@ class NoteEditor(Gtk.TextView):
             blocks.pop()
         return blocks
 
-    def spans(self, start, end):
-        result = []
+    def span_names(self):
+        """Names of all tags that are saved as spans: inline styles plus note links, mentions, footnotes."""
+        names = set(INLINE)
+        self.buffer.get_tag_table().foreach(lambda tag: names.add(tag.get_property("name"))
+                                            if model.link_target(tag.get_property("name"))
+                                            or model.mention_target(tag.get_property("name")) is not None
+                                            or model.footnote_text(tag.get_property("name")) is not None else None)
+        return names
+
+    def spans(self, start, end, names=None):
+        """[start, end, name] of the saved styles in one line – one pass over the tag toggles (the old
+        per-tag search over the whole tag table made saving a long note take seconds, card b9046682)."""
+        names = names if names is not None else self.span_names()
         base = start.get_offset()
-        table = self.buffer.get_tag_table()
-        links = []
-        table.foreach(lambda tag: links.append(tag.get_property("name"))
-                      if model.link_target(tag.get_property("name")) or model.mention_target(tag.get_property("name")) is not None
-                      or model.footnote_text(tag.get_property("name")) is not None
-                      else None)
-        for name in INLINE + tuple(links):
-            tag = table.lookup(name)
-            probe = start.copy()
-            while probe.compare(end) < 0:
-                if probe.has_tag(tag) or probe.starts_tag(tag):
-                    span_start = probe.get_offset()
-                    if not probe.forward_to_tag_toggle(tag) or probe.compare(end) > 0:
-                        probe = end.copy()
-                    result.append([span_start - base, probe.get_offset() - base, name])
-                elif not probe.forward_to_tag_toggle(tag):
-                    break
+        result = []
+        opened = {}
+        for tag in start.get_tags():
+            if tag.get_property("name") in names:
+                opened[tag.get_property("name")] = base
+        probe = start.copy()
+        while probe.forward_to_tag_toggle(None) and probe.compare(end) < 0:
+            offset = probe.get_offset()
+            for tag in probe.get_toggled_tags(False):
+                name = tag.get_property("name")
+                if name in opened:
+                    begin = opened.pop(name)
+                    if offset > begin:
+                        result.append([begin - base, offset - base, name])
+            for tag in probe.get_toggled_tags(True):
+                name = tag.get_property("name")
+                if name in names:
+                    opened[name] = offset
+        for name, begin in opened.items():
+            if end.get_offset() > begin:
+                result.append([begin - base, end.get_offset() - base, name])
         return sorted(result)
 
     # ========================================================

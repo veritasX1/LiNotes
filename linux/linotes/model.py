@@ -460,6 +460,19 @@ def is_dev_board(sync, board_id):
     return bool(board and board["data"].get("dev"))
 
 
+def clip_text(text, limit):
+    """At most `limit` characters, cut at a word end with "…" – a cheap stand-in for GTK's line limit
+    with ellipsis, which made a board with many cards four times slower to lay out."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit - 1]
+    space = cut.rfind(" ")
+    if space > limit * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,.;:–-") + "…"
+
+
 def archived(obj):
     """In the archive (notes, lists, boards, plans) – a mark on the object, so for everyone it is shared with."""
     return bool(obj and obj["data"].get("archived"))

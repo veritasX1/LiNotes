@@ -151,13 +151,30 @@ class SyncEngine:
             self.save_timer.start()
 
     def save(self):
+        """Write the state file. Under the lock only a shallow copy is taken (remote objects and pending
+        changes are replaced as a whole, never changed inside); the JSON is then written object by
+        object outside the lock, so the window keeps working meanwhile – one big json.dumps held the
+        lock and the interpreter for a third of a second after every edit (card b9046682)."""
         with self.save_lock:
             with self.lock:
-                data = json.dumps(self.state, ensure_ascii=False)
+                snapshot = {key: (dict(value) if key == "remote" else list(value) if key == "pending" else copy.deepcopy(value))
+                            for key, value in self.state.items()}
             temp = self.path.with_name(f"state.{threading.get_ident()}.tmp")
             fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as handle:
-                handle.write(data)
+                handle.write("{")
+                for index, (key, value) in enumerate(snapshot.items()):
+                    handle.write(("," if index else "") + json.dumps(key) + ":")
+                    if key == "remote":
+                        handle.write("{")
+                        for number, (object_id, stored) in enumerate(value.items()):
+                            handle.write(("," if number else "") + json.dumps(object_id) + ":" + json.dumps(stored, ensure_ascii=False))
+                        handle.write("}")
+                    elif key == "pending":
+                        handle.write("[" + ",".join(json.dumps(change, ensure_ascii=False) for change in value) + "]")
+                    else:
+                        handle.write(json.dumps(value, ensure_ascii=False))
+                handle.write("}")
             os.replace(temp, self.path)
 
     # ========================================================
