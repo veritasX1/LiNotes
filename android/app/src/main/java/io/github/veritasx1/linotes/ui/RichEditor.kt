@@ -29,6 +29,7 @@ import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.MotionEvent
 import android.widget.EditText
@@ -915,6 +916,30 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val probe = (selectionStart - 1).coerceAtLeast(0)
         if (text.isEmpty()) return emptySet()
         return INLINE.filter { hasInline(text, it, probe) }.toSet()
+    }
+
+    // --- system selection menu ----------------------------------
+
+    private var floatingMode: ActionMode? = null
+
+    /** While the format panel is open, Android's floating "Cut / Copy / Share" bar would sit on top
+     *  of its buttons. Like Apple's edit menu it stays away then; the selection itself is kept,
+     *  because the panel's styles apply to it. */
+    var selectionMenuSuppressed = false
+        set(value) {
+            field = value
+            if (value) floatingMode?.let { mode ->
+                val start = selectionStart
+                val end = selectionEnd
+                floatingMode = null
+                mode.finish()
+                if (selectionStart != start || selectionEnd != end) setSelection(start, end)
+            }
+        }
+
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
+        if (type == ActionMode.TYPE_FLOATING && selectionMenuSuppressed) return null
+        return super.startActionMode(callback, type).also { if (type == ActionMode.TYPE_FLOATING) floatingMode = it }
     }
 
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {

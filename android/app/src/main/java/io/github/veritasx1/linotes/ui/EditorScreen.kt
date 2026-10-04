@@ -379,6 +379,12 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         val imeBottom = WindowInsets.ime.getBottom(density)
         LaunchedEffect(imeBottom) { if (imeBottom > 0) { kotlinx.coroutines.delay(50); keepCaretVisible() } }
+        // The format panel takes room below the text: keep the selection above it, without the
+        // system's selection menu on top of the panel's buttons.
+        LaunchedEffect(showFormat) {
+            editor.selectionMenuSuppressed = showFormat
+            if (showFormat) { kotlinx.coroutines.delay(80); keepCaretVisible() }
+        }
         Column(Modifier.weight(1f).imePadding()) {
             Column(Modifier.weight(1f).onSizeChanged { viewportHeight = it.height }.verticalScroll(scrollState)) {
                 Text(Model.longDate(Model.modified(note)), style = Type.footnote, color = colors.secondary,

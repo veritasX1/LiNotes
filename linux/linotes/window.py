@@ -112,7 +112,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ========================================================
 
     def build_main(self):
-        self.split = Adw.OverlaySplitView(min_sidebar_width=210, max_sidebar_width=260)
+        self.split = Adw.OverlaySplitView(min_sidebar_width=210, max_sidebar_width=300)
 
         sidebar_view = Adw.ToolbarView()
         sidebar_header = Adw.HeaderBar(show_title=False, show_end_title_buttons=False)
