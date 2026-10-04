@@ -147,7 +147,10 @@ fun cardDates(card: SyncObject, dev: Boolean): String {
 fun BoardsScreen(state: AppState, revision: Long) {
     val sync = state.sync
     val context = LocalContext.current
-    val boards = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val everything = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val boards = everything.filter { !Model.archived(it) }
+    val archivedBoards = everything.filter { Model.archived(it) }
+    var archiveOpen by remember { mutableStateOf(false) }
     val cards = remember(revision) { sync.all("card") }
     var creating by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
@@ -170,6 +173,10 @@ fun BoardsScreen(state: AppState, revision: Long) {
                     divider = index < group.lastIndex, dragPayload = "board:${board.id}", onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
             }
         }
+        archiveSection("boards", archivedBoards, archiveOpen, { archiveOpen = !archiveOpen }) { board, divider ->
+            GroupRow(board.data.optString("name", "Board"), Glyph.Board, subtitle = shareLabel(sync, board), divider = divider,
+                onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
+        }
     }
     creating?.let { _ ->
         AlertDialog("Neues Board", confirm = "Erstellen", fields = listOf(AlertField("z. B. Haushalt")), onDismiss = { creating = null }) { values ->
@@ -189,6 +196,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
             SheetAction("Verschieben nach …") { moving = board },
             SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
             SheetAction("Bericht teilen (PDF) …") { Report.share(state, context, board.id) },
+            archiveAction(state, board),
             SheetAction(if (isDevBoard(board)) "Entwicklungsprojekt ausschalten" else "Als Entwicklungsprojekt führen") {
                 val dev = !isDevBoard(board)
                 sync.update(board.id) { it.put("dev", dev) }

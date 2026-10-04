@@ -54,7 +54,10 @@ fun listColor(obj: SyncObject): Color = LIST_COLORS.firstOrNull { it.first == ob
 @Composable
 fun ListsScreen(state: AppState, revision: Long) {
     val sync = state.sync
-    val lists = remember(revision) { sync.all("list").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val everything = remember(revision) { sync.all("list").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val lists = everything.filter { !Model.archived(it) }
+    val archivedLists = everything.filter { Model.archived(it) }
+    var archiveOpen by remember { mutableStateOf(false) }
     val items = remember(revision) { sync.all("item") }
     var creating by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
@@ -83,6 +86,10 @@ fun ListsScreen(state: AppState, revision: Long) {
                     tint = listColor(list),
                 ) { state.push(Route.ListDetail(list.id)) }
             }
+        }
+        archiveSection("lists", archivedLists, archiveOpen, { archiveOpen = !archiveOpen }) { list, divider ->
+            GroupRow(title = list.data.optString("name", "Liste"), subtitle = shareLabel(sync, list), divider = divider,
+                onLongClick = { menu = list }, glyph = Glyph.Cart, tint = listColor(list)) { state.push(Route.ListDetail(list.id)) }
         }
     }
 
@@ -113,6 +120,7 @@ private fun ListMenu(state: AppState, list: SyncObject, onRename: () -> Unit, on
         SheetAction("Umbenennen") { onRename() },
         SheetAction("Verschieben nach …") { onMove() },
         SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
+        archiveAction(state, list),
         SheetAction(if (list.data.optBoolean("grocery")) "Warengruppen ausschalten" else "Nach Warengruppen sortieren") {
             sync.update(list.id) { it.put("grocery", !it.optBoolean("grocery")) }
         },

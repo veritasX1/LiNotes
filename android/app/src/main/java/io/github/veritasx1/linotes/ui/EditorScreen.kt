@@ -476,6 +476,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             } else {
                 add(SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
                 add(SheetAction("Verschieben …") { moving = true })
+                add(archiveAction(state, note))
                 if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
                 add(SheetAction("Als PDF senden …") { exportPdf(print = false) })
                 add(SheetAction("Drucken …") { exportPdf(print = true) })
