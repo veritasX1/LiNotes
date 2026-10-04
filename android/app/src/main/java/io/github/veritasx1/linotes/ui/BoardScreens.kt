@@ -460,7 +460,7 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                     val folder = java.io.File(context.cacheDir, "attachments/" + item.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
                     java.io.File(folder, java.io.File(item.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
                 }
-                state.openFile(file, item.optString("m", "application/octet-stream"))
+                state.quickLook = LookFile(file, item.optString("m", "application/octet-stream"))
             } catch (error: Exception) {
                 state.showToast(errorText(error))
             }

@@ -58,6 +58,8 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var pickFile: ((String, String, ByteArray) -> Unit) -> Unit = {}
     /** Open a decrypted attachment with the app that handles its type. */
     var openFile: (file: java.io.File, mime: String) -> Unit = { _, _ -> }
+    /** The attachment shown in the quick look (null: closed). */
+    var quickLook by mutableStateOf<LookFile?>(null)
 
     // Platform hooks, filled in by MainActivity.
     var authenticate: (title: String, done: (Boolean) -> Unit) -> Unit = { _, done -> done(false) }

@@ -276,7 +276,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                         val folder = java.io.File(context.cacheDir, "attachments/" + block.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
                         java.io.File(folder, java.io.File(block.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
                     }
-                    state.openFile(file, block.optString("m", "application/octet-stream"))
+                    state.quickLook = LookFile(file, block.optString("m", "application/octet-stream"))
                 } catch (error: Exception) {
                     state.showToast(errorText(error))
                 }
