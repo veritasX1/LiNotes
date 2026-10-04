@@ -61,6 +61,88 @@ object AudioNotes {
         return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, rest) else "%d:%02d".format(minutes, rest)
     }
 
+    const val BARS = 36          // bars of the waveform in the message bubble
+    private const val WAVE_RATE = 4000
+
+    /** Loudness per bar of the waveform, 0.08…1 (square root, so quiet speech still shows), like the
+     *  bars of a voice message in Apple's Messages. Same rules as audio.peaks on Ubuntu. */
+    fun peaks(samples: ShortArray, bars: Int = BARS): FloatArray {
+        val count = samples.size.toLong()
+        if (count == 0L) return FloatArray(bars) { 0.08f }
+        val values = IntArray(bars) { index ->
+            val start = (index * count / bars).toInt()
+            val end = maxOf(start + 1, ((index + 1) * count / bars).toInt())
+            var top = 0
+            for (i in start until end) top = maxOf(top, kotlin.math.abs(samples[i].toInt()))
+            top
+        }
+        val top = values.maxOrNull()?.takeIf { it > 0 } ?: 1
+        return FloatArray(bars) { (Math.round(maxOf(0.08, kotlin.math.sqrt(values[it].toDouble() / top)) * 1000) / 1000.0).toFloat() }
+    }
+
+    /** Read a recording and give its waveform – blocking, run it in the background. Only loudness
+     *  leaves this function, nothing is stored. */
+    fun waveform(file: File, bars: Int = BARS): FloatArray {
+        val extractor = android.media.MediaExtractor()
+        var codec: android.media.MediaCodec? = null
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val track = (0 until extractor.trackCount).first {
+                extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val rate = format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+            val channels = format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+            // Keep the loudest sample of every block, about WAVE_RATE values per second.
+            val block = maxOf(1, rate / WAVE_RATE) * channels
+            val kept = java.io.ByteArrayOutputStream()
+            var loudest = 0
+            var inBlock = 0
+            codec = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME)!!)
+            codec.configure(format, null, null, 0)
+            codec.start()
+            val info = android.media.MediaCodec.BufferInfo()
+            var inputDone = false
+            while (true) {
+                if (!inputDone) {
+                    val index = codec.dequeueInputBuffer(10_000)
+                    if (index >= 0) {
+                        val size = extractor.readSampleData(codec.getInputBuffer(index)!!, 0)
+                        if (size < 0) {
+                            codec.queueInputBuffer(index, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+                val out = codec.dequeueOutputBuffer(info, 10_000)
+                if (out >= 0) {
+                    val shorts = codec.getOutputBuffer(out)!!.order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                    while (shorts.hasRemaining()) {
+                        loudest = maxOf(loudest, kotlin.math.abs(shorts.get().toInt()))
+                        if (++inBlock == block) {
+                            val value = minOf(loudest, Short.MAX_VALUE.toInt())
+                            kept.write(value and 0xFF); kept.write(value shr 8 and 0xFF)
+                            loudest = 0; inBlock = 0
+                        }
+                    }
+                    codec.releaseOutputBuffer(out, false)
+                    if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                }
+            }
+            val bytes = kept.toByteArray()
+            val samples = ShortArray(bytes.size / 2) { ((bytes[2 * it].toInt() and 0xFF) or (bytes[2 * it + 1].toInt() shl 8)).toShort() }
+            return peaks(samples, bars)
+        } finally {
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            extractor.release()
+        }
+    }
+
     private val MONTHS = listOf("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
     private val NAME = Regex("^(.*?)\\s*(\\d{4})-(\\d{2})-(\\d{2})[ _](\\d{2})-(\\d{2})\\.\\w+$")
 
@@ -175,8 +257,8 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
     }
 }
 
-/** Plays one recording at a time inside the note; pause, jump and seek like Apple's player
- *  (the card in the note shows it – RichEditor.showAudio). */
+/** Plays one recording at a time inside the note; pause and seek (the message bubble in the note
+ *  shows it – RichEditor.showAudio). */
 class AudioPlayer {
     var playing by mutableStateOf<String?>(null)  // file id of the loaded recording (playing or paused)
         private set
@@ -212,8 +294,6 @@ class AudioPlayer {
         current.seekTo(millis.coerceIn(0L, maxOf(0L, length - 50)).toInt())
         update()
     }
-
-    fun jump(seconds: Int) = seek(position + seconds * 1000L)
 
     fun update() { player?.let { position = it.currentPosition.toLong() } }
 
