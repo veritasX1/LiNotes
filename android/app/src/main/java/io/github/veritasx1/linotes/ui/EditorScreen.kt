@@ -163,6 +163,18 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             breakStrategy = if (sync.justify || sync.hyphenate) android.text.Layout.BREAK_STRATEGY_HIGH_QUALITY else android.text.Layout.BREAK_STRATEGY_SIMPLE
         }
     }
+    // The playing recording's card follows the player (position, pause) and goes back when it stops.
+    var shownAudio by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(player.playing) {
+        shownAudio?.let { if (it != player.playing) editor.showAudio(it, null) }
+        shownAudio = player.playing
+        val id = player.playing ?: return@LaunchedEffect
+        while (player.playing == id) {
+            player.update()
+            editor.showAudio(id, RichEditor.AudioView(!player.paused, player.position, player.length))
+            delay(250)
+        }
+    }
     val loadedBlocks = remember(noteId) { mutableStateOf<String?>(null) }
     // "Claude hat geändert · 05:45 – die Änderungen sind markiert." (changes by others)
     var activityNote by remember(noteId) { mutableStateOf<String?>(null) }
@@ -280,6 +292,43 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onFootnotesChanged = { footnotes = it }
         editor.onFootnote = { footnoteMenu = it }
+        // Recordings play in their card (Apple's player, 900036dc): play/pause, ±15 s, seek.
+        editor.onAudio = { block, action, fraction ->
+            val fileId = block.optString("f")
+            if (player.playing == fileId) when (action) {
+                "back" -> player.jump(-15)
+                "forward" -> player.jump(15)
+                "seek" -> player.seek((player.length * fraction).toLong())
+                else -> player.toggle()
+            } else scope.launch {
+                try {
+                    val file = withContext(Dispatchers.IO) { sync.fetchFile(fileId, sync.get(noteId)?.share) }
+                    player.play(fileId, file)
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
+        // A tapped picture opens in the quick look (900036dc).
+        editor.onOpenImage = { fileId ->
+            scope.launch {
+                try {
+                    val look = withContext(Dispatchers.IO) {
+                        val source = sync.fetchFile(fileId, sync.get(noteId)?.share)
+                        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        android.graphics.BitmapFactory.decodeFile(source.absolutePath, bounds)
+                        val mime = bounds.outMimeType ?: "image/jpeg"
+                        val folder = java.io.File(context.cacheDir, "attachments/" + fileId.substringAfter(":").take(12)).apply { mkdirs() }
+                        val target = java.io.File(folder, "Bild." + (android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"))
+                        source.copyTo(target, overwrite = true)
+                        LookFile(target, mime)
+                    }
+                    state.quickLook = look
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
         editor.onOpenFile = { block ->
             // Recordings play inside the note (like Apple), other files open in their app.
             if (block.optString("t") == "link") {
@@ -428,7 +477,6 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
                 if (footnotes.isNotEmpty()) FootnoteList(footnotes)
             }
-            PlayerBar(player)
             linkQuery?.let { query ->
                 val mention = editor.linkKind == "mention"
                 val choices = if (mention) editor.mentionPeople().filter { it.second.contains(query, ignoreCase = true) }

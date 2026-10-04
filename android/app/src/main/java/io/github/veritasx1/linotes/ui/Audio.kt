@@ -61,6 +61,25 @@ object AudioNotes {
         return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, rest) else "%d:%02d".format(minutes, rest)
     }
 
+    private val MONTHS = listOf("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
+    private val NAME = Regex("^(.*?)\\s*(\\d{4})-(\\d{2})-(\\d{2})[ _](\\d{2})-(\\d{2})\\.\\w+$")
+
+    /** Title and the line below it on the player card, like Apple's: "Aufnahme", "4. Okt. 2026, 14:22 · 0:07".
+     *  Same rules as audio.recording_label on Ubuntu. */
+    fun label(block: JSONObject): Pair<String, String> {
+        val name = block.optString("n")
+        val duration = if (block.optDouble("d", 0.0) > 0) durationText(block.optDouble("d")) else ""
+        val match = NAME.find(name)
+        if (match != null && match.groupValues[3].toInt() in 1..12) {
+            val g = match.groupValues
+            val title = g[1].trim().ifEmpty { "Aufnahme" }
+            val date = "${g[4].toInt()}. ${MONTHS[g[3].toInt() - 1]} ${g[2]}, ${g[5]}:${g[6]}"
+            return title to listOf(date, duration).filter { it.isNotEmpty() }.joinToString(" · ")
+        }
+        val title = if ('.' in name) name.substringBeforeLast('.') else name
+        return title.ifEmpty { "Audioaufnahme" } to duration
+    }
+
     fun recordingName(): String =
         java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("'Aufnahme' yyyy-MM-dd HH-mm")) + ".$extension"
 }
@@ -156,9 +175,12 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
     }
 }
 
-/** Plays one recording at a time inside the note. */
+/** Plays one recording at a time inside the note; pause, jump and seek like Apple's player
+ *  (the card in the note shows it – RichEditor.showAudio). */
 class AudioPlayer {
-    var playing by mutableStateOf<String?>(null)  // file id
+    var playing by mutableStateOf<String?>(null)  // file id of the loaded recording (playing or paused)
+        private set
+    var paused by mutableStateOf(false)
         private set
     var position by mutableLongStateOf(0L)
     var length by mutableLongStateOf(0L)
@@ -173,8 +195,25 @@ class AudioPlayer {
             start()
         }
         length = player?.duration?.toLong() ?: 0L
+        paused = false
         playing = fileId
     }
+
+    /** Pause or go on. */
+    fun toggle() {
+        val current = player ?: return
+        if (paused) current.start() else current.pause()
+        paused = !paused
+        update()
+    }
+
+    fun seek(millis: Long) {
+        val current = player ?: return
+        current.seekTo(millis.coerceIn(0L, maxOf(0L, length - 50)).toInt())
+        update()
+    }
+
+    fun jump(seconds: Int) = seek(position + seconds * 1000L)
 
     fun update() { player?.let { position = it.currentPosition.toLong() } }
 
@@ -182,6 +221,7 @@ class AudioPlayer {
         player?.release()
         player = null
         playing = null
+        paused = false
         position = 0
     }
 }
