@@ -10,6 +10,59 @@ import java.time.temporal.ChronoUnit
 
 /** Helpers shared by the screens, mirroring linux/linotes/model.py. */
 object Model {
+    // --- templates (Vorlagen), the same as model.py ---
+    private val WEEKDAY_NAMES = listOf("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+    private val PLACEHOLDER = Regex("\\{\\{(Datum|Uhrzeit|Wochentag)\\}\\}")
+    private fun t(kind: String, text: String = "") = JSONObject().put("t", kind).put("x", text)
+
+    /** Shipped templates: key, name, blocks (fresh copies on every call). */
+    val BUILTIN_TEMPLATES: List<Triple<String, String, List<JSONObject>>> get() = listOf(
+        Triple("besprechung", "Besprechung", listOf(t("title", "Besprechung {{Datum}}"), t("body", "{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr"),
+            t("heading", "Teilnehmer"), t("bullet"), t("heading", "Themen"), t("number"), t("heading", "Beschlüsse"), t("body"),
+            t("heading", "Aufgaben"), t("check"))),
+        Triple("protokoll", "Protokoll", listOf(t("title", "Protokoll {{Datum}}"), t("body", "Ort: "), t("body", "Anwesend: "),
+            t("heading", "Verlauf"), t("body"), t("heading", "Ergebnisse"), t("bullet"))),
+        Triple("reise", "Reisecheckliste", listOf(t("title", "Packliste"), t("heading", "Dokumente"), t("check", "Ausweis oder Reisepass"),
+            t("check", "Tickets"), t("check", "Versicherungskarte"), t("heading", "Kleidung"), t("check"), t("heading", "Technik"),
+            t("check", "Ladegerät"), t("check", "Kopfhörer"), t("heading", "Vor der Abreise"), t("check", "Pflanzen gießen"),
+            t("check", "Fenster schließen"))),
+        Triple("tagebuch", "Tagebuch", listOf(t("title", "{{Wochentag}}, {{Datum}}"), t("body"))),
+    )
+
+    /** A copy of the blocks with {{Datum}}, {{Uhrzeit}}, {{Wochentag}} filled in; formatting spans move with the text. */
+    fun fillTemplate(blocks: List<JSONObject>, now: java.time.LocalDateTime): List<JSONObject> {
+        val values = mapOf("Datum" to "%02d.%02d.%d".format(now.dayOfMonth, now.monthValue, now.year),
+            "Uhrzeit" to "%02d:%02d".format(now.hour, now.minute), "Wochentag" to WEEKDAY_NAMES[now.dayOfWeek.value - 1])
+        return blocks.map { original ->
+            val block = JSONObject(original.toString())
+            val text = block.optString("x")
+            val matches = PLACEHOLDER.findAll(text).toList()
+            if (matches.isEmpty()) return@map block
+            val out = StringBuilder()
+            var last = 0
+            val shifts = mutableListOf<Pair<Int, Int>>()   // (end of placeholder, change in length)
+            for (match in matches) {
+                out.append(text, last, match.range.first)
+                val value = values.getValue(match.groupValues[1])
+                out.append(value)
+                shifts.add(match.range.last + 1 to value.length - match.value.length)
+                last = match.range.last + 1
+            }
+            out.append(text.substring(last))
+            block.put("x", out.toString())
+            block.optJSONArray("s")?.let { spans ->
+                for (i in 0 until spans.length()) {
+                    val span = spans.optJSONArray(i) ?: continue
+                    for (position in 0..1) {
+                        val at = span.optInt(position)
+                        span.put(position, at + shifts.filter { at >= it.first }.sumOf { it.second })
+                    }
+                }
+            }
+            block
+        }
+    }
+
     const val FOOTNOTE = "fn:"
 
     /** The text of a footnote span ("fn:<text>") – a Profi-Funktion – otherwise null. */

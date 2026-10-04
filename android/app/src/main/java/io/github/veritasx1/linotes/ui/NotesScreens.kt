@@ -219,6 +219,44 @@ fun newNote(state: AppState, folderKey: String?) {
     state.push(Route.Editor(note.id))
 }
 
+/** A new note from a template, with {{Datum}}, {{Uhrzeit}}, {{Wochentag}} filled in. Pictures and files of a
+ *  template from another place are re-encrypted for the new note's folder (in the background). */
+fun newNoteFromTemplate(state: AppState, folderKey: String?, blocks: List<JSONObject>, source: SyncObject?) {
+    val sync = state.sync
+    val folder = folderKey?.removePrefix("folder:")?.let { sync.get(it) } ?: sync.get(Model.privateFolder(sync.userId))
+    val body = org.json.JSONArray(Model.fillTemplate(blocks, java.time.LocalDateTime.now()))
+    sync.launch {
+        val data = JSONObject().put("body", body)
+        val content = if (source != null && source.share != folder?.share)
+            sync.rekeyFiles(SyncObject(source.id, "note", source.share, source.owner, data, false, 0, 0.0, 0), folder?.share) else data
+        val now = Model.now()
+        val note = sync.put("note", JSONObject().put("folder", folder?.id).put("body", content.getJSONArray("body"))
+            .put("created", now).put("modified", now), folder?.share)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { state.push(Route.Editor(note.id)) }
+    }
+}
+
+/** "Neue Notiz aus Vorlage": own templates first, then the shipped ones. */
+@Composable
+fun TemplateSheet(state: AppState, folderKey: String?, onDone: () -> Unit) {
+    val sync = state.sync
+    val own = sync.all("note").filter { it.data.optBoolean("template") && !it.data.has("trashed") && !it.data.has("enc") }
+        .sortedBy { Model.title(it).lowercase() }
+    ActionSheet("Neue Notiz aus Vorlage", own.map { note ->
+        SheetAction(Model.title(note).ifEmpty { "Vorlage" }) { newNoteFromTemplate(state, folderKey, Model.blocks(note).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }, note) }
+    } + Model.BUILTIN_TEMPLATES.map { (_, name, blocks) ->
+        SheetAction(name) { newNoteFromTemplate(state, folderKey, blocks, null) }
+    }, onDone)
+}
+
+fun templateAction(state: AppState, note: SyncObject): SheetAction {
+    val template = note.data.optBoolean("template")
+    return SheetAction(if (template) "Nicht mehr als Vorlage" else "Als Vorlage verwenden") {
+        state.sync.update(note.id) { if (template) it.remove("template") else it.put("template", true) }
+        state.toastLater(if (template) "Keine Vorlage mehr" else "Als Vorlage gemerkt – „…“ → „Neue Notiz aus Vorlage“")
+    }
+}
+
 // ================================================================
 // NOTE LIST
 // ================================================================
@@ -268,6 +306,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     val pool = if (key == "all" && query.isNotBlank()) notes + notesFor(sync, "archive").first else notes
     val shown = pool.filter { query.isBlank() || Model.text(it).contains(query, true) }
     var sortMenu by remember { mutableStateOf(false) }
+    var templates by remember { mutableStateOf(false) }
     var gallery by remember { mutableStateOf(sync.noteGallery) }
     val sorted = Model.sortNotes(shown, sync.noteSort(), pinnedFirst = key != "trash")
     val groups = sorted.groupBy { it.group }
@@ -334,6 +373,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
             SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } },
             SheetAction("Verschieben …") { moving = note },
             archiveAction(state, note),
+            templateAction(state, note),
             SheetAction("Teilen …") { if (locked) state.toastLater("Gesperrte Notizen können nicht geteilt werden.") else state.push(Route.Share(note.id)) },
             SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = note to !locked },
             SheetAction("Löschen", destructive = true) { trashNote(state, note) },
@@ -341,7 +381,9 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     }
     moving?.let { note -> MoveSheet(state, note) { moving = null } }
     // Like Apple: "View as Gallery / List" and the sort order in one menu.
+    if (templates) TemplateSheet(state, key.takeIf { it.startsWith("folder:") }) { templates = false }
     if (sortMenu) ActionSheet(null, listOf(
+        SheetAction("Neue Notiz aus Vorlage …") { templates = true },
         SheetAction(if (gallery) "Als Liste anzeigen" else "Als Galerie anzeigen") { gallery = !gallery; sync.noteGallery = gallery },
     ) + Model.NOTE_SORTS.map { (order, label) ->
         SheetAction("Sortieren nach $label" + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
@@ -434,7 +476,8 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? 
                 }
                 Row {
                     // Found by a search although archived: say so.
-                    Text((if (Model.archived(note)) "im Archiv · " else "") + Model.shortDate(stamp ?: Model.modified(note)),
+                    Text((if (note.data.optBoolean("template")) "Vorlage · " else "") + (if (Model.archived(note)) "im Archiv · " else "") +
+                        Model.shortDate(stamp ?: Model.modified(note)),
                         style = Type.subheadline, color = colors.label)
                     Spacer(Modifier.width(8.dp))
                     Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) "Gesperrt" else "Kein weiterer Text" },
