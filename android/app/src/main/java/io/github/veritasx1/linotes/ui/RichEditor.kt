@@ -33,6 +33,7 @@ import android.view.ActionMode
 import android.view.Gravity
 import android.view.MotionEvent
 import android.widget.EditText
+import io.github.veritasx1.linotes.data.LinkPreview
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -341,6 +342,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var onLinkRequested: (() -> Unit)? = null
     var onOpenNote: ((String) -> Unit)? = null
     var onOpenFile: ((JSONObject) -> Unit)? = null
+    /** A web address was finished alone on a line (Enter or pasted): the screen may make a preview. */
+    var onLinkLine: ((String) -> Unit)? = null
     /** First page of an attached PDF for its card (null: no preview). */
     var loadFilePreview: ((JSONObject, (Bitmap?) -> Unit) -> Unit)? = null
     /** Where the pending ">>" starts, or -1. */
@@ -404,6 +407,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 } finally {
                     busy = false
                 }
+                checkLinkLines(s, insertStart, insertCount)
                 onEdited?.invoke()
             }
         })
@@ -414,6 +418,73 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         colors = newColors
         setTextColor(colors.label)
         load(toBlocks())
+    }
+
+    // --- link previews (web address alone on a line → card) ------------
+
+    /** After Enter (or pasting a lone address): every finished line that is just a web address. */
+    private fun checkLinkLines(text: Editable, start: Int, count: Int) {
+        val callback = onLinkLine ?: return
+        val end = (start + count).coerceAtMost(text.length)
+        val inserted = text.subSequence(start.coerceAtMost(end), end).toString()
+        val lines = mutableListOf<IntRange>()
+        if ('\n' in inserted) {
+            // Each line that a line break of this edit finished.
+            var at = start
+            while (true) {
+                val brk = text.indexOf('\n', at)
+                if (brk < 0 || brk >= end) break
+                val lineStart = text.lastIndexOf('\n', brk - 1).let { if (it < 0) 0 else it + 1 }
+                lines.add(lineStart until brk)
+                at = brk + 1
+            }
+        } else if (LinkPreview.loneUrl(inserted) != null) {
+            val lineStart = text.lastIndexOf('\n', (start - 1).coerceAtLeast(0)).let { if (it < 0 || start == 0) 0 else it + 1 }
+            lines.add(lineStart until paragraphEnd(text, start))
+        }
+        for (range in lines) {
+            if (range.isEmpty() || text.getSpans(range.first, range.last + 1, FileBlockSpan::class.java).isNotEmpty()) continue
+            LinkPreview.loneUrl(text.substring(range.first, range.last + 1))?.let { url -> post { callback(url) } }
+        }
+    }
+
+    /** The line that still holds only [url] becomes the preview card; the cursor stays where it is. */
+    fun replaceUrlLine(url: String, block: JSONObject): Boolean {
+        val text = text ?: return false
+        var lineStart = 0
+        while (lineStart <= text.length) {
+            val lineEnd = paragraphEnd(text, lineStart)
+            if (text.substring(lineStart, lineEnd).trim() == url && text.getSpans(lineStart, lineEnd, FileBlockSpan::class.java).isEmpty()) {
+                val cursor = selectionStart
+                busy = true
+                text.replace(lineStart, lineEnd, OBJECT.toString())
+                text.setSpan(FileBlockSpan(block, fileCard(block, null)), lineStart, lineStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                normalize(text)
+                busy = false
+                val shift = lineEnd - lineStart - 1
+                setSelection((if (cursor > lineStart) cursor - shift else cursor).coerceIn(0, text.length))
+                text.getSpans(lineStart, lineStart + 1, FileBlockSpan::class.java).firstOrNull()?.let { loadPreview(it) }
+                onEdited?.invoke()
+                return true
+            }
+            lineStart = lineEnd + 1
+        }
+        return false
+    }
+
+    /** Back to the plain address ("Nur als Adresse zeigen"). */
+    fun unlinkPreview(block: JSONObject) {
+        val text = text ?: return
+        val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull {
+            it.block.optString("t") == "link" && it.block.optString("u") == block.optString("u")
+        } ?: return
+        val start = text.getSpanStart(span)
+        busy = true
+        text.removeSpan(span)
+        text.replace(start, start + 1, block.optString("u"))
+        normalize(text)
+        busy = false
+        onEdited?.invoke()
     }
 
     // --- paragraphs ------------------------------------------------
@@ -990,7 +1061,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             } else if (type == "table") {
                 builder.append(OBJECT)
                 builder.setSpan(FileBlockSpan(JSONObject(block.toString()), tableCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (type == "file") {
+            } else if (type == "file" || type == "link") {
                 builder.append(OBJECT)
                 val span = FileBlockSpan(JSONObject(block.toString()), fileCard(block, null))
                 builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -1022,7 +1093,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "table") "body" else type
+            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "link" || type == "table") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
             folds[index]?.let { hidden ->
@@ -1281,8 +1352,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     }
 
     private fun loadPreview(span: FileBlockSpan) {
-        if (span.block.optString("m") != "application/pdf") return
-        val loader = loadFilePreview ?: return
+        val link = span.block.optString("t") == "link"
+        if (link && span.block.optString("f").isEmpty()) return
+        if (!link && span.block.optString("m") != "application/pdf") return
+        val loader: (JSONObject, (Bitmap?) -> Unit) -> Unit =
+            if (link) { block, done -> loadImage(block.optString("f"), done) } else loadFilePreview ?: return
         loader(span.block) { bitmap ->
             if (bitmap == null) return@loader
             post {
@@ -1310,7 +1384,24 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         canvas.drawRoundRect(box, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = density; color = (colors.label and 0x00FFFFFF) or 0x26000000 })
         val iconBox = android.graphics.RectF(12 * density, 10 * density, 56 * density, height - 10 * density)
-        if (preview != null) {
+        val link = block.optString("t") == "link"
+        if (link && preview != null) {
+            // The page's picture, cropped to fill the square (like Apple's previews).
+            val side = minOf(preview.width, preview.height)
+            val source = android.graphics.Rect((preview.width - side) / 2, (preview.height - side) / 2, (preview.width + side) / 2, (preview.height + side) / 2)
+            canvas.save()
+            val clip = android.graphics.Path().apply { addRoundRect(iconBox, 6 * density, 6 * density, android.graphics.Path.Direction.CW) }
+            canvas.clipPath(clip)
+            canvas.drawBitmap(preview, source, iconBox, Paint(Paint.FILTER_BITMAP_FLAG))
+            canvas.restore()
+        } else if (link) {
+            // No picture: a globe in the accent color.
+            val globe = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2 * density; color = colors.accent }
+            val r = minOf(iconBox.width(), iconBox.height()) / 2 - 2 * density
+            canvas.drawCircle(iconBox.centerX(), iconBox.centerY(), r, globe)
+            canvas.drawOval(android.graphics.RectF(iconBox.centerX() - r / 2.2f, iconBox.centerY() - r, iconBox.centerX() + r / 2.2f, iconBox.centerY() + r), globe)
+            canvas.drawLine(iconBox.centerX() - r, iconBox.centerY(), iconBox.centerX() + r, iconBox.centerY(), globe)
+        } else if (preview != null) {
             val scale = minOf(iconBox.width() / preview.width, iconBox.height() / preview.height)
             val w = preview.width * scale
             val h = preview.height * scale
@@ -1342,9 +1433,17 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val maxText = width - textLeft - 12 * density
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
         val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
-        val name = android.text.TextUtils.ellipsize(if (AudioNotes.isAudio(block)) "Audioaufnahme" else block.optString("n", "Datei"), title, maxText, android.text.TextUtils.TruncateAt.MIDDLE).toString()
+        val label = when {
+            link -> block.optString("n").ifEmpty { block.optString("dm") }
+            AudioNotes.isAudio(block) -> "Audioaufnahme"
+            else -> block.optString("n", "Datei")
+        }
+        val name = android.text.TextUtils.ellipsize(label, title, maxText,
+            if (link) android.text.TextUtils.TruncateAt.END else android.text.TextUtils.TruncateAt.MIDDLE).toString()
         canvas.drawText(name, textLeft, height / 2f - 3 * density, title)
-        canvas.drawText(fileDetails(block), textLeft, height / 2f + 17 * density, sub)
+        val details = if (link) android.text.TextUtils.ellipsize(block.optString("dm"), sub, maxText, android.text.TextUtils.TruncateAt.END).toString()
+            else fileDetails(block)
+        canvas.drawText(details, textLeft, height / 2f + 17 * density, sub)
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
 

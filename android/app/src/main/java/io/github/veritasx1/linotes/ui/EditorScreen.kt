@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.veritasx1.linotes.data.Keep
+import io.github.veritasx1.linotes.data.LinkPreview
 import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncObject
 import io.github.veritasx1.linotes.data.Vault
@@ -80,6 +81,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    var linkMenu by remember { mutableStateOf<JSONObject?>(null) }
     var recording by remember { mutableStateOf(false) }
     // The table being edited (its block as it is in the note).
     var tableEditing by remember { mutableStateOf<JSONObject?>(null) }
@@ -254,9 +256,27 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onLinkRequested = { linkQuery = editor.pendingLinkQuery() ?: "" }
         // Attachments: decrypt under their own name and open with the app for the type.
+        // A web address alone on a line → preview card, only if switched on (Settings → Link-Vorschau)
+        // and never in locked notes. Only this phone fetches the page; picture and card are stored
+        // encrypted in the note. Fails quietly: the address simply stays a link.
+        editor.onLinkLine = { url ->
+            val current = sync.get(noteId)
+            if (sync.linkPreviews && current != null && !current.data.has("enc") && !trashed) sync.launch {
+                try {
+                    val found = LinkPreview.fetch(url)
+                    val reference = found.picture?.let { sync.uploadFile(it, current.share) }
+                    val block = LinkPreview.block(url, found, reference)
+                    withContext(Dispatchers.Main) { if (editor.isAttachedToWindow) editor.replaceUrlLine(url, block) }
+                } catch (error: Exception) {
+                    android.util.Log.i("LiNotes", "keine Link-Vorschau: $error")
+                }
+            }
+        }
         editor.onOpenFile = { block ->
             // Recordings play inside the note (like Apple), other files open in their app.
-            if (block.optString("t") == "table") {
+            if (block.optString("t") == "link") {
+                linkMenu = block
+            } else if (block.optString("t") == "table") {
                 if (!trashed) tableEditing = block
             } else if (AudioNotes.isAudio(block)) {
                 val fileId = block.getString("f")
@@ -477,6 +497,14 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             }) { keepChoice = false }
     }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
+    linkMenu?.let { block ->
+        ActionSheet(block.optString("dm").ifEmpty { block.optString("u") }, listOf(
+            SheetAction("Im Browser öffnen") {
+                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(block.optString("u")))) }
+            },
+            SheetAction("Nur als Adresse zeigen") { editor.unlinkPreview(block) },
+        )) { linkMenu = null }
+    }
     if (photoMenu) {
         // Like Notes: take a photo or choose one.
         fun insert(bytes: ByteArray, @Suppress("UNUSED_PARAMETER") mime: String) {

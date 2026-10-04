@@ -92,6 +92,10 @@ class SyncEngine(private val context: Context) {
     var hyphenate: Boolean
         get() = uiPrefs.getBoolean("hyphenate", false)
         set(value) = uiPrefs.edit().putBoolean("hyphenate", value).apply()
+    /** Link previews fetch the page, the site then sees this phone's address – off unless switched on. */
+    var linkPreviews: Boolean
+        get() = uiPrefs.getBoolean("link_previews", false)
+        set(value) = uiPrefs.edit().putBoolean("link_previews", value).apply()
 
     /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
     var noteGallery: Boolean
