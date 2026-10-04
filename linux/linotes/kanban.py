@@ -113,7 +113,10 @@ class CardWidget(Gtk.Box):
         else:
             self.append(title)
         if data.get("notes"):
-            notes = Gtk.Label(label=data["notes"][:140], xalign=0, wrap=True)
+            # At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the
+            # notes become spaces so no line is wasted. The whole text is in the card dialog.
+            preview = " ".join(data["notes"].split())[:400]
+            notes = Gtk.Label(label=preview, xalign=0, wrap=True, wrap_mode=2, lines=2, ellipsize=3, max_width_chars=1)
             notes.add_css_class("card-meta")
             self.append(notes)
 

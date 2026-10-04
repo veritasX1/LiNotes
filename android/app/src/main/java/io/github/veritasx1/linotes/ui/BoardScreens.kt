@@ -335,7 +335,10 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
             Text(data.optString("title"), style = Type.headline, color = colors.label)
         }
         if (data.optString("notes").isNotEmpty()) {
-            Text(data.optString("notes").take(140), style = Type.footnote, color = colors.secondary)
+            // At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the notes
+            // become spaces so no line is wasted. The whole text is in the card sheet.
+            Text(data.optString("notes").split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ").take(400),
+                style = Type.footnote, color = colors.secondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
         val doneAt = data.optDouble("done_at", 0.0).takeIf { isLast && it > 0 }
