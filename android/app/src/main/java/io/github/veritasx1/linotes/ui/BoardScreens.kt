@@ -407,6 +407,15 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     var notes by remember { mutableStateOf(card.data.optString("notes")) }
     var due by remember { mutableStateOf(card.data.optString("due").takeIf { it.isNotEmpty() && it != "null" }) }
     var assignee by remember { mutableStateOf(card.data.optInt("assignee")) }
+    // Only people the board is shared with (and oneself) – not everyone one knows. Someone assigned
+    // earlier who is no longer in the board stays visible, so it can be undone.
+    val assignable = remember(card.share) {
+        val inBoard = sync.shareMembers(card.share).toSet() + sync.userId
+        val assigned = card.data.optInt("assignee")
+        (inBoard + listOfNotNull(assigned.takeIf { it != 0 }))
+            .map { id -> id to sync.userName(id) + if (id in inBoard) "" else " (nicht im Board)" }
+            .sortedBy { it.second.lowercase() }
+    }
     var color by remember { mutableStateOf(card.data.optString("color").takeIf { it.isNotEmpty() && it != "null" }) }
     var column by remember { mutableStateOf(card.data.optString("column")) }
     var priority by remember { mutableStateOf(card.data.optString("priority").takeIf { it in PRIORITY_MARKS } ?: "") }
@@ -509,7 +518,7 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                 }
                 FormSection {
                     PickerRow("Spalte", columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
-                    PickerRow("Zuständig", listOf(0 to "Niemand") + sync.users.map { it.id to it.name }, assignee, divider = true) { assignee = it }
+                    PickerRow("Zuständig", listOf(0 to "Niemand") + assignable, assignee, divider = true) { assignee = it }
                     PickerRow("Priorität", PRIORITIES, priority, divider = true) { priority = it }
                     val label = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "%02d.%02d.%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "Kein Datum"
                     GroupRow("Fällig", detail = label, chevron = false, divider = due != null) {

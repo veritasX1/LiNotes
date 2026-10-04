@@ -492,7 +492,14 @@ class CardDialog(Adw.Dialog):
             self.column_row.set_selected(column_ids.index(data.get("column")))
         group.add(self.column_row)
 
-        users = [(None, "Niemand")] + [(user["id"], user["name"]) for user in self.sync.state["users"]]
+        # Only people the board is shared with (and oneself) – not everyone one knows. Someone
+        # assigned earlier who is no longer in the board stays visible, so it can be undone.
+        in_board = set(self.sync.share_members(card.get("share"))) | {self.sync.user_id}
+        assigned = data.get("assignee")
+        people = in_board | ({assigned} if assigned is not None else set())
+        users = [(None, "Niemand")] + sorted(
+            ((uid, self.sync.user_name(uid) + ("" if uid in in_board else " (nicht im Board)")) for uid in people),
+            key=lambda entry: entry[1].lower())
         self.users = users
         self.assignee = Adw.ComboRow(title="Zuständig", model=Gtk.StringList.new([name for _id, name in users]))
         ids = [user_id for user_id, _name in users]
