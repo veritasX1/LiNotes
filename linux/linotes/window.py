@@ -1278,7 +1278,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         return True
 
     def open_attachment(self, block, share):
-        """Decrypt the file into a private folder under its own name and open it with its app."""
+        """Decrypt the file into a private folder under its own name and show it in a quick look
+        inside LiNotes (another app only via "Teilen")."""
         def fetch():
             source = self.sync.fetch_file(block["f"], share)
             folder = Path(GLib.get_user_cache_dir()) / "linotes" / "open" / block["f"].partition(":")[2][:12]
@@ -1291,7 +1292,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if error is not None:
                 self.toast(error_text(error))
                 return
-            Gtk.FileLauncher.new(Gio.File.new_for_path(str(target))).launch(self, None, None)
+            from .quicklook import QuickLook
+            QuickLook(self, target, block.get("n"), block.get("m")).present(self)
         run_async(fetch, done)
 
     def format_target(self, editor):

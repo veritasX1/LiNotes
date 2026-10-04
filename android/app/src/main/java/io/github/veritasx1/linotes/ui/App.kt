@@ -101,6 +101,7 @@ fun LiNotesApp(state: AppState) {
             }
             if (state.signedIn) {
                 IncomingRequests(state)
+                QuickLookOverlay(state)
             }
             QrScannerOverlay(state)
             Toast(state.toast)
