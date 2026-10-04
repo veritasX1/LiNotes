@@ -12,12 +12,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -101,6 +106,8 @@ fun LiNotesApp(state: AppState) {
             }
             if (state.signedIn) {
                 IncomingRequests(state)
+                // Above the tab bar or the editor's toolbar (and the keyboard).
+                UploadBanner(state, Modifier.align(Alignment.BottomCenter).imePadding().navigationBarsPadding().padding(bottom = 64.dp))
                 QuickLookOverlay(state)
             }
             QrScannerOverlay(state)

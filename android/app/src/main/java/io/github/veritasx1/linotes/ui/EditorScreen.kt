@@ -480,13 +480,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     if (photoMenu) {
         // Like Notes: take a photo or choose one.
         fun insert(bytes: ByteArray, @Suppress("UNUSED_PARAMETER") mime: String) {
-            scope.launch {
-                try {
-                    val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                    editor.insertImage(id)
-                } catch (error: Exception) {
-                    state.showToast(errorText(error))
-                }
+            state.upload("Foto", bytes, note.share) { id ->
+                if (editor.isAttachedToWindow) editor.insertImage(id) else appendBlock(state, noteId, JSONObject().put("t", "image").put("f", id))
             }
         }
         ActionSheet(null, listOf(
@@ -495,13 +490,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             // Like Apple: attach a PDF or any other file (encrypted like photos).
             SheetAction("Datei anhängen …") {
                 state.pickFile { name, mime, bytes ->
-                    scope.launch {
-                        try {
-                            val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                            editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size))
-                        } catch (error: Exception) {
-                            state.showToast(errorText(error))
-                        }
+                    state.upload(name, bytes, note.share) { id ->
+                        val block = JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size)
+                        if (editor.isAttachedToWindow) editor.insertFile(block) else appendBlock(state, noteId, block)
                     }
                 }
             },
@@ -518,13 +509,16 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             onDone = { file, length ->
                 recording = false
                 scope.launch {
-                    try {
-                        val bytes = withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
-                        val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                        editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", file.name).put("m", AudioNotes.mime)
-                            .put("b", bytes.size).put("d", Math.round(length * 10) / 10.0))
+                    val bytes = try {
+                        withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
                     } catch (error: Exception) {
                         state.showToast(errorText(error))
+                        return@launch
+                    }
+                    state.upload(file.name, bytes, note.share) { id ->
+                        val block = JSONObject().put("t", "file").put("f", id).put("n", file.name).put("m", AudioNotes.mime)
+                            .put("b", bytes.size).put("d", Math.round(length * 10) / 10.0)
+                        if (editor.isAttachedToWindow) editor.insertFile(block) else appendBlock(state, noteId, block)
                     }
                 }
             },
@@ -788,3 +782,15 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
 }
 
 private data class Quad(val type: String, val label: String, val size: Int, val weight: FontWeight)
+
+/** An upload that finished after the note was closed: its block goes to the end of the note. */
+private fun appendBlock(state: AppState, noteId: String, block: JSONObject) {
+    val sync = state.sync
+    val current = sync.get(noteId) ?: return
+    if (current.data.has("enc") || current.data.has("trashed")) return
+    val data = JSONObject(current.data.toString())
+    val body = data.optJSONArray("body") ?: JSONArray()
+    body.put(block)
+    data.put("body", body).put("modified", Model.now())
+    sync.put("note", data, current.share, current.id)
+}

@@ -13,7 +13,8 @@ from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from . import model
 from . import smoothscroll
-from .dialogs import ask_text, confirm, error_text, run_async
+from . import uploads
+from .dialogs import ask_text, confirm, error_text
 from .icons import icon_button
 from .lists import share_label
 
@@ -693,6 +694,7 @@ class CardDialog(Adw.Dialog):
             return
         share = card.get("share")
         window = self.board.window
+        group = self.files_group if key == "files" else self.evidence_group
         for path in paths:
             if not path.is_file():
                 continue
@@ -706,19 +708,31 @@ class CardDialog(Adw.Dialog):
             if key == "evidence":
                 entry.update(model.evidence_fields(self.sync, content))
 
-            def done(reference, error, entry=entry):
+            pending = []
+
+            def done(reference, error, entry=entry, pending=pending):
+                for row in pending:
+                    row.get_child().detach()
+                    if row.get_parent() is not None:
+                        group.remove(row)
                 if error is not None:
                     window.toast(error_text(error))
                     return
-                current = self.card()
+                # Saved to the card even if this dialog was closed meanwhile.
+                current = self.sync.get(self.card_id)
                 if current is None:
                     return
                 items = list(current["data"].get(key) or [])
                 items.append({"f": reference, **entry})
                 self.sync.update(self.card_id, **{key: items})
-                self.fill_files(key)
-            window.toast(f"„{path.name}“ wird angehängt …")
-            run_async(lambda content=content: self.sync.upload_file(content, share), done)
+                if self.get_root() is not None:
+                    self.fill_files(key)
+            upload = uploads.start(window, path.name, content, share, done)
+            # Its own row in this card's list while it runs.
+            row = Adw.PreferencesRow(activatable=False, child=uploads.UploadRow(
+                upload, margin_top=10, margin_bottom=10, margin_start=12, margin_end=12))
+            group.add(row)
+            pending.append(row)
 
     def remove_file(self, index, key="files"):
         card = self.card()

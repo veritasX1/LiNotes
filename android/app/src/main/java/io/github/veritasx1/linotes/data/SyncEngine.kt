@@ -922,7 +922,7 @@ class SyncEngine(private val context: Context) {
         return target
     }
 
-    fun uploadFile(content: ByteArray, share: String?): String {
+    fun uploadFile(content: ByteArray, share: String?, progress: ((Long, Long) -> Unit)? = null): String {
         val name = UUID.randomUUID().toString().replace("-", "")
         val key = keyFor(share) ?: throw E2E.CryptoError("no key")
         if (server.isEmpty()) {
@@ -933,7 +933,7 @@ class SyncEngine(private val context: Context) {
             File(filesDir, name).writeBytes(content)
             return "local:$name"
         }
-        val id = api?.upload(E2E.sealBytes(key, content, name), share) ?: throw OfflineException("no session")
+        val id = api?.upload(E2E.sealBytes(key, content, name), share, progress) ?: throw OfflineException("no session")
         filesDir.mkdirs()
         File(filesDir, name).writeBytes(content)
         return "$id:$name"

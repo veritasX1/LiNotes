@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.ui.AppState
@@ -39,8 +40,17 @@ class MainActivity : FragmentActivity() {
         pendingImage = null
         if (uri == null) return@registerForActivityResult
         val mime = contentResolver.getType(uri) ?: "image/jpeg"
-        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@registerForActivityResult
-        callback(bytes, mime)
+        // Read in the background: photos from a cloud gallery can take a while.
+        readInBackground({ contentResolver.openInputStream(uri)?.use { it.readBytes() } }) { bytes ->
+            if (bytes != null) callback(bytes, mime) else state.toastLater("Das Foto ließ sich nicht lesen.")
+        }
+    }
+
+    private fun <T> readInBackground(read: () -> T?, done: (T?) -> Unit) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { try { read() } catch (error: Exception) { null } }
+            done(result)
+        }
     }
 
     // Attachments (like Apple: PDFs and other files): name and size come from the provider.
@@ -62,12 +72,11 @@ class MainActivity : FragmentActivity() {
             return@registerForActivityResult
         }
         val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-        val bytes = try { contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (error: Exception) { null }
-        if (bytes == null || bytes.size > MAX_ATTACHMENT) {
-            state.toastLater(if (bytes == null) "„$name“ ließ sich nicht lesen." else "„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
-            return@registerForActivityResult
+        readInBackground({ contentResolver.openInputStream(uri)?.use { it.readBytes() } }) { bytes ->
+            if (bytes == null || bytes.size > MAX_ATTACHMENT) {
+                state.toastLater(if (bytes == null) "„$name“ ließ sich nicht lesen." else "„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
+            } else callback(name, mime, bytes)
         }
-        callback(name, mime, bytes)
     }
 
     // Photo straight from the camera: the camera app writes into a file we hand it.
@@ -75,8 +84,8 @@ class MainActivity : FragmentActivity() {
     private val photo = registerForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         val (file, callback) = pendingPhoto ?: return@registerForActivityResult
         pendingPhoto = null
-        if (taken && file.length() > 0) callback(file.readBytes(), "image/jpeg")
-        file.delete()
+        if (taken && file.length() > 0) readInBackground({ file.readBytes().also { file.delete() } }) { bytes -> bytes?.let { callback(it, "image/jpeg") } }
+        else file.delete()
     }
 
     private var pendingSave: Pair<ByteArray, (Boolean) -> Unit>? = null
