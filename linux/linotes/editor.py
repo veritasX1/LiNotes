@@ -20,7 +20,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import audio, calc, linkpreview, model, syntax, textsize
+from . import audio, calc, linkpreview, mathtex, model, syntax, textsize
 from .table import NoteTable
 
 
@@ -1280,6 +1280,8 @@ class NoteEditor(Gtk.TextView):
                 self.add_file(buffer.create_child_anchor(end), block)
             elif kind == "table":
                 self.add_table(buffer.create_child_anchor(end), block)
+            elif kind == "math":
+                self.add_math(buffer.create_child_anchor(end), block.get("x", ""))
             else:
                 block = model.refresh_note_links(block, self.note_title, self.user_name)
                 text = block.get("x", "")
@@ -1304,9 +1306,11 @@ class NoteEditor(Gtk.TextView):
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
             style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind in ("image", "divider", "file", "link", "table"):
+            if kind in ("image", "divider", "file", "link", "table", "math"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
+            if kind == "math":
+                self.set_alignment("center", [line])
             if block.get("a") in ALIGNMENTS:
                 self.set_alignment(block["a"], [line])
             if kind == "code" and block.get("lang") in syntax.LANGUAGES:
@@ -1338,6 +1342,8 @@ class NoteEditor(Gtk.TextView):
                 image = self.anchors[anchor]
                 if image.get("table"):
                     blocks.append(model.table_block(image["table"].rows()))
+                elif "math" in image:
+                    blocks.append({"t": "math", "x": image["math"]})
                 elif image.get("attachment"):
                     blocks.append(dict(image["attachment"]))
                 else:
@@ -1670,7 +1676,128 @@ class NoteEditor(Gtk.TextView):
                 self.on_changed(buffer)
                 return
 
-    def insert_image(self, file_id, divider=False, attachment=None, table=None):
+    # ========================================================
+    # FORMULAS (LaTeX, Profi-Funktion) – set by mathtex.py
+    # ========================================================
+
+    def math_size(self):
+        """Formulas a little larger than the text (follows the text size setting)."""
+        font = self.get_pango_context().get_font_description()
+        size = font.get_size() / Pango.SCALE
+        if not font.get_size_is_absolute():
+            size *= 96 / 72
+        return max(10.0, size * 1.15)
+
+    def add_math(self, anchor, source):
+        """A formula on a line of its own, centered; a click opens its source for editing."""
+        area = Gtk.DrawingArea(css_classes=["math-block"])
+        area.set_cursor_from_name("pointer")
+        area.set_tooltip_text("Formel bearbeiten")
+        entry = {"math": source, "picture": area}
+        self.anchors[anchor] = entry
+        self.show_math(entry)
+        click = Gtk.GestureClick()
+        click.connect("released", lambda *_args: self.edit_math(anchor))
+        area.add_controller(click)
+        self.add_child_at_anchor(area, anchor)
+        return area
+
+    def show_math(self, entry):
+        """Set the formula once (drawing reuses the result, typing elsewhere costs nothing)."""
+        area = entry["picture"]
+        source = entry["math"]
+        if source.strip():
+            formula = mathtex.layout(source, self.math_size(), mathtex.measure)
+        else:
+            formula = mathtex.layout("\\text{Formel}", self.math_size(), mathtex.measure)
+        empty = not source.strip()
+        pad = 6
+        area.set_content_width(max(1, int(formula.width + 2 * pad + 1)))
+        area.set_content_height(max(1, int(formula.height + 2 * pad + 1)))
+
+        def draw(widget, cr, _width, _height):
+            color = widget.get_color()
+            if empty:
+                cr.push_group()
+            mathtex.draw(cr, formula, pad, pad, (color.red, color.green, color.blue))
+            if empty:
+                cr.pop_group_to_source()
+                cr.paint_with_alpha(0.4)
+        area.set_draw_func(draw)
+        area.queue_draw()
+
+    def refresh_math(self):
+        for entry in self.anchors.values():
+            if "math" in entry:
+                self.show_math(entry)
+
+    def math_entry(self, anchor):
+        return self.anchors.get(anchor) if anchor in self.anchors and "math" in self.anchors[anchor] else None
+
+    def set_math(self, anchor, source):
+        entry = self.math_entry(anchor)
+        if entry is None or entry["math"] == source:
+            return
+        entry["math"] = source
+        self.show_math(entry)
+        self.on_changed(self.buffer)
+
+    def edit_math(self, anchor):
+        """Source on the left side of a popover, the set formula live below it."""
+        entry = self.math_entry(anchor)
+        if entry is None:
+            return
+        popover = Gtk.Popover(position=Gtk.PositionType.BOTTOM)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(6)
+        box.append(Gtk.Label(label="Formel (LaTeX)", xalign=0, css_classes=["heading"]))
+        source = Gtk.TextView(monospace=True, wrap_mode=Gtk.WrapMode.CHAR, top_margin=6, bottom_margin=6,
+                              left_margin=6, right_margin=6, accepts_tab=False, css_classes=["card"])
+        source.get_buffer().set_text(entry["math"])
+        scroller = Gtk.ScrolledWindow(child=source, min_content_height=70, max_content_height=200, propagate_natural_height=True)
+        scroller.set_size_request(440, -1)
+        box.append(scroller)
+        hint = Gtk.Label(label="z. B.  \\frac{a}{b}   x^2   \\sqrt{x}   \\alpha   \\sum_{i=1}^{n}",
+                         xalign=0, css_classes=["dim-label", "caption"])
+        box.append(hint)
+        problem = Gtk.Label(label="Rot markierte Teile kennt LiNotes nicht.", xalign=0, css_classes=["error", "caption"], visible=False)
+        box.append(problem)
+        buttons = Gtk.Box(spacing=8)
+        remove = Gtk.Button(label="Löschen", css_classes=["destructive-action"])
+        buttons.append(remove)
+        buttons.append(Gtk.Box(hexpand=True))
+        done = Gtk.Button(label="Fertig", css_classes=["suggested-action"])
+        buttons.append(done)
+        box.append(buttons)
+        popover.set_child(box)
+
+        def changed(buffer):
+            text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+            self.set_math(anchor, text)
+            problem.set_visible(bool(text.strip()) and mathtex.layout(text, 12, mathtex.measure).error)
+        source.get_buffer().connect("changed", changed)
+        done.connect("clicked", lambda _b: popover.popdown())
+        remove.connect("clicked", lambda _b: (popover.popdown(), GLib.idle_add(lambda: self.delete_anchor_line(anchor) and False)))
+        keys = Gtk.EventControllerKey()
+
+        def key(_controller, keyval, _code, state):
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and state & Gdk.ModifierType.CONTROL_MASK:
+                popover.popdown()
+                return True
+            return False
+        keys.connect("key-pressed", key)
+        source.add_controller(keys)
+        popover.set_parent(entry["picture"])
+        popover.connect("closed", lambda p: GLib.idle_add(lambda: p.unparent() and False))
+        popover.popup()
+        source.grab_focus()
+
+    def insert_math(self, source=""):
+        """Format → Formel: a new formula line, its editor open right away."""
+        self.insert_image(None, math=source)
+
+    def insert_image(self, file_id, divider=False, attachment=None, table=None, math=None):
         buffer = self.buffer
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
         if not cursor.starts_line():
@@ -1686,6 +1813,8 @@ class NoteEditor(Gtk.TextView):
             self.add_divider(anchor)
         elif table is not None:
             widget = self.add_table(anchor, table)
+        elif math is not None:
+            self.add_math(anchor, math)
         elif attachment:
             self.add_file(anchor, attachment)
         else:
@@ -1697,13 +1826,17 @@ class NoteEditor(Gtk.TextView):
         self.set_line_style(line, "body", 0, checked=False)
         start, _end, with_break = self.line_bounds(line)
         buffer.apply_tag_by_name("image", start, with_break)
-        if divider or attachment or table is not None:
+        if math is not None:
+            self.set_alignment("center", [line])
+        if divider or attachment or table is not None or math is not None:
             # Typing goes on below the line.
             self.set_line_style(line + 1, "body", 0, checked=False)
             buffer.place_cursor(buffer.get_iter_at_line(line + 1)[1])
         self.on_changed(buffer)
         if table is not None:
             GLib.idle_add(lambda: widget.cells[0][0].grab_focus() and False)
+        if math is not None:
+            GLib.idle_add(lambda: self.edit_math(anchor) and False)
 
 
 def file_details(block):

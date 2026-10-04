@@ -457,6 +457,20 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.y += 8
             numbers = {}
             continue
+        if kind == "math":
+            # A formula, set like in the editor and centered (vector, sharp at any zoom).
+            from . import mathtex
+            formula = mathtex.layout(block.get("x", ""), 13.5, mathtex.measure)
+            scale = min(1.0, (pdf.width - 2 * MARGIN) / max(1.0, formula.width))
+            pdf.need(formula.height * scale + 12)
+            pdf.cr.save()
+            pdf.cr.translate(MARGIN + (pdf.width - 2 * MARGIN - formula.width * scale) / 2, pdf.y + 4)
+            pdf.cr.scale(scale, scale)
+            mathtex.draw(pdf.cr, formula, 0, 0, (0, 0, 0))
+            pdf.cr.restore()
+            pdf.y += formula.height * scale + 12
+            numbers = {}
+            continue
         if kind == "divider":
             pdf.need(16)
             pdf.cr.set_source_rgb(*LINE)
