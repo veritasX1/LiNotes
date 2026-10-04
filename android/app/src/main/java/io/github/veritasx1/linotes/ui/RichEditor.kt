@@ -1199,9 +1199,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (type == "divider") {
                 builder.append(OBJECT)
                 builder.setSpan(dividerSpan(), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (type == "table") {
+            } else if (type == "table" || type == "math") {
                 builder.append(OBJECT)
-                builder.setSpan(FileBlockSpan(JSONObject(block.toString()), tableCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                builder.setSpan(FileBlockSpan(JSONObject(block.toString()), blockCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             } else if (type == "file" || type == "link") {
                 builder.append(OBJECT)
                 val span = FileBlockSpan(JSONObject(block.toString()), fileCard(block, null))
@@ -1236,7 +1236,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "link" || type == "table") "body" else type
+            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "link" || type == "table" || type == "math") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
             if (paraType == "code") span.lang = block.optString("lang").takeIf { it in Syntax.LANGUAGES }
@@ -1439,6 +1439,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         onEdited?.invoke()
     }
 
+    /** A formula (Profi-Funktion) on a line of its own; tapping it opens its source. */
+    fun insertMath(block: JSONObject) = insertTable(block)
+
     /** A table (like Apple's): shown as a grid, tapping opens the table editor. */
     fun insertTable(block: JSONObject) {
         val text = text ?: return
@@ -1450,15 +1453,17 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             at += 1
         }
         text.insert(at, "$OBJECT\n")
-        text.setSpan(FileBlockSpan(block, tableCard(block)), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(FileBlockSpan(block, blockCard(block)), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         normalize(text)
         busy = false
         setSelection((at + 2).coerceAtMost(text.length))
         onEdited?.invoke()
     }
 
-    /** Replace a table after editing it (null: delete it with its line). */
-    fun replaceTable(old: JSONObject, new: JSONObject?) {
+    /** Replace a table or formula after editing it (null: delete it with its line). */
+    fun replaceTable(old: JSONObject, new: JSONObject?) = replaceBlock(old, new)
+
+    fun replaceBlock(old: JSONObject, new: JSONObject?) {
         val text = text ?: return
         val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull { it.block.toString() == old.toString() } ?: return
         val start = text.getSpanStart(span)
@@ -1467,11 +1472,19 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         if (new == null) {
             text.delete(start, (start + 2).coerceAtMost(text.length))
         } else {
-            text.setSpan(FileBlockSpan(new, tableCard(new)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(FileBlockSpan(new, blockCard(new)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         normalize(text)
         busy = false
         onEdited?.invoke()
+    }
+
+    private fun blockCard(block: JSONObject): Drawable = if (block.optString("t") == "math") mathCard(block) else tableCard(block)
+
+    /** A formula set by MathTex, a little larger than the text, centered in the line. */
+    private fun mathCard(block: JSONObject): Drawable {
+        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 } ?: (320 * density).toInt()
+        return MathDraw.FormulaDrawable(block.optString("x"), textSize * 1.15f, colors.label, 6 * density, width)
     }
 
     private fun tableCard(block: JSONObject): Drawable {

@@ -109,6 +109,21 @@ object NotePdf {
                 numbers.clear()
                 continue
             }
+            if (kind == "math") {
+                // A formula, set like in the editor and centered (same as Ubuntu).
+                val formula = MathDraw.layout(block.optString("x"), 13.5f)
+                val available = pdf.width - 2 * pdf.margin
+                val scale = minOf(1f, available / maxOf(1f, formula.width.toFloat()))
+                pdf.need(formula.height.toFloat() * scale + 12f)
+                pdf.canvas.save()
+                pdf.canvas.translate(pdf.margin + (available - formula.width.toFloat() * scale) / 2, pdf.y + 4f)
+                pdf.canvas.scale(scale, scale)
+                MathDraw.draw(pdf.canvas, formula, 0f, 0f, Color.BLACK)
+                pdf.canvas.restore()
+                pdf.y += formula.height.toFloat() * scale + 12f
+                numbers.clear()
+                continue
+            }
             if (kind == "table") {
                 // Rows with thin lines, each row kept on one page (same as Ubuntu).
                 val rows = io.github.veritasx1.linotes.data.Model.tableRows(block)
