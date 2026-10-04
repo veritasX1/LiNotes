@@ -124,6 +124,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         sidebar_header = Adw.HeaderBar(show_title=False, show_end_title_buttons=False)
         sidebar_header.set_decoration_layout(DECORATION_LAYOUT)
         new_menu = Gio.Menu()
+        new_menu.append("Neue Notiz aus Vorlage …", "win.new-from-template")
         new_menu.append("Neuer Ordner", "win.new-folder")
         new_menu.append("Neue Liste", "win.new-list")
         new_menu.append("Neues Board", "win.new-board")
@@ -1332,6 +1333,86 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.attach_path(path, self.note_pane.editor, note)
         return True
 
+    # --- templates (Vorlagen) ---
+
+    def toggle_template(self, note_id):
+        note = self.sync.get(note_id) if note_id else None
+        if note is None or "enc" in note["data"]:
+            return
+        data = dict(note["data"])
+        if data.get("template"):
+            data.pop("template")
+            self.toast("Keine Vorlage mehr")
+        else:
+            data["template"] = True
+            self.toast("Als Vorlage gemerkt – „Neu …“ → „Neue Notiz aus Vorlage“")
+        self.sync.put("note", data, note.get("share"), note_id)
+        self.refresh_all()
+
+    def choose_template(self):
+        """Neu → Neue Notiz aus Vorlage: own templates first, then the shipped ones."""
+        own = sorted((n for n in self.sync.objects("note") if n["data"].get("template") and not n["data"].get("trashed")
+                      and "enc" not in n["data"]), key=lambda n: model.note_title(n).lower())
+        dialog = Adw.Dialog(title="Neue Notiz aus Vorlage", content_width=420)
+        page = Adw.PreferencesPage()
+
+        def row(title, subtitle, action):
+            entry = Adw.ActionRow(title=GLib.markup_escape_text(title), subtitle=GLib.markup_escape_text(subtitle), activatable=True)
+            entry.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            entry.connect("activated", lambda _r: (dialog.close(), action()))
+            return entry
+        if own:
+            group = Adw.PreferencesGroup(title="Eigene Vorlagen")
+            for note in own:
+                group.add(row(model.note_title(note), model.note_preview(note) or "",
+                              lambda note=note: self.new_from_template(model.note_blocks(note), note)))
+            page.add(group)
+        group = Adw.PreferencesGroup(title="Mitgeliefert",
+                                     description="Eigene Vorlagen: eine Notiz anlegen, Rechtsklick → „Als Vorlage verwenden“. "
+                                                 "{{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen ersetzt.")
+        for _key, name, blocks in model.BUILTIN_TEMPLATES:
+            group.add(row(name, " · ".join(b["x"] for b in blocks[1:4] if b.get("x")) or "",
+                          lambda blocks=blocks: self.new_from_template(blocks, None)))
+        page.add(group)
+        view = Adw.ToolbarView(content=page)
+        view.add_top_bar(Adw.HeaderBar())
+        dialog.set_child(view)
+        dialog.present(self)
+
+    def new_from_template(self, blocks, source):
+        """A new note in the current folder with the template's content and the placeholders filled in."""
+        import datetime
+        if self.stack.get_visible_child_name() != "notes" or self.current_key in ("trash", "locked", "archive"):
+            self.sidebar.select("all", emit=False)
+            self.current_key = "all"
+            self.stack.set_visible_child_name("notes")
+            self.show_note_tools(True)
+        self.note_pane.editor.flush()
+        folder = self.current_folder_for_new()
+        share = folder.get("share") if folder else None
+        body = model.fill_template(blocks, datetime.datetime.now())
+
+        def build():
+            data = {"body": body}
+            if source is not None and source.get("share") != share:
+                # Pictures and files of the template are encrypted for its own place – re-encrypt them.
+                data = self.sync.rekey_files({"data": data, "share": source.get("share")}, share)
+            return data
+
+        def done(data, error):
+            if error is not None:
+                self.toast(error_text(error))
+                return
+            now = time.time()
+            note = self.sync.put("note", {"folder": folder["id"] if folder else None, "body": data["body"],
+                                          "created": now, "modified": now}, share)
+            self.current_note = note["id"]
+            self.sidebar.refresh()
+            self.show_notes()
+            self.open_note(note["id"])
+            self.show_note_narrow()
+        run_async(build, done)
+
     def toggle_archive(self, object_id):
         """Into the archive or back – for everyone the item is shared with (Olaf, 04.10.2026)."""
         obj = self.sync.get(object_id) if object_id else None
@@ -1464,6 +1545,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append("Verschieben nach …", "win.move-note")
             menu.append("Duplizieren", "win.duplicate-note")
             menu.append("Aus dem Archiv holen" if model.archived(note) else "Archivieren", "win.archive-note")
+            menu.append("Nicht mehr als Vorlage" if note["data"].get("template") else "Als Vorlage verwenden", "win.template-note")
             menu.append("Als PDF exportieren …", "win.export-note")
             menu.append("Drucken …", "win.print-note")
             menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
@@ -1975,6 +2057,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "connect": self.connect_server,
             "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),
             "archive-note": lambda: self.toggle_archive(self.current_note),
+            "template-note": lambda: self.toggle_template(self.current_note),
+            "new-from-template": self.choose_template,
             "archive-object": lambda: self.toggle_archive(self.menu_target),
             "list-view": lambda: self.list_mode.set_active(True),
             "gallery-view": lambda: self.gallery_mode.set_active(True),
