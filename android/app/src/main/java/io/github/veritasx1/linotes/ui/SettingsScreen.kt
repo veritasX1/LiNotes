@@ -24,6 +24,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
     var textSize by remember { mutableStateOf(sync.textSize) }
     var justify by remember { mutableStateOf(sync.justify) }
     var hyphenate by remember { mutableStateOf(sync.hyphenate) }
+    var linkPreviews by remember { mutableStateOf(sync.linkPreviews) }
     var changeVault by remember { mutableStateOf(false) }
     var enableBiometric by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
@@ -57,6 +58,13 @@ fun SettingsScreen(state: AppState, revision: Long) {
             GroupRow("Blocksatz", Glyph.Format, chevron = false, trailing = { IosSwitch(justify, "Blocksatz") { toggleJustify() } }) { toggleJustify() }
             GroupRow("Silbentrennung", Glyph.Format, chevron = false, divider = false,
                 trailing = { IosSwitch(hyphenate, "Silbentrennung") { toggleHyphenate() } }) { toggleHyphenate() }
+        }
+        section("links", header = "Link-Vorschau", compact = true, footer = "Steht eine Webadresse allein in einer Zeile, wird sie zur Vorschau mit Titel und Bild. " +
+            "Dafür ruft dieses Handy die Seite ab – der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz; " +
+            "andere Geräte rufen nichts ab. Gesperrte Notizen bekommen keine Vorschau.") {
+            fun toggleLinks() { linkPreviews = !linkPreviews; sync.linkPreviews = linkPreviews }
+            GroupRow("Link-Vorschau", Glyph.Globe, chevron = false, divider = false,
+                trailing = { IosSwitch(linkPreviews, "Link-Vorschau") { toggleLinks() } }) { toggleLinks() }
         }
         if (!sync.isLocal) section("keep", header = "Auf diesem Handy", compact = true, footer = "So lange bleibt der Inhalt einer Notiz nach der letzten Benutzung auf dem Handy. " +
             "Danach liegt er nur noch verschlüsselt auf dem Server und wird beim Öffnen geladen. Angeheftete Notizen, Listen und Boards bleiben immer hier.") {

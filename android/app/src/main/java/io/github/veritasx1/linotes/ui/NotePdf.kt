@@ -96,6 +96,14 @@ object NotePdf {
                 numbers.clear()
                 continue
             }
+            if (kind == "link") {
+                // A link preview: its title and the address (the address stays readable on paper).
+                val title = block.optString("n").ifEmpty { block.optString("dm") }
+                pdf.styled("🔗 $title – ${block.optString("u").ifEmpty { block.optString("x") }}", 10.5f, false, false, color = pdf.grey,
+                    mono = false, indent = 0f, space = 6f, mark = null, markColor = Color.BLACK, bar = false)
+                numbers.clear()
+                continue
+            }
             if (kind == "table") {
                 // Rows with thin lines, each row kept on one page (same as Ubuntu).
                 val rows = io.github.veritasx1.linotes.data.Model.tableRows(block)

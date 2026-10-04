@@ -739,6 +739,7 @@ HELP = [
         ("Checklisten", "Kreis anklicken, um einen Punkt abzuhaken. Tab rückt ein, Umschalt+Tab aus. Eine leere Zeile "
          "beendet die Liste. Im Format-Menü kannst du abgehakte Punkte automatisch nach unten sortieren lassen."),
         ("Tags", "Schreibe #Wort in eine Notiz – der Tag erscheint unten in der Seitenleiste zum Filtern."),
+        ("Link-Vorschau", "Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du „Link-Vorschau (Webseite abrufen)“ im Darstellungsmenü (⋯) einschaltest; ab Werk ist sie aus. Dafür ruft nur dieser Computer die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Rechtsklick auf die Vorschau → „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau."),
         ("Gesperrte Notizen", "Über das Schloss sperrst du eine Notiz mit deinem Notizen-Passwort. Sie wird zusätzlich "
          "verschlüsselt und sperrt sich nach 10 Minuten ohne Benutzung wieder. Geteilte Notizen können nicht gesperrt werden."),
         ("Gelöschte Notizen", "Gelöschte Notizen liegen 30 Tage in „Zuletzt gelöscht“ und lassen sich dort wiederherstellen."),

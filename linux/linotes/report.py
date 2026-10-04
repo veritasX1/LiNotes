@@ -411,6 +411,14 @@ def write_note_pdf(blocks, path, header, image_path=None):
             pdf.y += layout[0].get_pixel_extents()[1].height + 6
             numbers = {}
             continue
+        if kind == "link":
+            # A link preview: its title and the address (the address stays readable on paper).
+            layout = pdf.layout(f"🔗 {block.get('n') or block.get('dm') or ''} – {block.get('u') or block.get('x') or ''}", 10.5, color=GREY)
+            pdf.need(layout[0].get_pixel_extents()[1].height)
+            pdf.draw(layout, MARGIN, pdf.y)
+            pdf.y += layout[0].get_pixel_extents()[1].height + 6
+            numbers = {}
+            continue
         if kind == "table":
             # Rows with thin lines, each row kept on one page.
             rows = model.table_rows(block)

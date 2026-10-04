@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 /** LiNotes' own symbols (same shapes as on Linux), drawn on a 16×16 grid. */
 enum class Glyph { Folder, FolderShared, Notes, Lock, LockOpen, Trash, Compose, Checklist, Format, Photo, Share, Cart,
     Board, Tag, Pin, Plus, More, Back, Chevron, Search, Person, Cloud, CloudOff, Close, Gear, Grid, ListLines,
-    FolderPlus, Key, Fingerprint, Password, UpDown, Mic, Table, Export }
+    FolderPlus, Key, Fingerprint, Password, UpDown, Mic, Table, Export, Globe }
 
 @Composable
 fun GlyphIcon(glyph: Glyph, tint: Color, size: Dp = 22.dp, modifier: Modifier = Modifier) {
@@ -143,6 +143,12 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
                 drawLine(color, p(13f, 4f), p(13f, 9f), 1.35f * s, StrokeCap.Round)
                 drawLine(color, p(10.5f, 6.5f), p(15.5f, 6.5f), 1.35f * s, StrokeCap.Round)
             }
+        }
+        Glyph.Globe -> {
+            // A globe (web pages): circle, a meridian and the equator.
+            drawCircle(color, 6.5f * s, p(8f, 8f), style = line())
+            drawOval(color, p(5.2f, 1.5f), androidx.compose.ui.geometry.Size(5.6f * s, 13f * s), style = line())
+            drawLine(color, p(1.5f, 8f), p(14.5f, 8f), 1.35f * s, StrokeCap.Round)
         }
         Glyph.Export -> {
             // Apple's export symbol: a tray with an arrow leaving upwards.
