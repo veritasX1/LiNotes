@@ -590,7 +590,8 @@ class SyncEngine:
     def rekey_files(self, item, new_share):
         data = copy.deepcopy(item["data"])
         for block in data.get("body") or []:
-            if block.get("t") == "image" and block.get("f"):
+            # Pictures, attached files and link-preview pictures are encrypted with the share's key.
+            if block.get("t") in ("image", "file", "link") and block.get("f"):
                 try:
                     content = self.fetch_file(block["f"], item.get("share")).read_bytes()
                     block["f"] = self.upload_file(content, new_share)

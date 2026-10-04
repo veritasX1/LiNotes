@@ -72,6 +72,64 @@ def link_target(span_name):
     return span_name[len(NOTE_LINK):] if isinstance(span_name, str) and span_name.startswith(NOTE_LINK) else None
 
 
+# --- templates (Vorlagen) ---------------------------------------------------
+
+WEEKDAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+PLACEHOLDER = re.compile(r"\{\{(Datum|Uhrzeit|Wochentag)\}\}")
+
+
+def _t(kind, text=""):
+    return {"t": kind, "x": text}
+
+
+# Shipped templates (the same in Android's Model.BUILTIN_TEMPLATES): key, name, blocks.
+BUILTIN_TEMPLATES = [
+    ("besprechung", "Besprechung", [
+        _t("title", "Besprechung {{Datum}}"), _t("body", "{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr"),
+        _t("heading", "Teilnehmer"), _t("bullet"), _t("heading", "Themen"), _t("number"),
+        _t("heading", "Beschlüsse"), _t("body"), _t("heading", "Aufgaben"), _t("check")]),
+    ("protokoll", "Protokoll", [
+        _t("title", "Protokoll {{Datum}}"), _t("body", "Ort: "), _t("body", "Anwesend: "),
+        _t("heading", "Verlauf"), _t("body"), _t("heading", "Ergebnisse"), _t("bullet")]),
+    ("reise", "Reisecheckliste", [
+        _t("title", "Packliste"), _t("heading", "Dokumente"), _t("check", "Ausweis oder Reisepass"), _t("check", "Tickets"),
+        _t("check", "Versicherungskarte"), _t("heading", "Kleidung"), _t("check"), _t("heading", "Technik"),
+        _t("check", "Ladegerät"), _t("check", "Kopfhörer"), _t("heading", "Vor der Abreise"), _t("check", "Pflanzen gießen"),
+        _t("check", "Fenster schließen")]),
+    ("tagebuch", "Tagebuch", [_t("title", "{{Wochentag}}, {{Datum}}"), _t("body")]),
+]
+
+
+def fill_template(blocks, now):
+    """A copy of the blocks with {{Datum}}, {{Uhrzeit}}, {{Wochentag}} filled in; formatting spans
+    move with the text (Android: Model.fillTemplate)."""
+    values = {"Datum": now.strftime("%d.%m.%Y"), "Uhrzeit": now.strftime("%H:%M"), "Wochentag": WEEKDAY_NAMES[now.weekday()]}
+    result = []
+    for block in blocks:
+        block = {**block}
+        text = block.get("x", "")
+        spans = [list(span) for span in block.get("s") or []]
+        shift_at = []
+        out, last = [], 0
+        for match in PLACEHOLDER.finditer(text):
+            out.append(text[last:match.start()])
+            value = values[match.group(1)]
+            out.append(value)
+            shift_at.append((match.start(), match.end(), len(value) - (match.end() - match.start())))
+            last = match.end()
+        if shift_at:
+            out.append(text[last:])
+            block["x"] = "".join(out)
+            for span in spans:
+                for position in (0, 1):
+                    delta = sum(change for start, end, change in shift_at if span[position] >= end)
+                    span[position] += delta
+            if spans:
+                block["s"] = spans
+        result.append(block)
+    return result
+
+
 FOOTNOTE = "fn:"
 
 
