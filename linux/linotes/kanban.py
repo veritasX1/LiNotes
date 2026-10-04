@@ -186,6 +186,7 @@ class ColumnWidget(Gtk.Box):
         count = Gtk.Label(label=str(len(cards)))
         count.add_css_class("column-count")
         header.append(count)
+        self.count = count
         header.append(Gtk.Box(hexpand=True))
         menu_button = Gtk.MenuButton(icon_name="view-more-symbolic")
         menu_button.add_css_class("flat")
@@ -270,6 +271,11 @@ class BoardView(Gtk.Box):
         self.subtitle.add_css_class("dim-label")
         titles.append(self.subtitle)
         header.append(titles)
+        # A magnifier finds cards by id, title, notes, fields, commits … (Strg+F while a board is open).
+        search = icon_button("search", "Karten suchen (Strg+F)")
+        search.set_valign(Gtk.Align.CENTER)
+        search.connect("clicked", lambda _button: self.start_search())
+        header.append(search)
         # Person with plus = invite people (as in Apple's apps); the tray with the arrow exports.
         people = icon_button("share", "Personen hinzufügen …")
         people.set_valign(Gtk.Align.CENTER)
@@ -283,6 +289,21 @@ class BoardView(Gtk.Box):
         add_column.connect("clicked", lambda _button: self.add_column())
         header.append(add_column)
         self.append(header)
+
+        self.query = ""
+        self.search_entry = Gtk.SearchEntry(placeholder_text="Karten-ID, Titel, Notizen, Commit … ", hexpand=True)
+        self.search_entry.connect("search-changed", lambda entry: self.set_query(entry.get_text()))
+        self.search_entry.connect("activate", lambda _entry: self.open_first_hit())
+        self.search_entry.connect("stop-search", lambda _entry: self.search_bar.set_search_mode(False))
+        self.search_hits = Gtk.Label(css_classes=["dim-label"])
+        search_box = Gtk.Box(spacing=10, margin_start=20, margin_end=20)
+        search_box.append(self.search_entry)
+        search_box.append(self.search_hits)
+        self.search_bar = Gtk.SearchBar(child=search_box, show_close_button=True)
+        self.search_bar.connect_entry(self.search_entry)
+        self.search_bar.connect("notify::search-mode-enabled",
+                                lambda bar, _p: None if bar.get_search_mode() else self.search_entry.set_text(""))
+        self.append(self.search_bar)
 
         self.columns_box = Gtk.Box(spacing=14)
         self.columns_box.set_margin_start(20)
@@ -323,8 +344,55 @@ class BoardView(Gtk.Box):
         return bool(columns) and columns[-1]["id"] == column_id
 
     def show(self, board_id):
+        if board_id != self.board_id:
+            self.search_bar.set_search_mode(False)
         self.board_id = board_id
         self.refresh()
+
+    # --- search ---------------------------------------------------
+
+    def start_search(self):
+        self.search_bar.set_search_mode(True)
+        self.search_entry.grab_focus()
+
+    def set_query(self, text):
+        self.query = text.strip()
+        self.apply_search()
+
+    def card_widgets(self):
+        column = self.columns_box.get_first_child()
+        while column is not None:
+            card = column.cards_box.get_first_child()
+            while card is not None:
+                yield column, card
+                card = card.get_next_sibling()
+            column = column.get_next_sibling()
+
+    def apply_search(self):
+        """Hide the cards that do not match; the columns count hits of their cards."""
+        hits = {}
+        for column, widget in self.card_widgets():
+            card = self.sync.get(widget.card_id)
+            match = card is not None and model.card_matches(card, self.query, self.sync.user_name)
+            widget.set_visible(match)
+            shown, total = hits.get(column, (0, 0))
+            hits[column] = (shown + match, total + 1)
+        for column, (shown, total) in hits.items():
+            column.count.set_label(f"{shown} / {total}" if self.query else str(total))
+            column.set_visible(shown > 0 or not self.query)  # only columns with hits while searching
+        column = self.columns_box.get_first_child()
+        while column is not None:
+            if column not in hits:  # empty column
+                column.set_visible(not self.query)
+            column = column.get_next_sibling()
+        found = sum(shown for shown, _total in hits.values())
+        self.search_hits.set_label((f"{found} Treffer" if found != 1 else "1 Treffer") if self.query else "")
+
+    def open_first_hit(self):
+        for _column, widget in self.card_widgets():
+            if widget.get_visible() and self.query:
+                self.edit_card(widget.card_id)
+                return
 
     def refresh(self):
         board = self.board()
@@ -355,6 +423,8 @@ class BoardView(Gtk.Box):
             self.columns_box.append(ColumnWidget(self, column, cards))
         where = share_label(self.sync, board)
         self.subtitle.set_label(f"{total} Karten · {where}" + (" · Entwicklungsprojekt" if self.is_dev() else ""))
+        if self.query:
+            self.apply_search()  # a rebuild (sync) keeps the search
         self.restore_scroll(scroll, typing[0] if typing and typing[3] else None)
         if typing:
             # Erst nach dem Layout lässt sich das neue Feld fokussieren.

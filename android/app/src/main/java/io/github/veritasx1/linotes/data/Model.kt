@@ -10,6 +10,26 @@ import java.time.temporal.ChronoUnit
 
 /** Helpers shared by the screens, mirroring linux/linotes/model.py. */
 object Model {
+    /** Everything a card can be found by: id, title, notes, impact, verification, version, commits,
+     *  file and evidence names, the person in charge – lower case (the same as model.card_search_text). */
+    fun cardSearchText(card: SyncObject, userName: ((Int) -> String)? = null): String {
+        val data = card.data
+        val parts = mutableListOf(card.id)
+        for (key in listOf("title", "notes", "impact", "verification", "version")) data.optString(key).takeIf { it.isNotEmpty() && it != "null" }?.let { parts.add(it) }
+        data.optJSONArray("commits")?.let { list -> for (i in 0 until list.length()) list.optJSONObject(i)?.let { parts.add(it.optString("h") + " " + it.optString("m")) } }
+        for (key in listOf("files", "evidence")) data.optJSONArray(key)?.let { list -> for (i in 0 until list.length()) list.optJSONObject(i)?.optString("n")?.let { parts.add(it) } }
+        if (userName != null && data.has("assignee") && !data.isNull("assignee")) parts.add(userName(data.optInt("assignee")))
+        return parts.joinToString(" ").lowercase()
+    }
+
+    /** Every word of the query is somewhere in the card. */
+    fun cardMatches(card: SyncObject, query: String, userName: ((Int) -> String)? = null): Boolean {
+        val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return true
+        val text = cardSearchText(card, userName)
+        return words.all { it in text }
+    }
+
 
     private val tagPattern = Regex("(?<![\\w#])#(\\p{L}[\\p{L}\\p{N}_-]{0,40})")
 

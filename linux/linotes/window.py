@@ -1972,6 +1972,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if key == Gdk.KEY_d and not shift:
             self.duplicate()
             return True
+        if key == Gdk.KEY_f and self.stack.get_visible_child_name() == "board":
+            self.board_view.start_search()  # find cards in the open board
+            return True
         if key == Gdk.KEY_f and (alt or not self.note_pane.editor.has_focus()):
             self.activate_action("win.search")
             return True

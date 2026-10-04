@@ -386,6 +386,28 @@ def short_id(object_id):
     return object_id[:8]
 
 
+def card_search_text(card, user_name=None):
+    """Everything a card can be found by: id, title, notes, impact, verification, version,
+    commits, file and evidence names, the person in charge. Lower case (casefold)."""
+    data = card["data"]
+    parts = [card["id"], data.get("title"), data.get("notes"), data.get("impact"), data.get("verification"),
+             data.get("version")]
+    parts += [f"{c.get('h', '')} {c.get('m', '')}" for c in data.get("commits") or []]
+    parts += [item.get("n", "") for item in (data.get("files") or []) + (data.get("evidence") or [])]
+    if user_name is not None and data.get("assignee") is not None:
+        parts.append(user_name(data["assignee"]))
+    return " ".join(str(part) for part in parts if part).casefold()
+
+
+def card_matches(card, query, user_name=None):
+    """Every word of the query is somewhere in the card (the same in Android's Model.cardMatches)."""
+    words = query.casefold().split()
+    if not words:
+        return True
+    text = card_search_text(card, user_name)
+    return all(word in text for word in words)
+
+
 def moment_label(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
     delta = (datetime.date.today() - moment.date()).days

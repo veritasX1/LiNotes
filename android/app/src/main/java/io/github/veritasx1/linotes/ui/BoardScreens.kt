@@ -224,26 +224,46 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
     var columnMenu by remember { mutableStateOf<SyncObject?>(null) }
     var renameColumn by remember { mutableStateOf<SyncObject?>(null) }
     var addColumn by remember { mutableStateOf(false) }
+    // The magnifier finds cards by id, title, notes, fields, commits … (Model.cardMatches).
+    var searching by remember(boardId) { mutableStateOf(false) }
+    var query by remember(boardId) { mutableStateOf("") }
+    val shown = if (searching && query.isNotBlank()) cards.filter { Model.cardMatches(it, query) { id -> sync.userName(id) } } else cards
     val width = LocalConfiguration.current.screenWidthDp
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
         NavBar("", "Aufgaben", { state.pop() }, actions = {
+            BarButton(Glyph.Search, "Karten suchen") { searching = !searching; if (!searching) query = "" }
             BarButton(Glyph.Share, "Teilen") { state.push(Route.Share(board.id)) }
             BarButton(Glyph.Plus, "Spalte hinzufügen") { addColumn = true }
         })
         Text(board.data.optString("name"), style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
         Text("${cards.size} Karten · " + shareLabel(sync, board) + if (isDevBoard(board)) " · Entwicklungsprojekt" else "",
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
+        if (searching) {
+            val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+            Row(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SearchField(query, { query = it }, "Karten-ID, Titel, Notizen, Commit …", Modifier.weight(1f), focus)
+                Spacer(Modifier.width(10.dp))
+                TextButton("Abbrechen") { searching = false; query = "" }
+            }
+            if (query.isNotBlank()) Text(if (shown.size == 1) "1 Treffer" else "${shown.size} Treffer", style = Type.footnote, color = colors.secondary,
+                modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp))
+            androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        }
         Spacer(Modifier.height(10.dp))
         LazyRow(Modifier.weight(1f).navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(columns, key = { it.id }) { column ->
-                val columnCards = cards.filter { it.data.optString("column") == column.id }.sortedBy { it.data.optDouble("order", 0.0) }
+            // While searching only the columns with hits – the hit is right there, no swiping.
+            items(if (shown === cards) columns else columns.filter { column -> shown.any { it.data.optString("column") == column.id } },
+                key = { it.id }) { column ->
+                val columnCards = shown.filter { it.data.optString("column") == column.id }.sortedBy { it.data.optDouble("order", 0.0) }
+                val columnTotal = if (shown === cards) columnCards.size else cards.count { it.data.optString("column") == column.id }
                 Column(Modifier.width((width * 0.82f).dp).fillMaxHeight().clip(RoundedCornerShape(14.dp)).background(if (colors.dark) colors.fill.copy(alpha = 0.5f) else colors.fill).padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(column.data.optString("name"), style = Type.headline, color = colors.label)
                         Spacer(Modifier.width(6.dp))
-                        Text("${columnCards.size}", style = Type.subheadline, color = colors.secondary, modifier = Modifier.weight(1f))
+                        Text(if (shown === cards) "${columnCards.size}" else "${columnCards.size} / $columnTotal", style = Type.subheadline,
+                            color = colors.secondary, modifier = Modifier.weight(1f))
                         BarButton(Glyph.More, "Spalte ${column.data.optString("name")} bearbeiten", tint = colors.secondary) { columnMenu = column }
                     }
                     LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
