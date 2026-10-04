@@ -34,6 +34,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.widget.EditText
 import io.github.veritasx1.linotes.data.LinkPreview
+import io.github.veritasx1.linotes.data.Syntax
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -80,9 +81,20 @@ class ParaSpan(
     val checked: Boolean,
     private val density: Float,
     private val colors: EditorColors,
-) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan, android.text.style.AlignmentSpan {
+) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan, android.text.style.AlignmentSpan, android.text.style.LineBackgroundSpan {
 
     var number = 1
+    /** Code blocks (Profi-Funktion): the language whose colors the lines get, e.g. "python". */
+    var lang: String? = null
+
+    override fun drawBackground(canvas: Canvas, paint: Paint, left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
+                                text: CharSequence, start: Int, end: Int, lineNumber: Int) {
+        if (type != "code") return
+        val saved = paint.color
+        paint.color = (colors.label and 0x00FFFFFF) or 0x14000000
+        canvas.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+        paint.color = saved
+    }
     /** Paragraph alignment like Format → Text in Notes: null (left), "center", "right". */
     var align: String? = null
 
@@ -108,7 +120,7 @@ class ParaSpan(
             "title" -> { paint.textSize *= 1.75f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
             "heading" -> { paint.textSize *= 1.35f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
             "subheading" -> { paint.textSize *= 1.12f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
-            "mono" -> { paint.textSize *= 0.92f; paint.typeface = Typeface.MONOSPACE }
+            "mono", "code" -> { paint.textSize *= 0.92f; paint.typeface = Typeface.MONOSPACE }
             "quote" -> { paint.typeface = Typeface.create(paint.typeface, Typeface.ITALIC); paint.color = colors.secondary }
         }
         if (type == "check" && checked) paint.color = colors.secondary
@@ -121,6 +133,7 @@ class ParaSpan(
         fold != 0 -> (20 * density).toInt()
         type in LIST_TYPES -> ((30 + 24 * level) * density).toInt()
         type == "quote" -> (16 * density).toInt()
+        type == "code" -> (8 * density).toInt()
         else -> 0
     }
 
@@ -320,6 +333,19 @@ data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, v
  * are standard spans, images are [ImageBlockSpan]s on an object character.
  */
 @SuppressLint("ViewConstructor")
+/** A code color (display only – toBlocks ignores it, so it is never stored). */
+class SyntaxSpan(val kind: String, private val dark: Boolean) : android.text.style.CharacterStyle() {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.color = when (kind) {
+            "keyword" -> if (dark) 0xFFC79BFF.toInt() else 0xFF9C52E0.toInt()
+            "string" -> if (dark) 0xFF6FD39A.toInt() else 0xFF1A9452.toInt()
+            "comment" -> if (dark) 0xFF9A9AA2.toInt() else 0xFF85858C.toInt()
+            else -> if (dark) 0xFFFFB45C.toInt() else 0xFFE07A00.toInt()
+        }
+        if (kind == "comment") paint.textSkewX = -0.2f
+    }
+}
+
 class RichEditor(context: Context, private var colors: EditorColors, private val loadImage: (String, (Bitmap?) -> Unit) -> Unit) :
     EditText(context) {
 
@@ -404,6 +430,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 busy = true
                 try {
                     handleEdit(s, insertStart, insertCount)
+                    highlightCode(s)
                 } finally {
                     busy = false
                 }
@@ -554,6 +581,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 normalize(text)
                 return
             }
+            if (style != null && style.type == "code" && content.isBlank()) {
+                // An empty code line ends the code block (like an empty list item ends a list).
+                text.delete(enterAt, enterAt + 1)
+                setPara(text, paragraphStart, makeSpan("body"))
+                normalize(text)
+                return
+            }
             if (style != null && style.type in LIST_TYPES && content.isBlank()) {
                 text.delete(enterAt, enterAt + 1)
                 setPara(text, paragraphStart, if (style.level > 0) makeSpan(style.type, style.level - 1) else makeSpan("body"))
@@ -634,6 +668,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     private fun setPara(text: Editable, paragraphStart: Int, span: ParaSpan) {
         spanStartingAt(text, paragraphStart)?.let { old ->
             if (span.align == null) span.align = old.align
+            if (span.lang == null && span.type == "code") span.lang = old.lang
             text.removeSpan(old)
         }
         val end = paragraphEnd(text, paragraphStart)
@@ -671,6 +706,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         // Alignment stays with its paragraph and carries on to the one created by Enter.
         starts.forEachIndexed { index, start ->
             styles[index].align = if (enterAt >= 0 && start == enterAt + 1) enterStyle?.align else spanStartingAt(text, start)?.align
+            // Code blocks keep their language, also on the line created by Enter.
+            if (styles[index].type == "code") styles[index].lang =
+                if (enterAt >= 0 && start == enterAt + 1) enterStyle?.lang else spanStartingAt(text, start)?.lang
         }
         // Empty list items get the placeholder, everything else loses it (back to front: offsets stay valid).
         for (index in starts.indices.reversed()) {
@@ -770,6 +808,31 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         busy = false
         onEdited?.invoke()
         onStyleChanged?.invoke()
+    }
+
+    /** Format → Code (language), a Profi-Funktion: the selected paragraphs become a code block. */
+    fun makeCode(lang: String) {
+        val text = text ?: return
+        busy = true
+        for (start in selectedParagraphs()) setPara(text, start, makeSpan("code").also { it.lang = lang })
+        normalize(text)
+        highlightCode(text)
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
+    /** Colors keywords, strings, comments, numbers in code paragraphs – display only (SyntaxSpan is never saved). */
+    fun highlightCode(text: Editable) {
+        for (old in text.getSpans(0, text.length, SyntaxSpan::class.java)) text.removeSpan(old)
+        for (start in paragraphStarts(text)) {
+            val span = spanStartingAt(text, start) ?: continue
+            if (span.type != "code") continue
+            val end = paragraphEnd(text, start)
+            for (token in Syntax.tokens(text.substring(start, end), span.lang)) {
+                text.setSpan(SyntaxSpan(token.kind, android.graphics.Color.luminance(colors.label) > 0.5f), start + token.start, start + token.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
     }
 
     fun indent(direction: Int) {
@@ -1096,6 +1159,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             val paraType = if (type == "image" || type == "divider" || type == "file" || type == "link" || type == "table") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
+            if (paraType == "code") span.lang = block.optString("lang").takeIf { it in Syntax.LANGUAGES }
             folds[index]?.let { hidden ->
                 foldSpans.add(Triple(FoldSpan(hidden), start, builder.length))
                 span.fold = 2
@@ -1118,7 +1182,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
-        text?.let { markLinks(it); markFixedSpaces(it) }
+        text?.let { markLinks(it); markFixedSpaces(it); highlightCode(it) }
         lineBlocks = origins
         busy = false
     }
@@ -1170,6 +1234,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (span != null && span.level > 0) block.put("l", span.level)
             if (span?.type == "check") block.put("c", span.checked)
             span?.align?.let { block.put("a", it) }
+            if (span?.type == "code") span.lang?.let { block.put("lang", it) }
             val fold = foldAt(text, start)?.takeIf { span?.type in FOLDABLE }
             val spans = JSONArray()
             for (name in INLINE) {

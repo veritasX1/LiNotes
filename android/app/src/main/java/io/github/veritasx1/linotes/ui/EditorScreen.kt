@@ -429,7 +429,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     editor.finishLink(id, title)
                 }) { linkQuery = null; editor.finishLink(null, null) }
             }
-            if (showFormat) FormatPanel(editor, styleTick) { showFormat = false }
+            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures) { showFormat = false }
             if (!trashed) EditorToolbar(
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
@@ -699,7 +699,7 @@ private fun LinkPanel(heading: String, glyph: Glyph, empty: String, choices: Lis
 }
 
 @Composable
-private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
+private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onClose: () -> Unit) {
     val colors = palette
     val current = remember(tick) { editor.currentStyle() }
     val inline = remember(tick) { editor.activeInline() }
@@ -806,6 +806,18 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
             // Also: "---" and Enter on an empty line.
             Text("Trennlinie", fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.insertDivider() }.padding(horizontal = 10.dp, vertical = 8.dp))
+        }
+        // Profi-Funktionen only when switched on (Settings) – Tante Erna sees a calm panel.
+        if (pro) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Code", fontSize = 15.sp, color = colors.label, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
+                for ((lang, label) in io.github.veritasx1.linotes.data.Syntax.LANGUAGES) {
+                    Text(label, fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.makeCode(lang) }
+                            .padding(horizontal = 9.dp, vertical = 8.dp))
+                }
+            }
         }
     }
 }
