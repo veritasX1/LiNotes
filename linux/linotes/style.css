@@ -454,3 +454,24 @@ button.font-serif { font-family: Serif; }
 .link-thumb {
   border-radius: 8px;
 }
+
+/* A recording as a voice message bubble like in Apple's Messages (card 900036dc). */
+.audio-bubble {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+  border-radius: 22px;
+  padding: 6px 14px 6px 6px;
+  margin: 2px 0;
+}
+.audio-bubble-play,
+.audio-bubble-play:hover {
+  background-color: var(--accent-fg-color);
+  color: var(--accent-bg-color);
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+}
+.audio-bubble-time {
+  font-weight: 600;
+  font-size: 10pt;
+}

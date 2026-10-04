@@ -1,5 +1,6 @@
-"""Card 900036dc: a click on a picture opens it in the quick look, a click on a recording's card plays
-or pauses it inside the note (Apple-style player: ±15 s, seek) – the cursor stays where it was."""
+"""Card 900036dc: a click on a picture opens it in the quick look, a click on a recording plays or
+pauses it inside the note – a voice message bubble like in Apple's Messages with the recording's
+waveform (a click on it jumps there) – and the cursor stays where it was."""
 
 import os
 import subprocess
@@ -42,7 +43,25 @@ def main():
     assert audio.recording_label({"n": "Aufnahme 2026-13-04 14-22.ogg"}) == ("Aufnahme 2026-13-04 14-22", "")
     assert audio.recording_label({}) == ("Audioaufnahme", "")
 
+    # Waveform bars (same cases as ObjectTapTest.peaks on Android).
+    assert audio.peaks([], 4) == [0.08] * 4
+    assert audio.peaks([0, 0, 0, 0, 0, 0, 0, 0], 4) == [0.08] * 4
+    assert audio.peaks([100, -400, 0, 0, 25, 1, -100, 50], 4) == [1.0, 0.08, 0.25, 0.5]
+    assert audio.peaks([7, -9, 3], 5) == [0.882, 0.882, 1.0, 1.0, 0.577]
+
     folder = Path(tempfile.mkdtemp())
+    # A recording with a pause in the middle: the waveform shows it.
+    import struct
+    import wave as wavefile
+    rate = 8000
+    with wavefile.open(str(folder / "pause.wav"), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        loud = struct.pack("<16h", *([12000] * 8 + [-12000] * 8)) * (rate // 16)  # 500 Hz, one second
+        handle.writeframes(loud + bytes(4 * rate) + loud)
+    bars = audio.waveform(folder / "pause.wav", 12)
+    assert bars[0] > 0.9 and bars[-1] > 0.9 and max(bars[5:7]) == 0.08, bars
     sound = folder / "ton.ogg"
     subprocess.run(["gst-launch-1.0", "-q", "audiotestsrc", "num-buffers=1500", "!", "audioconvert", "!", "opusenc", "!", "oggmux",
                     "!", "filesink", f"location={sound}"], check=True)
@@ -69,7 +88,7 @@ def main():
     click(entry["picture"])
     settle(1.0)
     assert editor.player.on_state is show and not editor.player.paused, "spielt nicht"
-    editor.player.jump(15)
+    editor.player.seek(15)
     settle(0.4)
     assert editor.player.position() >= 14.5, editor.player.position()
     click(entry["picture"])  # the card again: pause
