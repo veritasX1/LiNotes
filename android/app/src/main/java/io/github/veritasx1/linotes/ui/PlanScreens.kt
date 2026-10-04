@@ -43,6 +43,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -145,6 +146,8 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
     var rotation by remember { mutableStateOf(false) }
     // A task just added opens for editing right away.
     var openTask by remember { mutableStateOf<Int?>(null) }
+    // Like Reminders: "Reihenfolge ändern" shows arrows on every task until "Fertig".
+    var reordering by remember { mutableStateOf(false) }
     fun save(data: JSONObject) = sync.put("plan", data, obj.share, planId)
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
@@ -159,7 +162,8 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f).navigationBarsPadding()) {
-            if (Plans.isTimeline(plan)) Timeline(plan, openTask, onOpened = { openTask = null },
+            if (Plans.isTimeline(plan)) Timeline(plan, openTask, sync.userId, reordering, onReordered = { reordering = false },
+                onOpened = { openTask = null },
                 onAdd = { milestone -> save(addTask(plan, milestone)); openTask = Plans.tasks(plan).size }) { save(it) }
             else Grid(plan) { save(it) }
         }
@@ -169,6 +173,10 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
             if (Plans.isTimeline(plan)) {
                 add(SheetAction("Aufgabe hinzufügen") { save(addTask(plan, false)); openTask = Plans.tasks(plan).size })
                 add(SheetAction("Meilenstein hinzufügen") { save(addTask(plan, true)); openTask = Plans.tasks(plan).size })
+                if (Plans.tasks(plan).size > 1) {
+                    add(SheetAction("Reihenfolge ändern") { reordering = true })
+                    add(SheetAction("Nach Datum sortieren") { save(Plans.sortTasks(plan)) })
+                }
             } else {
                 add(SheetAction("Zeile hinzufügen") { save(Plans.insertRow(plan, Plans.rows(plan).size)) })
                 add(SheetAction(if (Plans.columnType(plan) == "free") "Spalte hinzufügen" else "Spalte anhängen") { save(Plans.insertColumn(plan, Plans.columnCount(plan))) })
@@ -280,7 +288,9 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
             onDismiss = { target = null }) { text, color -> save(Plans.setCell(plan, t.row, t.column, text, color)); target = null }
         is GridTarget.RowHead -> HeadSheet("Zeile", rows[t.row], editable = true, canRemove = rows.size > 1, free = true,
             onDismiss = { target = null }, rename = { save(Plans.setRow(plan, t.row, it)) },
-            before = { save(Plans.insertRow(plan, t.row)) }, after = { save(Plans.insertRow(plan, t.row + 1)) }, remove = { save(Plans.removeRow(plan, t.row)) })
+            before = { save(Plans.insertRow(plan, t.row)) }, after = { save(Plans.insertRow(plan, t.row + 1)) }, remove = { save(Plans.removeRow(plan, t.row)) },
+            up = if (t.row > 0) ({ save(Plans.moveRow(plan, t.row, t.row - 1)) }) else null,
+            down = if (t.row < rows.size - 1) ({ save(Plans.moveRow(plan, t.row, t.row + 1)) }) else null)
         is GridTarget.ColumnHead -> HeadSheet("Spalte", labels[t.column], editable = free, canRemove = labels.size > 1, free = free,
             onDismiss = { target = null }, rename = { save(Plans.setColumnLabel(plan, t.column, it)) },
             before = { save(Plans.insertColumn(plan, t.column)) }, after = { save(Plans.insertColumn(plan, t.column + 1)) },
@@ -291,7 +301,8 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
 
 @Composable
 private fun HeadSheet(kind: String, label: String, editable: Boolean, canRemove: Boolean, free: Boolean, onDismiss: () -> Unit,
-                      rename: (String) -> Unit, before: () -> Unit, after: () -> Unit, remove: () -> Unit) {
+                      rename: (String) -> Unit, before: () -> Unit, after: () -> Unit, remove: () -> Unit,
+                      up: (() -> Unit)? = null, down: (() -> Unit)? = null) {
     var renaming by remember { mutableStateOf(false) }
     if (renaming) {
         AlertDialog("$kind umbenennen", confirm = "Sichern", fields = listOf(AlertField(kind, label)), onDismiss = onDismiss) { values ->
@@ -306,6 +317,8 @@ private fun HeadSheet(kind: String, label: String, editable: Boolean, canRemove:
             add(SheetAction(if (rowKind) "Zeile darüber einfügen" else "Spalte links einfügen") { before(); onDismiss() })
             add(SheetAction(if (rowKind) "Zeile darunter einfügen" else "Spalte rechts einfügen") { after(); onDismiss() })
         } else add(SheetAction("Spalte anhängen") { after(); onDismiss() })
+        up?.let { add(SheetAction("Zeile nach oben") { it(); onDismiss() }) }
+        down?.let { add(SheetAction("Zeile nach unten") { it(); onDismiss() }) }
         if (canRemove) add(SheetAction(if (rowKind) "Zeile löschen" else if (free) "Spalte löschen" else "Letzte Spalte entfernen", destructive = true) { remove(); onDismiss() })
     }) { if (!renaming) onDismiss() }
 }
@@ -354,7 +367,8 @@ private fun CellDialog(text: String, color: String, rotated: String?, title: Str
 // --- timeline ---
 
 @Composable
-private fun Timeline(plan: JSONObject, open: Int?, onOpened: () -> Unit, onAdd: (Boolean) -> Unit, save: (JSONObject) -> Unit) {
+private fun Timeline(plan: JSONObject, open: Int?, userId: Int, reordering: Boolean, onReordered: () -> Unit, onOpened: () -> Unit,
+                     onAdd: (Boolean) -> Unit, save: (JSONObject) -> Unit) {
     val colors = palette
     val tasks = Plans.tasks(plan)
     val (first, last) = Plans.timelineRange(plan)
@@ -394,6 +408,15 @@ private fun Timeline(plan: JSONObject, open: Int?, onOpened: () -> Unit, onAdd: 
                         val color = planColor(task.optString("k").ifEmpty { "blue" })
                         if (task.optBoolean("m")) {
                             val cx = x + day / 2; val cy = y + row / 2 - 4.dp.toPx(); val s = 9.dp.toPx()
+                            // Earlier days stay visible, faded, joined to the current one by a dashed line.
+                            for (entry in Plans.moved(task)) {
+                                val was = Plans.day(entry.optString("was")) ?: continue
+                                val ox = ChronoUnit.DAYS.between(first, was) * day + day / 2
+                                drawPath(Path().apply { moveTo(ox, cy - s); lineTo(ox + s, cy); lineTo(ox, cy + s); lineTo(ox - s, cy); close() }, color.copy(alpha = 0.3f))
+                                val sign = if (cx > ox) 1 else -1
+                                drawLine(color.copy(alpha = 0.5f), Offset(ox + sign * s, cy), Offset(cx - sign * s, cy), 1.2.dp.toPx(),
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())))
+                            }
                             drawPath(Path().apply { moveTo(cx, cy - s); lineTo(cx + s, cy); lineTo(cx, cy + s); lineTo(cx - s, cy); close() }, color)
                         } else {
                             val w = (ChronoUnit.DAYS.between(span.first, span.second) + 1) * day
@@ -404,14 +427,34 @@ private fun Timeline(plan: JSONObject, open: Int?, onOpened: () -> Unit, onAdd: 
             }
         }
         Spacer(Modifier.height(12.dp))
+        if (reordering) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Reihenfolge ändern", style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
+            TextButton("Fertig", bold = true, onClick = onReordered)
+        }
         tasks.forEachIndexed { index, task ->
             val span = Plans.taskSpan(task)
-            Row(Modifier.fillMaxWidth().clickable { editing = index }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable(enabled = !reordering) { editing = index }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).clip(if (task.optBoolean("m")) RoundedCornerShape(2.dp) else CircleShape).background(planColor(task.optString("k").ifEmpty { "blue" })))
                 Spacer(Modifier.width(10.dp))
                 Text(task.optString("x").ifEmpty { "Aufgabe" }, style = Type.body, color = colors.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(span?.let { if (task.optBoolean("m")) "◆ " + german(it.first) else "${german(it.first)} – ${german(it.second)}" }.orEmpty(),
                     style = Type.subheadline, color = colors.secondary)
+                if (reordering) {
+                    Spacer(Modifier.width(6.dp))
+                    for ((label, to) in listOf("↑" to index - 1, "↓" to index + 1)) {
+                        val possible = to in tasks.indices
+                        Box(Modifier.size(40.dp).clip(CircleShape).clickable(enabled = possible) { save(Plans.moveTask(plan, index, to)) },
+                            contentAlignment = Alignment.Center) {
+                            Text(label, style = Type.title3, color = if (possible) colors.accentText else colors.tertiary)
+                        }
+                    }
+                }
+            }
+            val moved = Plans.moved(task)
+            if (moved.isNotEmpty()) {
+                val trail = (moved.map { it.optString("was") } + task.optString("from")).mapNotNull { Plans.day(it)?.let(::german) }.joinToString(" → ")
+                Text("verschoben: $trail", style = Type.caption, color = colors.secondary,
+                    modifier = Modifier.padding(start = 38.dp, end = 16.dp, bottom = 8.dp))
             }
             HorizontalDivider(Modifier.padding(start = 38.dp), 0.5.dp, colors.separator)
         }
@@ -428,7 +471,13 @@ private fun Timeline(plan: JSONObject, open: Int?, onOpened: () -> Unit, onAdd: 
         TaskDialog(tasks[index], onDismiss = { editing = null }, onDelete = {
             save(JSONObject(plan.toString()).put("tasks", JSONArray(tasks.filterIndexed { i, _ -> i != index }))); editing = null
         }) { changed ->
-            save(JSONObject(plan.toString()).put("tasks", JSONArray(tasks.mapIndexed { i, t -> if (i == index) changed else t }))); editing = null
+            // Name and color as they are; the days through setTaskDay, which keeps a milestone's old day.
+            var updated = JSONObject(plan.toString()).put("tasks", JSONArray(tasks.mapIndexed { i, t ->
+                if (i == index) JSONObject(t.toString()).put("x", changed.optString("x")).put("k", changed.optString("k")) else t }))
+            val at = System.currentTimeMillis() / 1000.0
+            updated = Plans.setTaskDay(updated, index, "from", changed.optString("from"), userId, at)
+            if (!changed.optBoolean("m")) updated = Plans.setTaskDay(updated, index, "to", changed.optString("to"), userId, at)
+            save(updated); editing = null
         }
     }
 }
@@ -492,7 +541,7 @@ private fun TaskDialog(task: JSONObject, onDismiss: () -> Unit, onDelete: () -> 
 // ================================================================
 
 object PlanPdf {
-    fun write(plan: JSONObject, file: File) {
+    fun write(plan: JSONObject, file: File, userName: ((Int) -> String)? = null) {
         val name = plan.optString("name").ifEmpty { "Plan" }
         val pdf = Report.Pdf(true, "$name · Stand ${german(LocalDate.now())}")
         pdf.text(name, 18f, true, space = 10f)
@@ -520,10 +569,37 @@ object PlanPdf {
                     val x = pdf.margin + labelWidth + ChronoUnit.DAYS.between(first, from) * scale
                     if (task.optBoolean("m")) {
                         val cx = x + scale / 2; val cy = pdf.y + 11
+                        // Earlier days faded, joined by a dashed line (as in the app).
+                        val base = fill.color
+                        for (entry in Plans.moved(task)) {
+                            val was = Plans.day(entry.optString("was")) ?: continue
+                            val ox = pdf.margin + labelWidth + ChronoUnit.DAYS.between(first, was) * scale + scale / 2
+                            fill.color = base; fill.alpha = 77
+                            pdf.canvas.drawPath(android.graphics.Path().apply { moveTo(ox, cy - 8); lineTo(ox + 8, cy); lineTo(ox, cy + 8); lineTo(ox - 8, cy); close() }, fill)
+                            val dash = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                style = android.graphics.Paint.Style.STROKE; strokeWidth = 0.9f; color = base; alpha = 128
+                                pathEffect = android.graphics.DashPathEffect(floatArrayOf(2.5f, 2.5f), 0f) }
+                            val sign = if (cx > ox) 1 else -1
+                            pdf.canvas.drawLine(ox + sign * 8, cy, cx - sign * 8, cy, dash)
+                        }
+                        fill.color = base; fill.alpha = 255
                         pdf.canvas.drawPath(android.graphics.Path().apply { moveTo(cx, cy - 8); lineTo(cx + 8, cy); lineTo(cx, cy + 8); lineTo(cx - 8, cy); close() }, fill)
                     } else pdf.canvas.drawRect(x, pdf.y + 4, x + (ChronoUnit.DAYS.between(from, to) + 1) * scale, pdf.y + 18, fill)
                 }
                 pdf.y += 24f
+            }
+            val moves = Plans.shifts(plan)
+            if (moves.isNotEmpty()) {
+                pdf.y += 14f
+                pdf.text("Terminverschiebungen", 12f, true, space = 6f)
+                val stamp = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.GERMANY)
+                fun date(text: String) = Plans.day(text)?.let(::german) ?: "–"
+                pdf.table(listOf("Meilenstein", "Bisher", "Neu", "Verschiebung", "Geändert am", "Von"), listOf(3f, 1.4f, 1.4f, 1.2f, 1.6f, 1.8f),
+                    moves.map { m ->
+                        val days = Plans.day(m.was)?.let { was -> Plans.day(m.now)?.let { ChronoUnit.DAYS.between(was, it) } }
+                        listOf(m.name, date(m.was), date(m.now), days?.let { "%+d Tage".format(it) } ?: "–",
+                            m.at?.let { stamp.format(java.util.Date((it * 1000).toLong())) } ?: "–", m.by?.let { userName?.invoke(it) } ?: "–")
+                    }, size = 9f)
             }
         } else {
             val rows = Plans.textRows(plan)
@@ -561,7 +637,7 @@ object PlanPdf {
         val name = plan.data.optString("name").ifEmpty { "Plan" }
         val folder = File(context.cacheDir, "reports").apply { mkdirs() }
         val file = File(folder, "${name.replace(Regex("[/\\\\:*?\"<>|]"), "_")}.pdf")
-        write(JSONObject(plan.data.toString()), file)
+        write(JSONObject(plan.data.toString()), file) { state.sync.userName(it) }
         state.shareFile(file, "application/pdf", "Plan: $name")
     }
 }
