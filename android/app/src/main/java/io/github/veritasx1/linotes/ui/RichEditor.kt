@@ -380,11 +380,15 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var onOpenFile: ((JSONObject) -> Unit)? = null
     /** A picture was tapped: the screen shows it in the quick look (900036dc). */
     var onOpenImage: ((String) -> Unit)? = null
-    /** A control on a recording's player card: "toggle", "back", "forward", or "seek" (with 0…1). */
+    /** A recording was tapped: "toggle" (play/pause) or "seek" (with the place on the waveform, 0…1). */
     var onAudio: ((JSONObject, String, Float) -> Unit)? = null
     /** What the player cards show (file id → state); see [showAudio]. */
     data class AudioView(val running: Boolean, val position: Long, val length: Long)
     private val audioViews = HashMap<String, AudioView>()
+    /** Reads a recording's waveform in the background (set by the screen); results by file id. */
+    var loadWaveform: ((String, (FloatArray?) -> Unit) -> Unit)? = null
+    private val waveforms = HashMap<String, FloatArray>()
+    private val waveformsAsked = HashSet<String>()
     private var objectTouch: Any? = null
     private var downX = 0f
     private var downY = 0f
@@ -1680,85 +1684,68 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
 
-    // --- recordings: a player card like Apple's (HIG: filled play/pause, ±15 s, scrubber,
-    //     elapsed and remaining time with even digits, targets of at least 44 dp) ----------
+    // --- recordings: a voice message bubble like in Apple's Messages (Olaf's choice of five
+    //     designs, 900036dc; HIG: filled play/pause, a tap target of 44 dp, even digits) ---------
 
-    private val audioIdleHeight get() = 76 * density
-    private val audioOpenHeight get() = 124 * density
+    private val waveLeft get() = 54 * density
+    private val waveWidth get() = AudioNotes.BARS * 5 * density
 
-    /** Which control of a recording's card is at (x, y) (card coordinates): the action and, for
-     *  "seek", the place on the bar (0…1). Anything else on the card plays/pauses. */
+    /** What a tap at x (bubble coordinates) does: on the waveform jump there, elsewhere play/pause. */
     private fun audioHit(block: JSONObject, x: Float, y: Float, width: Float): Pair<String, Float> {
-        val open = audioViews.containsKey(block.optString("f"))
-        val d = density
-        if (!open) return "toggle" to 0f
-        if (abs(y - 38 * d) <= 24 * d && abs(x - (width - 92 * d)) <= 22 * d) return "back" to 0f
-        if (abs(y - 38 * d) <= 24 * d && abs(x - (width - 42 * d)) <= 22 * d) return "forward" to 0f
-        if (y >= 66 * d) return "seek" to ((x - 16 * d) / (width - 32 * d)).coerceIn(0f, 1f)
+        if (x >= waveLeft - 2 * density && x <= waveLeft + waveWidth + 2 * density)
+            return "seek" to ((x - waveLeft) / waveWidth).coerceIn(0f, 1f)
         return "toggle" to 0f
     }
 
     private fun audioCard(block: JSONObject, view: AudioView?): Drawable {
         val d = density
-        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 }?.coerceAtMost((420 * d).toInt()) ?: (320 * d).toInt()
-        val height = (if (view != null) audioOpenHeight else audioIdleHeight).toInt()
+        val fileId = block.optString("f")
+        // Readable on the accent (HIG contrast): white on the darker accent, near black on the bright one (dark mode).
+        val onAccent = if (android.graphics.Color.luminance(colors.accent) > 0.55f) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
+        val time = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = onAccent; textSize = 13 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD
+            fontFeatureSettings = "tnum"; textAlign = Paint.Align.RIGHT
+        }
+        val length = block.optDouble("d", 0.0)
+        val shown = if (view != null) AudioNotes.durationText(maxOf(0L, view.length - view.position) / 1000.0) else AudioNotes.durationText(length)
+        val timeWidth = maxOf(time.measureText("00:00"), time.measureText(shown))
+        val width = (waveLeft + waveWidth + 12 * d + timeWidth + 16 * d).toInt()
+        val height = (46 * d).toInt()
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val box = android.graphics.RectF(d, d, width - d, height - d)
-        canvas.drawRoundRect(box, 12 * d, 12 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (colors.label and 0x00FFFFFF) or 0x10000000 })
-        canvas.drawRoundRect(box, 12 * d, 12 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE; strokeWidth = d; color = (colors.label and 0x00FFFFFF) or 0x26000000 })
-        // Round play/pause button in the accent color.
-        val cx = 34 * d
-        val cy = 38 * d
-        val radius = 22 * d
-        canvas.drawCircle(cx, cy, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
-        val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+        canvas.drawRoundRect(android.graphics.RectF(0f, 0f, width.toFloat(), height.toFloat()), height / 2f, height / 2f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
+        // Play/pause: a white circle with the symbol in the accent color.
+        val cx = 25 * d
+        val cy = height / 2f
+        canvas.drawCircle(cx, cy, 17 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = onAccent })
+        val symbol = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent }
         if (view?.running == true) {
-            canvas.drawRoundRect(cx - 7 * d, cy - 8 * d, cx - 2.5f * d, cy + 8 * d, 1.5f * d, 1.5f * d, white)
-            canvas.drawRoundRect(cx + 2.5f * d, cy - 8 * d, cx + 7 * d, cy + 8 * d, 1.5f * d, 1.5f * d, white)
+            canvas.drawRoundRect(cx - 5.5f * d, cy - 6.5f * d, cx - 1.8f * d, cy + 6.5f * d, 1.2f * d, 1.2f * d, symbol)
+            canvas.drawRoundRect(cx + 1.8f * d, cy - 6.5f * d, cx + 5.5f * d, cy + 6.5f * d, 1.2f * d, 1.2f * d, symbol)
         } else {
             canvas.drawPath(android.graphics.Path().apply {
-                moveTo(cx - 6 * d, cy - 9 * d); lineTo(cx + 10 * d, cy); lineTo(cx - 6 * d, cy + 9 * d); close()
-            }, white)
+                moveTo(cx - 4.5f * d, cy - 7 * d); lineTo(cx + 7.5f * d, cy); lineTo(cx - 4.5f * d, cy + 7 * d); close()
+            }, symbol)
         }
-        val (title, subtitle) = AudioNotes.label(block)
-        val textLeft = 68 * d
-        val textRight = if (view != null) width - 118 * d else width - 12 * d
-        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
-        val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
-        canvas.drawText(android.text.TextUtils.ellipsize(title, titlePaint, textRight - textLeft, android.text.TextUtils.TruncateAt.END).toString(),
-            textLeft, cy - 3 * d, titlePaint)
-        canvas.drawText(android.text.TextUtils.ellipsize(subtitle.ifEmpty { fileDetails(block) }, sub, textRight - textLeft,
-            android.text.TextUtils.TruncateAt.END).toString(), textLeft, cy + 17 * d, sub)
-        if (view != null) {
-            // ±15 s as circular arrows with "15" inside (Apple's gobackward.15 / goforward.15).
-            val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f * d; color = colors.accent; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-            val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent; textSize = 9 * d; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
-            for ((centerX, forward) in listOf(width - 92 * d to false, width - 42 * d to true)) {
-                val r = 12 * d
-                val oval = android.graphics.RectF(centerX - r, cy - r, centerX + r, cy + r)
-                if (forward) canvas.drawArc(oval, -90f + 34f, 326f, false, stroke) else canvas.drawArc(oval, -90f - 34f, -326f, false, stroke)
-                val side = if (forward) -1 else 1
-                canvas.drawPath(android.graphics.Path().apply {
-                    moveTo(centerX + side * 4 * d, cy - r - 4 * d); lineTo(centerX, cy - r); lineTo(centerX + side * 4 * d, cy - r + 4 * d)
-                }, stroke)
-                canvas.drawText("15", centerX, cy + 3.5f * d, label)
+        // The waveform, the played part brighter.
+        val peaks = waveforms[fileId] ?: FloatArray(AudioNotes.BARS) { 0.08f }
+        val fraction = if (view != null && view.length > 0) view.position.toFloat() / view.length else 0f
+        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 3 * d; strokeCap = Paint.Cap.ROUND }
+        val step = waveWidth / peaks.size
+        val waveHeight = 28 * d
+        peaks.forEachIndexed { index, value ->
+            bar.color = if ((index + 0.5f) / peaks.size <= fraction) onAccent else (onAccent and 0x00FFFFFF) or 0x73000000
+            val h = maxOf(3 * d, value * waveHeight)
+            val x = waveLeft + index * step + step / 2
+            canvas.drawLine(x, cy - h / 2 + 1.5f * d, x, cy + h / 2 - 1.5f * d, bar)
+        }
+        canvas.drawText(shown, width - 16 * d, cy + 4.5f * d, time)
+        if (fileId.isNotEmpty() && waveformsAsked.add(fileId)) loadWaveform?.invoke(fileId) { peaksRead ->
+            if (peaksRead != null) {
+                waveforms[fileId] = peaksRead
+                post { showAudio(fileId, audioViews[fileId]) }
             }
-            // Scrubber with elapsed and remaining time (tabular digits).
-            val fraction = if (view.length > 0) (view.position.toFloat() / view.length).coerceIn(0f, 1f) else 0f
-            val barLeft = 16 * d
-            val barRight = width - 16 * d
-            val barY = 86 * d
-            val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (colors.label and 0x00FFFFFF) or 0x30000000 }
-            canvas.drawRoundRect(barLeft, barY - 2 * d, barRight, barY + 2 * d, 2 * d, 2 * d, track)
-            val knobX = barLeft + (barRight - barLeft) * fraction
-            canvas.drawRoundRect(barLeft, barY - 2 * d, knobX, barY + 2 * d, 2 * d, 2 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
-            canvas.drawCircle(knobX, barY, 7 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
-            val time = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 12 * resources.displayMetrics.scaledDensity; fontFeatureSettings = "tnum" }
-            canvas.drawText(AudioNotes.durationText(view.position / 1000.0), barLeft, 110 * d, time)
-            time.textAlign = Paint.Align.RIGHT
-            canvas.drawText("−" + AudioNotes.durationText(maxOf(0L, view.length - view.position) / 1000.0), barRight, 110 * d, time)
         }
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }

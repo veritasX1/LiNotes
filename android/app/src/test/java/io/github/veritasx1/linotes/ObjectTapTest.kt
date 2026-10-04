@@ -79,7 +79,19 @@ class ObjectTapTest {
     }
 
     @Test
-    fun playerControls() {
+    fun peaks() {
+        // Same cases as linux/tests/test_object_tap.py.
+        val audio = io.github.veritasx1.linotes.ui.AudioNotes
+        fun same(expected: List<Double>, actual: FloatArray) =
+            assertTrue("$expected / ${actual.toList()}", expected.size == actual.size && expected.zip(actual.toList()).all { (a, b) -> kotlin.math.abs(a - b) < 0.0015 })
+        same(List(4) { 0.08 }, audio.peaks(ShortArray(0), 4))
+        same(List(4) { 0.08 }, audio.peaks(ShortArray(8), 4))
+        same(listOf(1.0, 0.08, 0.25, 0.5), audio.peaks(shortArrayOf(100, -400, 0, 0, 25, 1, -100, 50), 4))
+        same(listOf(0.882, 0.882, 1.0, 1.0, 0.577), audio.peaks(shortArrayOf(7, -9, 3), 5))
+    }
+
+    @Test
+    fun bubble() {
         val editor = editor()
         val actions = mutableListOf<String>()
         editor.onAudio = { _, action, fraction -> actions.add(if (action == "seek") "seek:" + "%.1f".format(java.util.Locale.ROOT, fraction) else action) }
@@ -91,7 +103,7 @@ class ObjectTapTest {
         val layout = editor.layout!!
         val line = layout.getLineForOffset(start)
         val density = editor.resources.displayMetrics.density
-        val card = editor.text!!.getSpans(start, start + 1, android.text.style.ImageSpan::class.java).first().drawable.bounds
+        val card = text.getSpans(start, start + 1, android.text.style.ImageSpan::class.java).first().drawable.bounds
         val left = layout.getPrimaryHorizontal(start) + editor.totalPaddingLeft
         val top = layout.getLineBottom(line) - card.height() + editor.totalPaddingTop
         fun press(x: Float, y: Float) {
@@ -99,14 +111,39 @@ class ObjectTapTest {
             editor.dispatchTouchEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, left + x, top + y, 0))
             editor.dispatchTouchEvent(MotionEvent.obtain(down, down + 60, MotionEvent.ACTION_UP, left + x, top + y, 0))
         }
-        press(34 * density, 38 * density)                       // the round button
-        press(card.width() - 92 * density, 38 * density)        // −15
-        press(card.width() - 42 * density, 38 * density)        // +15
-        press(16 * density + (card.width() - 32 * density) * 0.5f, 86 * density)  // middle of the bar
-        assertEquals(listOf("toggle", "back", "forward", "seek:0.5"), actions)
-        assertTrue(card.height() > 100 * density)  // the open card is taller (bar and times)
+        val middle = card.height() / 2f
+        press(25 * density, middle)                                                  // play/pause
+        press(54 * density + io.github.veritasx1.linotes.ui.AudioNotes.BARS * 5 * density * 0.5f, middle)  // middle of the waveform
+        press(card.width() - 10 * density, middle)                                   // the time: plays/pauses too
+        assertEquals(listOf("toggle", "seek:0.5", "toggle"), actions)
+        assertTrue(card.height() < 50 * density && card.width() < 330 * density)   // a bubble, not a card
         editor.showAudio("srv1:ton", null)
-        assertTrue(editor.text!!.getSpans(start, start + 1, android.text.style.ImageSpan::class.java).first().drawable.bounds.height() < 80 * density)
         assertEquals(blocks.map { it.toString() }, editor.toBlocks().map { it.toString() })
+    }
+
+    @Test
+    fun picture() {
+        org.junit.Assume.assumeTrue("nur mit -Pshots", System.getProperty("linotes.shots") != null)
+        val wave = floatArrayOf(.5f, .8f, 1f, .7f, .9f, .6f, .85f, .4f, .08f, .08f, .08f, .08f, .3f, .75f, .95f, .6f, .8f, .5f, .7f, .9f,
+            .65f, .3f, .08f, .08f, .45f, .8f, 1f, .7f, .55f, .8f, .6f, .35f, .5f, .7f, .4f, .2f)
+        for (dark in listOf(false, true)) {
+            val label = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+            val editor = RichEditor(ApplicationProvider.getApplicationContext(), EditorColors(label, 0xFF8E8E93.toInt(), 0xFF999999.toInt(),
+                if (dark) 0xFFFFC940.toInt() else 0xFFE6A200.toInt(), 0xFFFFE680.toInt())) { _, done -> done(null) }
+            editor.loadWaveform = { _, done -> done(wave) }
+            editor.layoutParams = android.view.ViewGroup.LayoutParams(1179, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            editor.setBackgroundColor(if (dark) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt())
+            editor.setTextColor(label)
+            editor.load(blocks.filter { it.optString("t") != "image" })
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            editor.showAudio("srv1:ton", RichEditor.AudioView(true, 7000, 18000))
+            editor.measure(View.MeasureSpec.makeMeasureSpec(1179, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            editor.layout(0, 0, 1179, editor.measuredHeight)
+            val bitmap = android.graphics.Bitmap.createBitmap(1179, editor.measuredHeight, android.graphics.Bitmap.Config.ARGB_8888)
+            editor.draw(android.graphics.Canvas(bitmap))
+            java.io.File(System.getProperty("linotes.shots"), if (dark) "blase-dunkel.png" else "blase.png").outputStream().use {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
     }
 }

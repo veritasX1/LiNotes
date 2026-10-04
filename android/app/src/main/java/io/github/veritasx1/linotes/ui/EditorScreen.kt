@@ -292,21 +292,31 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onFootnotesChanged = { footnotes = it }
         editor.onFootnote = { footnoteMenu = it }
-        // Recordings play in their card (Apple's player, 900036dc): play/pause, ±15 s, seek.
+        // Recordings play in their message bubble (900036dc): play/pause, a tap on the waveform jumps there.
         editor.onAudio = { block, action, fraction ->
             val fileId = block.optString("f")
-            if (player.playing == fileId) when (action) {
-                "back" -> player.jump(-15)
-                "forward" -> player.jump(15)
-                "seek" -> player.seek((player.length * fraction).toLong())
-                else -> player.toggle()
+            if (player.playing == fileId) {
+                if (action == "seek") {
+                    player.seek((player.length * fraction).toLong())
+                    if (player.paused) player.toggle()
+                } else player.toggle()
             } else scope.launch {
                 try {
                     val file = withContext(Dispatchers.IO) { sync.fetchFile(fileId, sync.get(noteId)?.share) }
                     player.play(fileId, file)
+                    if (action == "seek") player.seek((player.length * fraction).toLong())
                 } catch (error: Exception) {
                     state.showToast(errorText(error))
                 }
+            }
+        }
+        editor.loadWaveform = { fileId, done ->
+            scope.launch {
+                val peaks = withContext(Dispatchers.IO) {
+                    runCatching { AudioNotes.waveform(sync.fetchFile(fileId, sync.get(noteId)?.share)) }
+                        .onFailure { android.util.Log.i("LiNotes", "keine Wellenform: $it") }.getOrNull()
+                }
+                done(peaks)
             }
         }
         // A tapped picture opens in the quick look (900036dc).
