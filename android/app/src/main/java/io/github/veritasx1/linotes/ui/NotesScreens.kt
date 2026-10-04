@@ -71,7 +71,9 @@ fun FoldersScreen(state: AppState, revision: Long) {
     var newHere by remember { mutableStateOf<Pair<SyncObject, String>?>(null) }
 
     val notes = remember(revision) { sync.all("note") }
-    val live = notes.filter { !it.data.has("trashed") }
+    val kept = notes.filter { !it.data.has("trashed") }
+    val live = kept.filter { !Model.archived(it) }
+    val archivedNotes = kept.filter { Model.archived(it) }
     val folders = remember(revision) { sync.all("folder").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name").lowercase() })) }
     val tags = live.flatMap { Model.tags(it) }.groupingBy { it }.eachCount().toSortedMap()
     fun count(predicate: (SyncObject) -> Boolean) = live.count(predicate)
@@ -102,7 +104,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
             }
         }
         if (query.isNotBlank()) {
-            val hits = live.filter { Model.text(it).contains(query, true) || Model.title(it).contains(query, true) }
+            // The search also finds what is in the archive (marked "im Archiv").
+            val hits = kept.filter { Model.text(it).contains(query, true) || Model.title(it).contains(query, true) }
             section("hits", header = "${hits.size} Treffer") {
                 hits.sortedByDescending { Model.modified(it) }.forEachIndexed { index, note ->
                     NoteRow(state, note, index < hits.lastIndex) { state.push(Route.Editor(note.id)) }
@@ -120,6 +123,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
                     onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
             GroupRow("Gesperrt", Glyph.Lock, detail = "${count { it.data.has("enc") }}") { state.push(Route.NoteList("locked")) }
+            if (archivedNotes.isNotEmpty()) GroupRow("Archiv", Glyph.Archive, detail = "${archivedNotes.size}") { state.push(Route.NoteList("archive")) }
             GroupRow("Zuletzt gelöscht", Glyph.Trash, detail = "${notes.count { it.data.has("trashed") }}", divider = false) {
                 state.push(Route.NoteList("trash"))
             }
@@ -222,7 +226,9 @@ fun newNote(state: AppState, folderKey: String?) {
 fun notesFor(sync: SyncEngine, key: String): Pair<List<SyncObject>, String> {
     val notes = sync.all("note")
     if (key == "trash") return notes.filter { it.data.has("trashed") } to "Zuletzt gelöscht"
-    val live = notes.filter { !it.data.has("trashed") }
+    val kept = notes.filter { !it.data.has("trashed") }
+    if (key == "archive") return kept.filter { Model.archived(it) } to "Archiv"
+    val live = kept.filter { !Model.archived(it) }
     return when {
         key == "locked" -> live.filter { it.data.has("enc") } to "Gesperrt"
         key == "shared-notes" -> live.filter { it.share != null && sync.get(it.data.optString("folder")) == null } to "Mit mir geteilt"
@@ -244,8 +250,8 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     val sync = state.sync
     val (notes, title) = remember(revision, key) { notesFor(sync, key) }
     val folderId = key.removePrefix("folder:").takeIf { key.startsWith("folder:") }
-    val folderLists = remember(revision, key) { if (folderId == null) emptyList() else sync.all("list").filter { it.data.optString("folder") == folderId }.sortedBy { it.data.optString("name").lowercase() } }
-    val folderBoards = remember(revision, key) { if (folderId == null) emptyList() else sync.all("board").filter { it.data.optString("folder") == folderId }.sortedBy { it.data.optString("name").lowercase() } }
+    val folderLists = remember(revision, key) { if (folderId == null) emptyList() else sync.all("list").filter { it.data.optString("folder") == folderId && !Model.archived(it) }.sortedBy { it.data.optString("name").lowercase() } }
+    val folderBoards = remember(revision, key) { if (folderId == null) emptyList() else sync.all("board").filter { it.data.optString("folder") == folderId && !Model.archived(it) }.sortedBy { it.data.optString("name").lowercase() } }
     val subfolders = remember(revision, key) {
         if (!key.startsWith("folder:")) emptyList()
         else sync.all("folder").filter { folderParent(sync, it) == key.removePrefix("folder:") }
@@ -258,7 +264,9 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
     var moving by remember { mutableStateOf<SyncObject?>(null) }
     var locking by remember { mutableStateOf<Pair<SyncObject, Boolean>?>(null) }
 
-    val shown = notes.filter { query.isBlank() || Model.text(it).contains(query, true) }
+    // Searching "Alle Notizen" also finds archived notes (marked "im Archiv").
+    val pool = if (key == "all" && query.isNotBlank()) notes + notesFor(sync, "archive").first else notes
+    val shown = pool.filter { query.isBlank() || Model.text(it).contains(query, true) }
     var sortMenu by remember { mutableStateOf(false) }
     var gallery by remember { mutableStateOf(sync.noteGallery) }
     val sorted = Model.sortNotes(shown, sync.noteSort(), pinnedFirst = key != "trash")
@@ -325,6 +333,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         ) else listOf(
             SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } },
             SheetAction("Verschieben …") { moving = note },
+            archiveAction(state, note),
             SheetAction("Teilen …") { if (locked) state.toastLater("Gesperrte Notizen können nicht geteilt werden.") else state.push(Route.Share(note.id)) },
             SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = note to !locked },
             SheetAction("Löschen", destructive = true) { trashNote(state, note) },
@@ -424,7 +433,9 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? 
                     }
                 }
                 Row {
-                    Text(Model.shortDate(stamp ?: Model.modified(note)), style = Type.subheadline, color = colors.label)
+                    // Found by a search although archived: say so.
+                    Text((if (Model.archived(note)) "im Archiv · " else "") + Model.shortDate(stamp ?: Model.modified(note)),
+                        style = Type.subheadline, color = colors.label)
                     Spacer(Modifier.width(8.dp))
                     Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) "Gesperrt" else "Kein weiterer Text" },
                         style = Type.subheadline, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

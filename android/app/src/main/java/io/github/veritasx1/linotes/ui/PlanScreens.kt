@@ -80,7 +80,10 @@ private fun parseGerman(text: String): LocalDate? = try {
 fun PlansScreen(state: AppState, revision: Long) {
     val sync = state.sync
     val context = LocalContext.current
-    val plans = remember(revision) { sync.all("plan").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val everything = remember(revision) { sync.all("plan").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val plans = everything.filter { !io.github.veritasx1.linotes.data.Model.archived(it) }
+    val archivedPlans = everything.filter { io.github.veritasx1.linotes.data.Model.archived(it) }
+    var archiveOpen by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf<String?>(null) }   // template key
     var choosing by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
@@ -96,6 +99,10 @@ fun PlansScreen(state: AppState, revision: Long) {
                     subtitle = (if (Plans.isTimeline(plan.data)) "Zeitstrahl" else "Raster") + " · " + shareLabel(sync, plan),
                     divider = index < group.lastIndex, dragPayload = "plan:${plan.id}", onLongClick = { menu = plan }) { state.push(Route.Plan(plan.id)) }
             }
+        }
+        archiveSection("plans", archivedPlans, archiveOpen, { archiveOpen = !archiveOpen }) { plan, divider ->
+            GroupRow(plan.data.optString("name").ifEmpty { "Plan" }, Glyph.Table, subtitle = shareLabel(sync, plan), divider = divider,
+                onLongClick = { menu = plan }) { state.push(Route.Plan(plan.id)) }
         }
     }
     if (choosing) {
@@ -117,6 +124,7 @@ fun PlansScreen(state: AppState, revision: Long) {
             SheetAction("Verschieben nach …") { moving = plan },
             SheetAction("Teilen …") { state.push(Route.Share(plan.id)) },
             SheetAction("Als PDF teilen …") { PlanPdf.share(state, context, plan) },
+            archiveAction(state, plan),
             SheetAction("Plan löschen", destructive = true) { sync.delete(plan.id) },
         )) { menu = null }
     }

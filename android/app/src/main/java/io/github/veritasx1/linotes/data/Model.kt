@@ -10,6 +10,13 @@ import java.time.temporal.ChronoUnit
 
 /** Helpers shared by the screens, mirroring linux/linotes/model.py. */
 object Model {
+    /** In the archive (notes, lists, boards, plans) – a mark on the object, so for everyone it is shared with. */
+    fun archived(obj: SyncObject?): Boolean = obj?.data?.has("archived") == true
+
+    fun setArchived(sync: SyncEngine, id: String, on: Boolean) {
+        sync.update(id) { if (on) it.put("archived", now()) else it.remove("archived") }
+    }
+
     /** Everything a card can be found by: id, title, notes, impact, verification, version, commits,
      *  file and evidence names, the person in charge – lower case (the same as model.card_search_text). */
     fun cardSearchText(card: SyncObject, userName: ((Int) -> String)? = null): String {
