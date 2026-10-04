@@ -28,6 +28,7 @@ import android.text.style.MetricAffectingSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
+import kotlin.math.abs
 import android.util.TypedValue
 import android.view.ActionMode
 import android.view.Gravity
@@ -377,6 +378,16 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var onLinkRequested: (() -> Unit)? = null
     var onOpenNote: ((String) -> Unit)? = null
     var onOpenFile: ((JSONObject) -> Unit)? = null
+    /** A picture was tapped: the screen shows it in the quick look (900036dc). */
+    var onOpenImage: ((String) -> Unit)? = null
+    /** A control on a recording's player card: "toggle", "back", "forward", or "seek" (with 0…1). */
+    var onAudio: ((JSONObject, String, Float) -> Unit)? = null
+    /** What the player cards show (file id → state); see [showAudio]. */
+    data class AudioView(val running: Boolean, val position: Long, val length: Long)
+    private val audioViews = HashMap<String, AudioView>()
+    private var objectTouch: Any? = null
+    private var downX = 0f
+    private var downY = 0f
     /** A footnote number was tapped (edit or remove it). */
     var onFootnote: ((FootnoteSpan) -> Unit)? = null
     /** The footnote texts changed (reading order) – the screen lists them under the note. */
@@ -995,11 +1006,6 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val text = text ?: return false
         if (event.eventTime - event.downTime > android.view.ViewConfiguration.getLongPressTimeout()) return false
         val offset = getOffsetForPosition(event.x, event.y)
-        text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FileBlockSpan::class.java).firstOrNull {
-            val start = text.getSpanStart(it)
-            val line = layout?.getLineForOffset(start)
-            line != null && line == layout?.getLineForVertical(event.y.toInt() - totalPaddingTop + scrollY)
-        }?.let { onOpenFile?.invoke(JSONObject(it.block.toString())); return true }
         text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FootnoteSpan::class.java).firstOrNull()
             ?.let { onFootnote?.invoke(it); return true }
         text.getSpans(offset, offset, NoteLinkSpan::class.java).firstOrNull {
@@ -1019,7 +1025,70 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
     }
 
+    /** The picture or file card under the finger (and where it is drawn, in text coordinates). */
+    private fun objectAt(event: MotionEvent): Pair<ImageSpan, android.graphics.RectF>? {
+        val text = text ?: return null
+        val layout = layout ?: return null
+        val x = event.x - totalPaddingLeft + scrollX
+        val y = event.y - totalPaddingTop + scrollY
+        val line = layout.getLineForVertical(y.toInt())
+        val spans = text.getSpans(layout.getLineStart(line), layout.getLineEnd(line), ImageSpan::class.java)
+            .filter { it is FileBlockSpan || it is ImageBlockSpan }
+        for (span in spans) {
+            val start = text.getSpanStart(span)
+            if (layout.getLineForOffset(start) != line) continue
+            val bounds = span.drawable.bounds
+            val left = layout.getPrimaryHorizontal(start)
+            val bottom = layout.getLineBottom(line).toFloat()
+            val rect = android.graphics.RectF(left, bottom - bounds.height(), left + bounds.width(), bottom)
+            if (rect.contains(x, y)) return span to rect
+        }
+        return null
+    }
+
+    /** Pictures and recordings react to the finger like buttons: a tap opens/plays them, also when
+     *  pressed a little longer – the cursor does not jump in front of them (900036dc). */
+    private fun handleObjectTouch(event: MotionEvent): Boolean? {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                objectTouch = objectAt(event)?.first
+                downX = event.x
+                downY = event.y
+                // EditText gets the touch (scrolling keeps working), but no long press: that would
+                // put the cursor (and the selection handles) in front of the object.
+                if (objectTouch != null) post { cancelLongPress() }
+                return null
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+                if (objectTouch != null && (abs(event.x - downX) > slop || abs(event.y - downY) > slop)) objectTouch = null
+                else if (objectTouch != null) cancelLongPress()
+                return null
+            }
+            MotionEvent.ACTION_CANCEL -> { objectTouch = null; return null }
+            MotionEvent.ACTION_UP -> {
+                val target = objectTouch ?: return null
+                objectTouch = null
+                val (span, rect) = objectAt(event)?.takeIf { it.first === target } ?: return null
+                // Let EditText end its touch without placing the cursor.
+                onTouchEvent(MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL })
+                val x = event.x - totalPaddingLeft + scrollX - rect.left
+                val y = event.y - totalPaddingTop + scrollY - rect.top
+                when (span) {
+                    is ImageBlockSpan -> onOpenImage?.invoke(span.fileId)
+                    is FileBlockSpan -> if (AudioNotes.isAudio(span.block)) {
+                        val (action, fraction) = audioHit(span.block, x, y, rect.width())
+                        onAudio?.invoke(JSONObject(span.block.toString()), action, fraction)
+                    } else onOpenFile?.invoke(JSONObject(span.block.toString()))
+                }
+                return true
+            }
+        }
+        return null
+    }
+
     private fun handleTouch(event: MotionEvent): Boolean {
+        handleObjectTouch(event)?.let { return it }
         if (event.action != MotionEvent.ACTION_UP) return false
         if (openLinkAt(event)) return true
         val layout = layout ?: return false
@@ -1537,6 +1606,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
 
     /** The card: rounded box, preview or document symbol, name and details. */
     private fun fileCard(block: JSONObject, preview: Bitmap?): Drawable {
+        if (AudioNotes.isAudio(block)) return audioCard(block, audioViews[block.optString("f")])
         val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 }?.coerceAtMost((420 * density).toInt()) ?: (320 * density).toInt()
         val height = (76 * density).toInt()
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -1608,6 +1678,103 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             else fileDetails(block)
         canvas.drawText(details, textLeft, height / 2f + 17 * density, sub)
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
+    }
+
+    // --- recordings: a player card like Apple's (HIG: filled play/pause, ±15 s, scrubber,
+    //     elapsed and remaining time with even digits, targets of at least 44 dp) ----------
+
+    private val audioIdleHeight get() = 76 * density
+    private val audioOpenHeight get() = 124 * density
+
+    /** Which control of a recording's card is at (x, y) (card coordinates): the action and, for
+     *  "seek", the place on the bar (0…1). Anything else on the card plays/pauses. */
+    private fun audioHit(block: JSONObject, x: Float, y: Float, width: Float): Pair<String, Float> {
+        val open = audioViews.containsKey(block.optString("f"))
+        val d = density
+        if (!open) return "toggle" to 0f
+        if (abs(y - 38 * d) <= 24 * d && abs(x - (width - 92 * d)) <= 22 * d) return "back" to 0f
+        if (abs(y - 38 * d) <= 24 * d && abs(x - (width - 42 * d)) <= 22 * d) return "forward" to 0f
+        if (y >= 66 * d) return "seek" to ((x - 16 * d) / (width - 32 * d)).coerceIn(0f, 1f)
+        return "toggle" to 0f
+    }
+
+    private fun audioCard(block: JSONObject, view: AudioView?): Drawable {
+        val d = density
+        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 }?.coerceAtMost((420 * d).toInt()) ?: (320 * d).toInt()
+        val height = (if (view != null) audioOpenHeight else audioIdleHeight).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val box = android.graphics.RectF(d, d, width - d, height - d)
+        canvas.drawRoundRect(box, 12 * d, 12 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (colors.label and 0x00FFFFFF) or 0x10000000 })
+        canvas.drawRoundRect(box, 12 * d, 12 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeWidth = d; color = (colors.label and 0x00FFFFFF) or 0x26000000 })
+        // Round play/pause button in the accent color.
+        val cx = 34 * d
+        val cy = 38 * d
+        val radius = 22 * d
+        canvas.drawCircle(cx, cy, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
+        val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+        if (view?.running == true) {
+            canvas.drawRoundRect(cx - 7 * d, cy - 8 * d, cx - 2.5f * d, cy + 8 * d, 1.5f * d, 1.5f * d, white)
+            canvas.drawRoundRect(cx + 2.5f * d, cy - 8 * d, cx + 7 * d, cy + 8 * d, 1.5f * d, 1.5f * d, white)
+        } else {
+            canvas.drawPath(android.graphics.Path().apply {
+                moveTo(cx - 6 * d, cy - 9 * d); lineTo(cx + 10 * d, cy); lineTo(cx - 6 * d, cy + 9 * d); close()
+            }, white)
+        }
+        val (title, subtitle) = AudioNotes.label(block)
+        val textLeft = 68 * d
+        val textRight = if (view != null) width - 118 * d else width - 12 * d
+        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
+        val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
+        canvas.drawText(android.text.TextUtils.ellipsize(title, titlePaint, textRight - textLeft, android.text.TextUtils.TruncateAt.END).toString(),
+            textLeft, cy - 3 * d, titlePaint)
+        canvas.drawText(android.text.TextUtils.ellipsize(subtitle.ifEmpty { fileDetails(block) }, sub, textRight - textLeft,
+            android.text.TextUtils.TruncateAt.END).toString(), textLeft, cy + 17 * d, sub)
+        if (view != null) {
+            // ±15 s as circular arrows with "15" inside (Apple's gobackward.15 / goforward.15).
+            val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f * d; color = colors.accent; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+            val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent; textSize = 9 * d; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+            for ((centerX, forward) in listOf(width - 92 * d to false, width - 42 * d to true)) {
+                val r = 12 * d
+                val oval = android.graphics.RectF(centerX - r, cy - r, centerX + r, cy + r)
+                if (forward) canvas.drawArc(oval, -90f + 34f, 326f, false, stroke) else canvas.drawArc(oval, -90f - 34f, -326f, false, stroke)
+                val side = if (forward) -1 else 1
+                canvas.drawPath(android.graphics.Path().apply {
+                    moveTo(centerX + side * 4 * d, cy - r - 4 * d); lineTo(centerX, cy - r); lineTo(centerX + side * 4 * d, cy - r + 4 * d)
+                }, stroke)
+                canvas.drawText("15", centerX, cy + 3.5f * d, label)
+            }
+            // Scrubber with elapsed and remaining time (tabular digits).
+            val fraction = if (view.length > 0) (view.position.toFloat() / view.length).coerceIn(0f, 1f) else 0f
+            val barLeft = 16 * d
+            val barRight = width - 16 * d
+            val barY = 86 * d
+            val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (colors.label and 0x00FFFFFF) or 0x30000000 }
+            canvas.drawRoundRect(barLeft, barY - 2 * d, barRight, barY + 2 * d, 2 * d, 2 * d, track)
+            val knobX = barLeft + (barRight - barLeft) * fraction
+            canvas.drawRoundRect(barLeft, barY - 2 * d, knobX, barY + 2 * d, 2 * d, 2 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
+            canvas.drawCircle(knobX, barY, 7 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
+            val time = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 12 * resources.displayMetrics.scaledDensity; fontFeatureSettings = "tnum" }
+            canvas.drawText(AudioNotes.durationText(view.position / 1000.0), barLeft, 110 * d, time)
+            time.textAlign = Paint.Align.RIGHT
+            canvas.drawText("−" + AudioNotes.durationText(maxOf(0L, view.length - view.position) / 1000.0), barRight, 110 * d, time)
+        }
+        return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
+    }
+
+    /** Show a recording's player state on its card (null: back to the plain card). */
+    fun showAudio(fileId: String, view: AudioView?) {
+        val text = text ?: return
+        if (view == null) audioViews.remove(fileId) else audioViews[fileId] = view
+        val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull { it.block.optString("f") == fileId } ?: return
+        val start = text.getSpanStart(span)
+        val end = text.getSpanEnd(span)
+        val wasBusy = busy
+        busy = true
+        text.removeSpan(span)
+        text.setSpan(FileBlockSpan(span.block, audioCard(span.block, view)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        busy = wasBusy
     }
 
     // --- images ------------------------------------------------
