@@ -732,6 +732,7 @@ private val HELP = listOf(
         "Checklisten" to "Kreis antippen, um einen Punkt abzuhaken. Eine leere Zeile beendet die Liste. Über „Mehr“ kannst du " +
             "abgehakte Punkte automatisch nach unten sortieren lassen.",
         "Tags" to "Schreibe #Wort in eine Notiz – der Tag erscheint in der Ordnerübersicht zum Filtern.",
+        "Profi-Funktionen" to "Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Einstellungen → „Profi-Funktionen“ einschalten – dann gibt es im Format-Feld (Aa) zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON); weitere Werkzeuge wie Fußnoten folgen. Der Schalter gilt für dein Konto auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block.",
         "Link-Vorschau" to "Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du Einstellungen → „Link-Vorschau“ einschaltest; ab Werk ist sie aus. Dafür ruft nur dieses Handy die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Vorschau antippen → „Im Browser öffnen“ oder „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau.",
         "Gesperrte Notizen" to "Über „Mehr“ → „Notiz sperren“ schützt du eine Notiz mit deinem Notizen-Passwort. In den " +
             "Einstellungen kannst du das Entsperren mit Fingerabdruck, PIN oder Muster einschalten. Gesperrte Notizen " +

@@ -30,7 +30,7 @@ object NotePdf {
     private val styles = mapOf(
         "title" to Style(20f, true, false, 8f), "heading" to Style(15f, true, false, 5f),
         "subheading" to Style(12.5f, true, false, 4f), "body" to Style(10.5f, false, false, 3f),
-        "mono" to Style(9.5f, false, false, 3f), "quote" to Style(10.5f, false, true, 3f),
+        "mono" to Style(9.5f, false, false, 3f), "quote" to Style(10.5f, false, true, 3f), "code" to Style(9.5f, false, false, 0f),
     )
     private val marks = mapOf("bullet" to "•", "dash" to "–", "number" to "", "check" to "○")
 
@@ -143,13 +143,27 @@ object NotePdf {
             val done = kind == "check" && block.optBoolean("c")
             var text = styledText(block)
             if (done) text = SpannableString(text).apply { setSpan(StrikethroughSpan(), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+            if (kind == "code") {
+                // Code with the same colors as on Ubuntu, on a tinted band (consecutive lines join up).
+                val plain = block.optString("x")
+                text = SpannableString(plain).apply {
+                    for (token in io.github.veritasx1.linotes.data.Syntax.tokens(plain, block.optString("lang"))) {
+                        val color = when (token.kind) { "keyword" -> 0xFF9C52E0.toInt(); "string" -> 0xFF1A9452.toInt(); "comment" -> 0xFF85858C.toInt(); else -> 0xFFE07A00.toInt() }
+                        setSpan(android.text.style.ForegroundColorSpan(color), token.start, token.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                val probe = pdf.layout(if (plain.isEmpty()) " " else plain, pdf.paint(9.5f, mono = true), pdf.width - 2 * pdf.margin)
+                pdf.need(probe.height.toFloat())
+                pdf.canvas.drawRect(pdf.margin - 6, pdf.y - 1, pdf.width - pdf.margin + 6, pdf.y + probe.height + 1,
+                    android.graphics.Paint().apply { color = 0xFFF2F2F5.toInt() })
+            }
             val mark = when {
                 kind == "number" -> "${numbers[level] ?: 1}."
                 done -> "☑"
                 else -> marks[kind]
             }
             pdf.styled(text, style.size, style.bold, style.italic,
-                color = if (kind == "quote" || done) pdf.grey else Color.BLACK, mono = kind == "mono",
+                color = if (kind == "quote" || done) pdf.grey else Color.BLACK, mono = kind == "mono" || kind == "code",
                 indent = 18f * level + (if (kind in marks) 18f else 0f) + (if (kind == "quote") 14f else 0f),
                 space = style.space, mark = mark, markColor = if (kind == "check") pdf.accent else Color.BLACK, bar = kind == "quote")
         }
