@@ -82,6 +82,11 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
     var linkMenu by remember { mutableStateOf<JSONObject?>(null) }
+    // Footnotes (Profi-Funktion): the list under the note, tapping a number, adding one.
+    var footnotes by remember(noteId) { mutableStateOf<List<String>>(emptyList()) }
+    var footnoteMenu by remember { mutableStateOf<FootnoteSpan?>(null) }
+    var footnoteEdit by remember { mutableStateOf<FootnoteSpan?>(null) }
+    var footnoteNew by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     // The table being edited (its block as it is in the note).
     var tableEditing by remember { mutableStateOf<JSONObject?>(null) }
@@ -272,6 +277,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
             }
         }
+        editor.onFootnotesChanged = { footnotes = it }
+        editor.onFootnote = { footnoteMenu = it }
         editor.onOpenFile = { block ->
             // Recordings play inside the note (like Apple), other files open in their app.
             if (block.optString("t") == "link") {
@@ -416,6 +423,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                             .padding(horizontal = 10.dp, vertical = 6.dp))
                 }
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
+                if (footnotes.isNotEmpty()) FootnoteList(footnotes)
             }
             PlayerBar(player)
             linkQuery?.let { query ->
@@ -429,7 +437,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     editor.finishLink(id, title)
                 }) { linkQuery = null; editor.finishLink(null, null) }
             }
-            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures) { showFormat = false }
+            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures, onFootnote = { showFormat = false; footnoteNew = true }) { showFormat = false }
             if (!trashed) EditorToolbar(
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
@@ -498,6 +506,23 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             }) { keepChoice = false }
     }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
+    if (footnoteNew) AlertDialog("Fußnote oder Quelle", "An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF.",
+        confirm = "Einfügen", fields = listOf(AlertField("z. B. Müller, Gartenbau, 2020, S. 41")), onDismiss = { footnoteNew = false }) { values ->
+        if (values[0].isNotBlank()) editor.insertFootnote(values[0])
+        footnoteNew = false
+    }
+    footnoteMenu?.let { span ->
+        ActionSheet(span.note.ifEmpty { "Fußnote" }, listOf(
+            SheetAction("Bearbeiten …") { footnoteEdit = span },
+            SheetAction("Entfernen", destructive = true) { editor.editFootnote(span, null) },
+        )) { footnoteMenu = null }
+    }
+    footnoteEdit?.let { span ->
+        AlertDialog("Fußnote", confirm = "Sichern", fields = listOf(AlertField("Text", span.note)), onDismiss = { footnoteEdit = null }) { values ->
+            if (values[0].isNotBlank()) editor.editFootnote(span, values[0])
+            footnoteEdit = null
+        }
+    }
     linkMenu?.let { block ->
         ActionSheet(block.optString("dm").ifEmpty { block.optString("u") }, listOf(
             SheetAction("Im Browser öffnen") {
@@ -699,7 +724,7 @@ private fun LinkPanel(heading: String, glyph: Glyph, empty: String, choices: Lis
 }
 
 @Composable
-private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onClose: () -> Unit) {
+private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote: () -> Unit, onClose: () -> Unit) {
     val colors = palette
     val current = remember(tick) { editor.currentStyle() }
     val inline = remember(tick) { editor.activeInline() }
@@ -818,6 +843,10 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onClose: ()
                             .padding(horizontal = 9.dp, vertical = 8.dp))
                 }
             }
+            Spacer(Modifier.height(8.dp))
+            Text("Fußnote / Quelle …", fontSize = 14.sp, color = colors.label,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onFootnote)
+                    .padding(horizontal = 10.dp, vertical = 8.dp))
         }
     }
 }
@@ -834,4 +863,21 @@ private fun appendBlock(state: AppState, noteId: String, block: JSONObject) {
     body.put(block)
     data.put("body", body).put("modified", Model.now())
     sync.put("note", data, current.share, current.id)
+}
+
+/** Under the note: "Fußnoten und Quellen", numbered like in the text. */
+@Composable
+private fun FootnoteList(notes: List<String>) {
+    val colors = palette
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
+        HorizontalDivider(Modifier.width(120.dp), 0.8.dp, colors.separator)
+        Text("Fußnoten und Quellen", style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = colors.label,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        notes.forEachIndexed { index, note ->
+            Row(Modifier.padding(vertical = 2.dp)) {
+                Text("${index + 1}", style = Type.footnote.copy(fontWeight = FontWeight.Bold), color = colors.accentText, modifier = Modifier.width(20.dp))
+                Text(note, style = Type.footnote, color = colors.label)
+            }
+        }
+    }
 }

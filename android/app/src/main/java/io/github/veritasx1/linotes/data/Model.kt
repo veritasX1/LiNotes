@@ -10,6 +10,18 @@ import java.time.temporal.ChronoUnit
 
 /** Helpers shared by the screens, mirroring linux/linotes/model.py. */
 object Model {
+    const val FOOTNOTE = "fn:"
+
+    /** The text of a footnote span ("fn:<text>") – a Profi-Funktion – otherwise null. */
+    fun footnoteText(name: String?): String? = if (name != null && name.startsWith(FOOTNOTE)) name.substring(FOOTNOTE.length) else null
+
+    /** The footnote texts of a note in reading order (as numbered in the text) – the same as model.footnotes. */
+    fun footnotes(blocks: List<org.json.JSONObject>): List<String> = blocks.flatMap { block ->
+        val spans = block.optJSONArray("s") ?: return@flatMap emptyList<String>()
+        (0 until spans.length()).mapNotNull { spans.optJSONArray(it) }.filter { it.length() == 3 }.sortedBy { it.optInt(0) }
+            .mapNotNull { footnoteText(it.optString(2)) }
+    }
+
     /** In the archive (notes, lists, boards, plans) – a mark on the object, so for everyone it is shared with. */
     fun archived(obj: SyncObject?): Boolean = obj?.data?.has("archived") == true
 
