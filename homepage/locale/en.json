@@ -565,7 +565,7 @@
  "Geräte wie bei Signal": "Devices like with Signal",
  "Neues Gerät? Sechsstelligen Code eintippen oder QR-Code scannen – fertig.": "New device? Type in the six-digit code or scan the QR code – done.",
  "Leg los. Kostenlos.": "Get started. For free.",
- "Version 2.2.0 für Android und Ubuntu – mit oder ohne eigenen Server.": "Version 2.2.0 for Android and Ubuntu – with or without your own server.",
+ "Version 2.2.1 für Android und Ubuntu – mit oder ohne eigenen Server.": "Version 2.2.1 for Android and Ubuntu – with or without your own server.",
  "Ab Android 8 · rund 10 MB": "Android 8 and later · about 10 MB",
  "Am bequemsten über F-Droid – dann kommen Updates automatisch.": "Most convenient via F-Droid – then updates arrive automatically.",
  "Quelle in F-Droid hinzufügen ›": "Add repository in F-Droid ›",
@@ -663,5 +663,11 @@
  "Startseite</a> · <a href=\"hilfe.html\">Hilfe</a> · <a href=\"index.html#laden\">Laden": "Home</a> · <a href=\"hilfe.html\">Help</a> · <a href=\"index.html#laden\">Download",
  "Handy und Laptop verbinden sich über HTTPS mit dem Router, der an den LiNotes-Server weiterleitet": "Phone and laptop connect via HTTPS to the router, which forwards to the LiNotes server",
  "Startbildschirm der App mit Feld für die Serveradresse": "Start screen of the app with field for the server address",
- "So richtest du deinen eigenen LiNotes-Server ein – auf einem Raspberry Pi oder jedem Debian-/Ubuntu-Rechner, mit einem einzigen Befehl.": "How to set up your own LiNotes server – on a Raspberry Pi or any Debian/Ubuntu computer, with a single command."
+ "So richtest du deinen eigenen LiNotes-Server ein – auf einem Raspberry Pi oder jedem Debian-/Ubuntu-Rechner, mit einem einzigen Befehl.": "How to set up your own LiNotes server – on a Raspberry Pi or any Debian/Ubuntu computer, with a single command.",
+ "Hauptrechner MCU A – ASIL C(D): Software-Anforderungen mit MC/DC-Abdeckung als Nachweis, Treiber für den neuen Sensor in Umsetzung.": "Main controller MCU A – ASIL C(D): software requirements with MC/DC coverage as evidence, driver for the new sensor in implementation.",
+ "Safety-Monitor MCU B – ASIL A(D): unabhängiger Abschaltpfad und Fensterwatchdog, diversitär zur MCU A.": "Safety monitor MCU B – ASIL A(D): independent shutdown path and window watchdog, diverse from MCU A.",
+ "Fehlerberichte (SUP.9): vom Klimakammertest des Zulieferers bis zur Kundendienstmeldung – mit Ursache, Korrektur und Nachweis.": "Bug reports (SUP.9): from the supplier’s climate chamber test to the customer service report – with cause, correction and evidence.",
+ "Stundenplan Mo–Fr mit farbigen Fächern – heute ist hervorgehoben.": "Timetable Mon–Fri with coloured subjects – today is highlighted.",
+ "Dienstplan mit Früh-, Spät- und Nachtschicht in Farbe – auf einen Blick, wer wann dran ist.": "Duty rota with early, late and night shifts in colour – who is on when, at a glance.",
+ "Projektplan als Zeitstrahl: Aufgaben als Balken, Meilensteine als Raute, die rote Linie ist heute.": "Project plan as a timeline: tasks as bars, milestones as diamonds, the red line is today."
 }

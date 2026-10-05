@@ -565,7 +565,7 @@
  "Geräte wie bei Signal": "Des appareils comme avec Signal",
  "Neues Gerät? Sechsstelligen Code eintippen oder QR-Code scannen – fertig.": "Nouvel appareil ? Saisissez le code à six chiffres ou scannez le QR code – c’est tout.",
  "Leg los. Kostenlos.": "Lancez-vous. Gratuitement.",
- "Version 2.2.0 für Android und Ubuntu – mit oder ohne eigenen Server.": "Version 2.2.0 pour Android et Ubuntu – avec ou sans votre propre serveur.",
+ "Version 2.2.1 für Android und Ubuntu – mit oder ohne eigenen Server.": "Version 2.2.1 pour Android et Ubuntu – avec ou sans votre propre serveur.",
  "Ab Android 8 · rund 10 MB": "À partir d’Android 8 · environ 10 Mo",
  "Am bequemsten über F-Droid – dann kommen Updates automatisch.": "Le plus pratique via F-Droid – les mises à jour arrivent alors automatiquement.",
  "Quelle in F-Droid hinzufügen ›": "Ajouter le dépôt dans F-Droid ›",
@@ -663,5 +663,11 @@
  "Startseite</a> · <a href=\"hilfe.html\">Hilfe</a> · <a href=\"index.html#laden\">Laden": "Accueil</a> · <a href=\"hilfe.html\">Aide</a> · <a href=\"index.html#laden\">Télécharger",
  "Handy und Laptop verbinden sich über HTTPS mit dem Router, der an den LiNotes-Server weiterleitet": "Le téléphone et l’ordinateur portable se connectent en HTTPS au routeur, qui redirige vers le serveur LiNotes",
  "Startbildschirm der App mit Feld für die Serveradresse": "Écran d’accueil de l’app avec champ pour l’adresse du serveur",
- "So richtest du deinen eigenen LiNotes-Server ein – auf einem Raspberry Pi oder jedem Debian-/Ubuntu-Rechner, mit einem einzigen Befehl.": "Comment installer votre propre serveur LiNotes – sur un Raspberry Pi ou tout ordinateur Debian/Ubuntu, avec une seule commande."
+ "So richtest du deinen eigenen LiNotes-Server ein – auf einem Raspberry Pi oder jedem Debian-/Ubuntu-Rechner, mit einem einzigen Befehl.": "Comment installer votre propre serveur LiNotes – sur un Raspberry Pi ou tout ordinateur Debian/Ubuntu, avec une seule commande.",
+ "Hauptrechner MCU A – ASIL C(D): Software-Anforderungen mit MC/DC-Abdeckung als Nachweis, Treiber für den neuen Sensor in Umsetzung.": "Calculateur principal MCU A – ASIL C(D) : exigences logicielles avec couverture MC/DC comme preuve, pilote du nouveau capteur en cours de réalisation.",
+ "Safety-Monitor MCU B – ASIL A(D): unabhängiger Abschaltpfad und Fensterwatchdog, diversitär zur MCU A.": "Moniteur de sécurité MCU B – ASIL A(D) : chemin de coupure indépendant et chien de garde à fenêtre, diversifié par rapport à la MCU A.",
+ "Fehlerberichte (SUP.9): vom Klimakammertest des Zulieferers bis zur Kundendienstmeldung – mit Ursache, Korrektur und Nachweis.": "Rapports d’anomalies (SUP.9) : de l’essai en enceinte climatique du fournisseur au signalement du service client – avec cause, correction et preuve.",
+ "Stundenplan Mo–Fr mit farbigen Fächern – heute ist hervorgehoben.": "Emploi du temps lun.–ven. avec matières en couleur – aujourd’hui est mis en évidence.",
+ "Dienstplan mit Früh-, Spät- und Nachtschicht in Farbe – auf einen Blick, wer wann dran ist.": "Planning de service avec équipes du matin, de l’après-midi et de nuit en couleur – qui travaille quand, en un coup d’œil.",
+ "Projektplan als Zeitstrahl: Aufgaben als Balken, Meilensteine als Raute, die rote Linie ist heute.": "Plan de projet en frise chronologique : tâches en barres, jalons en losanges, la ligne rouge est aujourd’hui."
 }
