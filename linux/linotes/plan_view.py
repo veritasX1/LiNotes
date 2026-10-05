@@ -384,7 +384,7 @@ class PlanView(Gtk.Box):
             cr.rectangle(x, top - 6, 1, height - top)
             cr.fill()
             d = first + datetime.timedelta(days=i)
-            layout.set_text(_("KW {week} · {date}", week=d.isocalendar()[1], date=d.strftime("%d.%m.")), -1)
+            layout.set_text(plans.week_label(d), -1)
             cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.6)
             cr.move_to(x + 4, 4)
             PangoCairo.show_layout(cr, layout)

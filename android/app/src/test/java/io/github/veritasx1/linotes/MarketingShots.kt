@@ -33,6 +33,46 @@ class MarketingShots {
     @get:Rule val compose = createComposeRule()
     private val out: String? = System.getProperty("linotes.shots")
 
+    /** -Plang=en|fr: the demo contents in that language too (table from tools/demo_texts.py, German = source). */
+    private val table: Map<String, String> = run {
+        val lang = System.getProperty("linotes.language") ?: "de"
+        val all = javaClass.classLoader?.getResource("demo_texts.json")?.readText()?.let { JSONObject(it) }
+        val t = all?.optJSONObject(lang) ?: return@run emptyMap()
+        t.keys().asSequence().associateWith { t.getString(it) }
+    }
+    private fun tx(text: String) = table[text] ?: text
+    private val textKeys = setOf("x", "name", "title", "notes", "text", "n")
+
+    /** Translates every visible text of an object about to be stored; spans move along with their words. */
+    private fun translate(value: Any?, key: String? = null): Any? = when {
+        table.isEmpty() -> value
+        value is JSONObject && value.optString("t") == "table" && value.has("r") -> {
+            val rows = value.getJSONArray("r")
+            val newRows = JSONArray((0 until rows.length()).map { r -> JSONArray((0 until rows.getJSONArray(r).length()).map { c -> tx(rows.getJSONArray(r).getString(c)) }) })
+            JSONObject(value.toString()).put("r", newRows).put("x", (0 until newRows.length()).joinToString("\n") { r ->
+                (0 until newRows.getJSONArray(r).length()).joinToString(" | ") { newRows.getJSONArray(r).getString(it) } })
+        }
+        value is JSONObject -> {
+            val copy = JSONObject()
+            val old = value.opt("x") as? String
+            for (k in value.keys()) copy.put(k, translate(value.get(k), k))
+            val spans = value.optJSONArray("s")
+            if (old != null && spans != null) {
+                val now = copy.getString("x")
+                copy.put("s", JSONArray((0 until spans.length()).map { i ->
+                    val sp = spans.getJSONArray(i)
+                    val part = tx(old.substring(sp.getInt(0), sp.getInt(1)))
+                    val at = now.indexOf(part).also { require(it >= 0) { "„$part“ fehlt in „$now“" } }
+                    JSONArray().put(at).put(at + part.length).put(sp.getString(2))
+                }))
+            }
+            copy
+        }
+        value is JSONArray -> JSONArray((0 until value.length()).map { translate(value.get(it), key) })
+        value is String && (key in textKeys || key == "rows" || key == "body") -> tx(value)
+        else -> value
+    }
+
     private fun block(type: String, text: String, vararg extra: Pair<String, Any>) =
         JSONObject().put("t", type).put("x", text).also { b -> extra.forEach { (k, v) -> b.put(k, v) } }
 
@@ -40,11 +80,12 @@ class MarketingShots {
         JSONArray().put(JSONArray().put(text.indexOf(part)).put(text.indexOf(part) + part.length).put(name))
 
     private fun seed(sync: SyncEngine): Map<String, String> {
+        fun put(kind: String, data: JSONObject) = sync.put(kind, translate(data) as JSONObject)
         sync.startLocal("Olaf")
         Model.ensureDefaults(sync)
         val uid = sync.userId
         val now = Model.now()
-        fun folder(name: String, order: Int) = sync.put("folder", JSONObject().put("name", name).put("order", order)).id
+        fun folder(name: String, order: Int) = put("folder", JSONObject().put("name", name).put("order", order)).id
         val reisen = folder("Reisen", 1)
         val rezepte = folder("Rezepte", 2)
         val haushalt = folder("Haushalt", 3)
@@ -52,7 +93,7 @@ class MarketingShots {
             val data = JSONObject().put("folder", folderId).put("body", JSONArray(blocks.toList()))
                 .put("created", now - minutesAgo * 60 - 3600).put("modified", now - minutesAgo * 60)
             if (pinned) data.put("pinned", true)
-            return sync.put("note", data).id
+            return put("note", data).id
         }
         val tour = note(reisen, 95, block("title", "Radtour Kühlungsborn"), block("body", "Rund 42 km, flach und fast immer am Wasser."),
             block("number", "Start am Bahnhof Kühlungsborn West"), block("number", "Steilküste bis Heiligendamm"),
@@ -91,26 +132,28 @@ class MarketingShots {
         val list = Model.defaultList(uid)
         listOf("Hafermilch" to false, "Äpfel (Boskop)" to false, "Vollkornbrot" to false, "Kaffeebohnen" to false, "Basilikum" to false,
             "Butter" to true).forEachIndexed { index, (text, done) ->
-            sync.put("item", JSONObject().put("list", list).put("text", text).put("done", done).put("order", now + index * 0.001).put("by", uid))
+            put("item", JSONObject().put("list", list).put("text", text).put("done", done).put("order", now + index * 0.001).put("by", uid))
         }
         val board = Model.defaultBoard(uid)
-        val columns = sync.all("column").filter { it.data.optString("board") == board }.associate { it.data.optString("name") to it.id }
+        // By position, not by name – the names follow the app's language.
+        val columns = listOf("Offen", "In Arbeit", "Erledigt").zip(sync.all("column").filter { it.data.optString("board") == board }
+            .sortedBy { it.data.optDouble("order") }.map { it.id }).toMap()
         listOf(Triple("Offen", "Steuererklärung abgeben", "hoch"), Triple("Offen", "Fahrrad zur Inspektion", "mittel"),
             Triple("Offen", "Fenster putzen", ""), Triple("In Arbeit", "Gartenhaus planen", "mittel"),
             Triple("Erledigt", "Geburtstagsgeschenk für Anna", "")).forEachIndexed { order, (column, title, priority) ->
             val card = JSONObject().put("board", board).put("column", columns.getValue(column)).put("title", title).put("order", order)
                 .put("created", now).put("created_by", uid)
             if (priority.isNotEmpty()) card.put("priority", priority)
-            sync.put("card", card)
+            put("card", card)
         }
         val today = LocalDate.now()
         val putz = Plans.template("putzplan").put("name", "Putzplan WG").put("order", 1)
         putz.put("rot", JSONObject().put("people", JSONArray(listOf("Olaf", "Anna", "Ben"))).put("start", Plans.monday(today).toString()))
-        val putzId = sync.put("plan", Plans.setCell(putz, 2, 1, "Ben (Urlaub)", "yellow")).id
+        val putzId = put("plan", Plans.setCell(putz, 2, 1, "Ben (Urlaub)", "yellow")).id
         val start = Plans.monday(today).minusDays(7)
         fun task(name: String, from: Long, to: Long, color: String, milestone: Boolean = false) = JSONObject().put("x", name)
             .put("from", start.plusDays(from).toString()).put("to", start.plusDays(to).toString()).put("k", color).also { if (milestone) it.put("m", true) }
-        val projekt = sync.put("plan", JSONObject().put("name", "Gartenhaus bauen").put("order", 3).put("mode", "timeline").put("tasks", JSONArray(listOf(
+        val projekt = put("plan", JSONObject().put("name", "Gartenhaus bauen").put("order", 3).put("mode", "timeline").put("tasks", JSONArray(listOf(
             task("Planung", 0, 9, "blue"), task("Fundament", 10, 13, "grey"), task("Material", 14, 14, "pink", true),
             task("Aufbau", 15, 26, "orange"), task("Streichen", 24, 30, "mint"), task("Einweihung", 33, 33, "purple", true))))).id
         var schicht = Plans.template("schichtplan").put("name", "Dienstplan Station 3").put("order", 4).put("rows", JSONArray(listOf("Lena", "Murat", "Sabine", "Tom")))
@@ -119,7 +162,7 @@ class MarketingShots {
         val shiftColors = mapOf("Früh" to "yellow", "Spät" to "blue", "Nacht" to "purple", "Frei" to "grey")
         schicht.put("cells", JSONArray())
         pattern.forEachIndexed { r, row -> row.forEachIndexed { c, value -> schicht = Plans.setCell(schicht, r, c, value, shiftColors.getValue(value)) } }
-        val schichtId = sync.put("plan", schicht).id
+        val schichtId = put("plan", schicht).id
         return mapOf("hero" to hero, "cake" to cake, "meeting" to meeting, "reisen" to reisen, "list" to list, "board" to board,
             "putz" to putzId, "projekt" to projekt, "schicht" to schichtId)
     }

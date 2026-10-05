@@ -399,7 +399,7 @@ private fun Timeline(plan: JSONObject, open: Int?, userId: Int, reordering: Bool
                 Row {
                     for (i in 0 until days step 7) {
                         val d = first.plusDays(i.toLong())
-                        Text(tr("KW {week} · {date}", "week" to d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), "date" to "%02d.%02d.".format(d.dayOfMonth, d.monthValue)), style = Type.caption,
+                        Text(Plans.weekLabel(d), style = Type.caption,
                             color = labelColor, maxLines = 1, modifier = Modifier.width(dayWidth * 7))
                     }
                 }
@@ -566,7 +566,7 @@ object PlanPdf {
             val small = pdf.paint(8f, color = pdf.grey)
             for (i in 0 until days step 7) {
                 val d = first.plusDays(i.toLong())
-                pdf.canvas.drawText(tr("KW {week} · {date}", "week" to d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), "date" to "%02d.%02d.".format(d.dayOfMonth, d.monthValue)),
+                pdf.canvas.drawText(Plans.weekLabel(d),
                     pdf.margin + labelWidth + i * scale + 2, pdf.y + 9, small)
             }
             pdf.y += 16f

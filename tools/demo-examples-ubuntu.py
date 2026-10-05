@@ -27,6 +27,15 @@ application.APP_ID = "io.github.veritasx1.LiNotesDemo"
 OUT = os.path.join(SCRATCH, "examples")
 os.makedirs(OUT, exist_ok=True)
 DAY = 86400
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from demo_texts import EN, FR, translator  # noqa: E402  – LINOTES_LANGUAGE=en|fr: contents in that language
+EN.update({"Dr. K. Brandt (Safety)": "Dr K. Brandt (Safety)", "Bremse Nord (Test)": "Brakes North (Test)",
+           "Lena (Entwicklung)": "Lena (development)", "Claude (KI-Konto)": "Claude (AI account)"})
+FR.update({"Bremse Nord (Test)": "Freins Nord (Test)", "Lena (Entwicklung)": "Lena (développement)",
+           "Claude (KI-Konto)": "Claude (compte IA)"})
+EN.update({"dienstlich": "business", "privat": "private", "gesamt": "total", "i. O.": "OK", "n. i. O.": "not OK", "offen": "open"})
+FR.update({"dienstlich": "professionnel", "privat": "privé", "gesamt": "total", "i. O.": "OK", "n. i. O.": "non OK", "offen": "ouvert"})
+L, TRANSLATE = translator(os.environ.get("LINOTES_LANGUAGE", "de"))
 
 
 class App(LiNotesApplication):
@@ -57,9 +66,9 @@ def report_png(path, title, subtitle, rows, footer=None, chart=None):
     cr = cairo.Context(surface)
     cr.set_source_rgb(1, 1, 1); cr.paint()
     cr.set_source_rgb(0.12, 0.12, 0.14); cr.select_font_face("Sans", 0, 1); cr.set_font_size(26)
-    cr.move_to(32, 50); cr.show_text(title)
+    cr.move_to(32, 50); cr.show_text(L(title))
     cr.select_font_face("Sans", 0, 0); cr.set_font_size(15); cr.set_source_rgb(0.42, 0.42, 0.45)
-    cr.move_to(32, 78); cr.show_text(subtitle)
+    cr.move_to(32, 78); cr.show_text(L(subtitle))
     y = 118
     for i, row in enumerate(rows):
         if i % 2 == 0:
@@ -70,13 +79,13 @@ def report_png(path, title, subtitle, rows, footer=None, chart=None):
             bad = cell in ("nicht bestanden", "n. i. O.", "offen")
             cr.set_source_rgb(*((0.18, 0.62, 0.3) if ok else (0.85, 0.25, 0.2) if bad else (0.12, 0.12, 0.14)))
             cr.select_font_face("Sans", 0, 1 if j == 0 else 0); cr.set_font_size(16)
-            cr.move_to(x, y); cr.show_text(str(cell))
+            cr.move_to(x, y); cr.show_text(L(str(cell)))
             x += [220, 300, 180, 160][j] if j < 4 else 120
         y += 34
     if chart:
         label, values, limit = chart
         top, base = y + 10, y + 190
-        cr.set_source_rgb(0.42, 0.42, 0.45); cr.set_font_size(14); cr.move_to(34, top); cr.show_text(label)
+        cr.set_source_rgb(0.42, 0.42, 0.45); cr.set_font_size(14); cr.move_to(34, top); cr.show_text(L(label))
         bw = (width - 120) / len(values)
         peak = max(max(values), limit) * 1.15
         for i, v in enumerate(values):
@@ -86,10 +95,10 @@ def report_png(path, title, subtitle, rows, footer=None, chart=None):
         ly = base - (base - top - 20) * limit / peak
         cr.set_source_rgb(0.85, 0.25, 0.2); cr.set_line_width(2); cr.set_dash([6, 4])
         cr.move_to(52, ly); cr.line_to(width - 40, ly); cr.stroke(); cr.set_dash([])
-        cr.move_to(width - 190, ly - 6); cr.set_font_size(13); cr.show_text(f"Grenze {limit}")
+        cr.move_to(width - 190, ly - 6); cr.set_font_size(13); cr.show_text(L("Grenze ") + str(limit))
         y = base + 20
     if footer:
-        cr.set_source_rgb(0.42, 0.42, 0.45); cr.set_font_size(13); cr.move_to(32, height - 22); cr.show_text(footer)
+        cr.set_source_rgb(0.42, 0.42, 0.45); cr.set_font_size(13); cr.move_to(32, height - 22); cr.show_text(L(footer))
     surface.write_to_png(path)
     return path
 
@@ -379,7 +388,7 @@ def seed_ai(sync, people):
         [("Offen", 4, me), ("In Arbeit", 2, ai), ("Testing", 1, ai)], 2)
     ids["ai_card"] = t
     log = os.path.join(ev, "Testprotokoll 1.3.0.txt")
-    open(log, "w").write("Testlauf 02.10.2026 18:20 – Commit 0c9e4a8\n\ntest_trip_kind.py ........ 8 bestanden\ntest_migration.py .... 4 bestanden\n\n12 bestanden, 0 fehlgeschlagen\n")
+    open(log, "w").write(L("Testlauf 02.10.2026 18:20 – Commit 0c9e4a8\n\ntest_trip_kind.py ........ 8 bestanden\ntest_migration.py .... 4 bestanden\n\n12 bestanden, 0 fehlgeschlagen\n"))
     attach(sync, t, [log, report_png(os.path.join(ev, "Jahresbericht 2026 – Summen.png"), "Jahresbericht 2026",
         "Fahrtenbuch-App 1.3.0 · Beispieldaten", [["Art", "Fahrten", "Kilometer", ""], ["dienstlich", "214", "18 402 km", ""],
         ["privat", "96", "4 117 km", ""], ["gesamt", "310", "22 519 km", ""]], "Summen fett, getrennt nach Art")], ai, 1)
@@ -423,12 +432,15 @@ def run(app):
         Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
     win.set_default_size(1560, 900)
     win.unmaximize()
+    put, update = sync.put, sync.update
+    sync.put = lambda kind, data, *args, **kwargs: put(kind, TRANSLATE(data), *args, **kwargs)
+    sync.update = lambda object_id, *args, **fields: update(object_id, *args, **TRANSLATE(fields))
     model.ensure_defaults(sync)
     # Team members of the examples (only in this isolated demo data).
     people = {"pm": sync.user_id}
     for uid, (key, name) in enumerate([("safety", "Dr. K. Brandt (Safety)"), ("sw", "M. Yilmaz (SW)"), ("hw", "S. Hansen (HW)"),
                                        ("test", "Bremse Nord (Test)"), ("dev", "Lena (Entwicklung)"), ("ai", "Claude (KI-Konto)")], start=2):
-        sync.state["users"].append({"id": uid, "name": name, "username": key})
+        sync.state["users"].append({"id": uid, "name": L(name), "username": key})
         people[key] = uid
     ids = seed_automotive(sync, people)
     ids.update(seed_ai(sync, people))
