@@ -1636,19 +1636,24 @@ class LiNotesWindow(Adw.ApplicationWindow):
             )
             return
 
-        def unlock(password, _hint):
-            def derive():
-                return vault.unlock(existing["data"], password)
+        def ask(wrong=False):
+            def unlock(password, _hint):
+                def derive():
+                    return vault.unlock(existing["data"], password)
 
-            def done(key, error):
-                if error is not None:
-                    self.toast(_("Falsches Passwort."))
-                    return
-                self.vault_key = key
-                self.touch_vault()
-                then()
-            run_async(derive, done)
-        ask_password(self, _("Gesperrte Notizen"), reason, unlock, hint=existing["data"].get("hint"), action=_("Entsperren"))
+                def done(key, error):
+                    if error is not None:
+                        # Like Apple: ask again, now with "Falsches Passwort" and the hint – the note
+                        # stays as it was until the right password is given or the user cancels.
+                        ask(wrong=True)
+                        return
+                    self.vault_key = key
+                    self.touch_vault()
+                    then()
+                run_async(derive, done)
+            ask_password(self, _("Gesperrte Notizen"), reason, unlock, hint=existing["data"].get("hint"),
+                         action=_("Entsperren"), wrong=wrong)
+        ask()
 
     def on_lock_button(self):
         note = self.sync.get(self.current_note) if self.current_note else None
@@ -1723,7 +1728,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             try:
                 old_key = vault.unlock(existing["data"], old)
             except vault.WrongPassword:
-                self.toast(_("Falsches Passwort."))
+                ask_old(wrong=True)
                 return
 
             def got_new(new, hint):
@@ -1741,8 +1746,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.touch_vault()
                 self.toast(_("Notizen-Passwort geändert, {count} Notizen neu verschlüsselt.", count=count))
             ask_password(self, _("Neues Notizen-Passwort"), "", got_new, confirm=True, action=_("Ändern"))
-        ask_password(self, _("Notizen-Passwort ändern"), _("Gib dein aktuelles Notizen-Passwort ein."), got_old,
-                     hint=existing["data"].get("hint"))
+
+        def ask_old(wrong=False):
+            ask_password(self, _("Notizen-Passwort ändern"), _("Gib dein aktuelles Notizen-Passwort ein."), got_old,
+                         hint=existing["data"].get("hint"), wrong=wrong)
+        ask_old()
 
     # ========================================================
     # FOLDERS, LISTS, BOARDS

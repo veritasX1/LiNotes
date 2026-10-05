@@ -41,23 +41,25 @@ def run_async(function, done):
     threading.Thread(target=worker, daemon=True).start()
 
 
-def ask_password(parent, heading, body, callback, hint=None, confirm=False, action="OK"):
-    """Ask for a password (optionally twice plus a hint). callback(password, hint)."""
+def ask_password(parent, heading, body, callback, hint=None, confirm=False, action="OK", wrong=False):
+    """Ask for a password (optionally twice plus a hint). callback(password, hint).
+    Like Apple, the hint shows only after a wrong password (`wrong`), together with that message."""
     dialog = Adw.AlertDialog(heading=heading, body=body)
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     first = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-    first.set_property("placeholder-text", "Passwort")
+    first.set_property("placeholder-text", _("Passwort"))
     box.append(first)
     second = hint_entry = None
     if confirm:
         second = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-        second.set_property("placeholder-text", "Passwort bestätigen")
+        second.set_property("placeholder-text", _("Passwort bestätigen"))
         box.append(second)
         hint_entry = Gtk.Entry(placeholder_text=_("Merkhilfe (empfohlen)"))
         box.append(hint_entry)
-    elif hint:
-        label = Gtk.Label(label=_("Merkhilfe: {hint}", hint=hint), xalign=0, wrap=True)
-        label.add_css_class("dim-label")
+    elif wrong:
+        text = _("Falsches Passwort.") + ("\n" + _("Merkhilfe: {hint}", hint=hint) if hint else "")
+        label = Gtk.Label(label=text, xalign=0, wrap=True)
+        label.add_css_class("error")
         box.append(label)
     dialog.set_extra_child(box)
     dialog.add_response("cancel", _("Abbrechen"))

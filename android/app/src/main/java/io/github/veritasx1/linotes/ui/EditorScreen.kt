@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -682,15 +683,20 @@ private fun LockedPlaceholder(state: AppState, onUnlocked: () -> Unit) {
 fun UnlockDialog(state: AppState, reason: String = tr("Gib dein Notizen-Passwort ein."), onDismiss: () -> Unit, onUnlocked: () -> Unit) {
     val scope = rememberCoroutineScope()
     val hint = state.vaultObject()?.data?.optString("hint").orEmpty()
-    AlertDialog(
-        tr("Gesperrte Notizen"), reason + if (hint.isNotEmpty()) tr("\nMerkhilfe: {hint}", "hint" to hint) else "", "OK",
-        fields = listOf(AlertField(tr("Passwort"), password = true)), onDismiss = onDismiss,
-    ) { values ->
-        scope.launch {
-            val ok = withContext(Dispatchers.Default) {
-                try { state.unlock(values[0]); true } catch (error: Exception) { false }
+    // Like Apple: the hint only after a wrong password, then together with that message; the field starts empty again.
+    var wrong by remember { mutableIntStateOf(0) }
+    key(wrong) {
+        AlertDialog(
+            tr("Gesperrte Notizen"),
+            if (wrong == 0) reason else tr("Falsches Passwort.") + if (hint.isNotEmpty()) tr("\nMerkhilfe: {hint}", "hint" to hint) else "",
+            "OK", fields = listOf(AlertField(tr("Passwort"), password = true)), onDismiss = onDismiss,
+        ) { values ->
+            scope.launch {
+                val ok = withContext(Dispatchers.Default) {
+                    try { state.unlock(values[0]); true } catch (error: Exception) { false }
+                }
+                if (ok) onUnlocked() else wrong++
             }
-            if (ok) onUnlocked() else state.showToast(tr("Falsches Passwort."))
         }
     }
 }
