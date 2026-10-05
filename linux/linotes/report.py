@@ -560,7 +560,7 @@ def write_plan_pdf(plan, path, user_name=None):
         for i in range(0, days, 7):
             x = MARGIN + label_width + i * scale
             d = first + datetime.timedelta(days=i)
-            pdf.draw(pdf.layout(f"KW {d.isocalendar()[1]} · {d.strftime('%d.%m.')}", 8, color=GREY), x + 2, top)
+            pdf.draw(pdf.layout(plans.week_label(d), 8, color=GREY), x + 2, top)
         pdf.y += 16
         for task in plan.get("tasks") or []:
             pdf.need(24)

@@ -44,7 +44,18 @@ def monday(date):
 
 
 def short_date(date):
+    """05.10. · 10/5 · 05/10 – as each language writes a short date."""
+    from .i18n import language
+    if language() == "en":
+        return f"{date.month}/{date.day}"
+    if language() == "fr":
+        return date.strftime("%d/%m")
     return date.strftime("%d.%m.")
+
+
+def week_label(date):
+    """„KW 41 · 05.10.“ · „Wk 41 · 10/5“ · „Sem. 41 · 05/10“"""
+    return _("KW {week} · {date}", week=date.isocalendar()[1], date=short_date(date))
 
 
 # --- grid ---------------------------------------------------------------
@@ -68,7 +79,7 @@ def column_labels(plan, today=None):
         return [f"{WEEKDAYS[d.weekday()]} {short_date(d)}" for d in (start + datetime.timedelta(days=i) for i in range(count))]
     if kind == "weeks":
         first = monday(today)
-        return [f"KW {d.isocalendar()[1]} · {short_date(d)}" for d in (first + datetime.timedelta(weeks=i) for i in range(count))]
+        return [week_label(d) for d in (first + datetime.timedelta(weeks=i) for i in range(count))]
     labels = list(cols.get("labels") or [])
     return labels + [""] * (count - len(labels))
 

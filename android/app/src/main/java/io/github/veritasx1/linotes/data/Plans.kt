@@ -30,7 +30,16 @@ object Plans {
 
     fun day(text: String?): LocalDate? = try { if (text.isNullOrEmpty()) null else LocalDate.parse(text) } catch (error: Exception) { null }
     fun monday(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
-    private fun short(date: LocalDate) = "%02d.%02d.".format(date.dayOfMonth, date.monthValue)
+    /** 05.10. · 10/5 · 05/10 – as each language writes a short date (the same as Ubuntu's plans.short_date). */
+    fun short(date: LocalDate) = when (io.github.veritasx1.linotes.i18n.I18n.language()) {
+        "en" -> "${date.monthValue}/${date.dayOfMonth}"
+        "fr" -> "%02d/%02d".format(date.dayOfMonth, date.monthValue)
+        else -> "%02d.%02d.".format(date.dayOfMonth, date.monthValue)
+    }
+
+    /** „KW 41 · 05.10.“ · „Wk 41 · 10/5“ · „Sem. 41 · 05/10“ */
+    fun weekLabel(date: LocalDate) = io.github.veritasx1.linotes.i18n.tr("KW {week} · {date}",
+        "week" to date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), "date" to short(date))
     private fun cols(plan: JSONObject) = plan.optJSONObject("cols") ?: JSONObject()
     fun columnType(plan: JSONObject): String = cols(plan).optString("type", "free").ifEmpty { "free" }
     fun isTimeline(plan: JSONObject) = plan.optString("mode") == "timeline"
@@ -49,7 +58,7 @@ object Plans {
                 val start = day(cols(plan).optString("start")) ?: today
                 (0 until count).map { start.plusDays(it.toLong()) }.map { "${WEEKDAYS[it.dayOfWeek.value - 1]} ${short(it)}" }
             }
-            "weeks" -> (0 until count).map { monday(today).plusWeeks(it.toLong()) }.map { "KW ${it.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · ${short(it)}" }
+            "weeks" -> (0 until count).map { monday(today).plusWeeks(it.toLong()) }.map { weekLabel(it) }
             else -> {
                 val labels = cols(plan).optJSONArray("labels") ?: JSONArray()
                 (0 until count).map { labels.optString(it) }
