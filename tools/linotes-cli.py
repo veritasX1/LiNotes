@@ -362,11 +362,11 @@ def cmd_add(board_ref, column_ref, title, notes=""):
     col = find(eng, "column", column_ref, board=board["id"])
     others = cards(eng, col["id"])
     order = (others[-1]["data"].get("order", 0) + 1) if others else 1
-    eng.put("card", {"board": board["id"], "column": col["id"], "title": title,
-                     "notes": notes, "order": order, **model.new_card_fields(eng, col["id"])},
-            board.get("share"), notify=False)
+    obj = eng.put("card", {"board": board["id"], "column": col["id"], "title": title,
+                           "notes": notes, "order": order, **model.new_card_fields(eng, col["id"])},
+                  board.get("share"), notify=False)
     flush(eng)
-    print("ok")
+    print("ok", obj["id"][:8])
 
 
 DEV_FIELDS = ("impact", "verification", "version")
