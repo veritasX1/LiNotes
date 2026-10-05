@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -143,7 +145,7 @@ object AudioNotes {
         }
     }
 
-    private val MONTHS = listOf("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
+    private val MONTHS = listOf(tr("Jan."), tr("Feb."), tr("März"), tr("Apr."), tr("Mai"), tr("Juni"), tr("Juli"), tr("Aug."), tr("Sept."), tr("Okt."), tr("Nov."), tr("Dez."))
     private val NAME = Regex("^(.*?)\\s*(\\d{4})-(\\d{2})-(\\d{2})[ _](\\d{2})-(\\d{2})\\.\\w+$")
 
     /** Title and the line below it on the player card, like Apple's: "Aufnahme", "4. Okt. 2026, 14:22 · 0:07".
@@ -154,12 +156,12 @@ object AudioNotes {
         val match = NAME.find(name)
         if (match != null && match.groupValues[3].toInt() in 1..12) {
             val g = match.groupValues
-            val title = g[1].trim().ifEmpty { "Aufnahme" }
+            val title = g[1].trim().ifEmpty { tr("Aufnahme") }
             val date = "${g[4].toInt()}. ${MONTHS[g[3].toInt() - 1]} ${g[2]}, ${g[5]}:${g[6]}"
             return title to listOf(date, duration).filter { it.isNotEmpty() }.joinToString(" · ")
         }
         val title = if ('.' in name) name.substringBeforeLast('.') else name
-        return title.ifEmpty { "Audioaufnahme" } to duration
+        return title.ifEmpty { tr("Audioaufnahme") } to duration
     }
 
     fun recordingName(): String =
@@ -217,12 +219,12 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
         val length = recorder.stop(keep)
         when {
             !keep -> onCancel()
-            length == null -> onFailed("Die Aufnahme war zu kurz.")
+            length == null -> onFailed(tr("Die Aufnahme war zu kurz."))
             else -> onDone(recorder.file, length)
         }
     }
     LaunchedEffect(recorder) {
-        if (recorder == null) { onFailed("Das Mikrofon lässt sich nicht öffnen."); return@LaunchedEffect }
+        if (recorder == null) { onFailed(tr("Das Mikrofon lässt sich nicht öffnen.")); return@LaunchedEffect }
         while (!finished) { elapsed = recorder.elapsed(); delay(250) }
     }
     DisposableEffect(Unit) { onDispose { finish(false) } }
@@ -233,7 +235,7 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Audioaufnahme", style = Type.headline, color = colors.label)
+                Text(tr("Audioaufnahme"), style = Type.headline, color = colors.label)
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(14.dp).background(colors.red, CircleShape))
@@ -241,16 +243,16 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
                     Text(AudioNotes.durationText(elapsed), style = Type.title1, color = colors.label)
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Aufnahme läuft …", style = Type.footnote, color = colors.secondary)
+                Text(tr("Aufnahme läuft …"), style = Type.footnote, color = colors.secondary)
             }
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable { finish(false) }, contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable { finish(true) }, contentAlignment = Alignment.Center) {
-                    Text("Fertig", style = Type.headline, color = colors.accentText)
+                    Text(tr("Fertig"), style = Type.headline, color = colors.accentText)
                 }
             }
         }
@@ -316,8 +318,8 @@ fun PlayerBar(player: AudioPlayer) {
         Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("Audioaufnahme  ${AudioNotes.durationText(player.position / 1000.0)} / ${AudioNotes.durationText(player.length / 1000.0)}",
+        Text(tr("Audioaufnahme  {durationText} / {durationText2}", "durationText" to (AudioNotes.durationText(player.position / 1000.0)), "durationText2" to (AudioNotes.durationText(player.length / 1000.0))),
             style = Type.subheadline, color = colors.label)
-        Text("Stopp", style = Type.headline, color = colors.accentText, modifier = Modifier.clickable { player.stop() }.padding(6.dp))
+        Text(tr("Stopp"), style = Type.headline, color = colors.accentText, modifier = Modifier.clickable { player.stop() }.padding(6.dp))
     }
 }

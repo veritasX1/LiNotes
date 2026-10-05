@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -80,7 +82,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
                 }
                 withContext(Dispatchers.Main) { done(reference) }
             } catch (error: Exception) {
-                withContext(Dispatchers.Main) { showToast("„$name“ nicht hochgeladen: " + errorText(error)) }
+                withContext(Dispatchers.Main) { showToast(tr("„{name}“ nicht hochgeladen: ", "name" to name) + errorText(error)) }
             } finally {
                 withContext(Dispatchers.Main) { uploads.remove(item) }
             }
@@ -108,7 +110,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
 
     fun scanQr(onResult: (String) -> Unit) {
         requestCamera { granted ->
-            if (granted) scanner = onResult else toastLater("Ohne Kamerazugriff kann kein QR-Code gescannt werden.")
+            if (granted) scanner = onResult else toastLater(tr("Ohne Kamerazugriff kann kein QR-Code gescannt werden."))
         }
     }
 
@@ -171,7 +173,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     fun enableBiometric(done: (Boolean) -> Unit) {
         val key = vaultKey ?: return done(false)
         val store = biometric ?: return done(false)
-        authenticate("Entsperren mit Fingerabdruck, PIN oder Muster einschalten") { ok ->
+        authenticate(tr("Entsperren mit Fingerabdruck, PIN oder Muster einschalten")) { ok ->
             val stored = ok && try { store.store(key, vaultObject()?.id.orEmpty()); true } catch (error: Exception) { false }
             done(stored)
         }
@@ -183,14 +185,14 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
 
     fun unlockWithBiometric(done: (Boolean) -> Unit) {
         val store = biometric?.takeIf { it.enabled } ?: return done(false)
-        authenticate("Gesperrte Notizen öffnen") { ok ->
+        authenticate(tr("Gesperrte Notizen öffnen")) { ok ->
             if (!ok) return@authenticate done(false)
             val key = try { store.load() } catch (error: Exception) { null }
             val vault = vaultObject()
             if (key == null || vault == null || !Vault.checkKey(vault.data, key)) {
                 // The notes password changed or the phone's lock was reset.
                 store.clear()
-                toastLater("Bitte einmal das Notizen-Passwort eingeben.")
+                toastLater(tr("Bitte einmal das Notizen-Passwort eingeben."))
                 return@authenticate done(false)
             }
             vaultKey = key

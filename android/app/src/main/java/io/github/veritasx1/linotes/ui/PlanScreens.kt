@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Color as AColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -90,27 +92,27 @@ fun PlansScreen(state: AppState, revision: Long) {
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
     var moving by remember { mutableStateOf<SyncObject?>(null) }
 
-    LargeTitleScreen(title = "Pläne", actions = { BarButton(Glyph.Plus, "Neuer Plan") { choosing = true } }) {
-        if (plans.isEmpty()) item { EmptyState("Keine Pläne", "Stundenplan, Schichtplan, Putzplan, Raumplan oder Projektplan – mit + anlegen.", glyph = Glyph.Table) }
-        for ((folder, group) in groupByFolder(sync, plans)) section("plans-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Pläne",
+    LargeTitleScreen(title = tr("Pläne"), actions = { BarButton(Glyph.Plus, tr("Neuer Plan")) { choosing = true } }) {
+        if (plans.isEmpty()) item { EmptyState(tr("Keine Pläne"), tr("Stundenplan, Schichtplan, Putzplan, Raumplan oder Projektplan – mit + anlegen."), glyph = Glyph.Table) }
+        for ((folder, group) in groupByFolder(sync, plans)) section("plans-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: tr("Pläne"),
             headerDrop = Pair({ it.startsWith("plan:") }, { dropOnFolder(state, it, folder?.id) })) {
             group.forEachIndexed { index, plan ->
-                GroupRow(plan.data.optString("name").ifEmpty { "Plan" }, Glyph.Table,
-                    subtitle = (if (Plans.isTimeline(plan.data)) "Zeitstrahl" else "Raster") + " · " + shareLabel(sync, plan),
+                GroupRow(plan.data.optString("name").ifEmpty { tr("Plan") }, Glyph.Table,
+                    subtitle = (if (Plans.isTimeline(plan.data)) tr("Zeitstrahl") else tr("Raster")) + " · " + shareLabel(sync, plan),
                     divider = index < group.lastIndex, dragPayload = "plan:${plan.id}", onLongClick = { menu = plan }) { state.push(Route.Plan(plan.id)) }
             }
         }
         archiveSection("plans", archivedPlans, archiveOpen, { archiveOpen = !archiveOpen }) { plan, divider ->
-            GroupRow(plan.data.optString("name").ifEmpty { "Plan" }, Glyph.Table, subtitle = shareLabel(sync, plan), divider = divider,
+            GroupRow(plan.data.optString("name").ifEmpty { tr("Plan") }, Glyph.Table, subtitle = shareLabel(sync, plan), divider = divider,
                 onLongClick = { menu = plan }) { state.push(Route.Plan(plan.id)) }
         }
     }
     if (choosing) {
-        ActionSheet("Neuer Plan – Vorlage", Plans.TEMPLATES.map { (key, title, _) -> SheetAction(title) { naming = key } }) { choosing = false }
+        ActionSheet(tr("Neuer Plan – Vorlage"), Plans.TEMPLATES.map { (key, title, _) -> SheetAction(title) { naming = key } }) { choosing = false }
     }
     naming?.let { key ->
         val title = Plans.TEMPLATES.first { it.first == key }.second
-        AlertDialog("Neuer Plan", "$title: " + Plans.TEMPLATES.first { it.first == key }.third, confirm = "Erstellen", fields = listOf(AlertField("Name", if (key == "leer") "" else title)),
+        AlertDialog(tr("Neuer Plan"), "$title: " + Plans.TEMPLATES.first { it.first == key }.third, confirm = tr("Erstellen"), fields = listOf(AlertField(tr("Name"), if (key == "leer") "" else title)),
             onDismiss = { naming = null }) { values ->
             val name = values[0].trim().ifEmpty { title }
             val plan = sync.put("plan", Plans.template(key).put("name", name).put("order", Model.now()))
@@ -120,17 +122,17 @@ fun PlansScreen(state: AppState, revision: Long) {
     }
     menu?.let { plan ->
         ActionSheet(plan.data.optString("name"), listOf(
-            SheetAction("Umbenennen") { renaming = plan },
-            SheetAction("Verschieben nach …") { moving = plan },
-            SheetAction("Teilen …") { state.push(Route.Share(plan.id)) },
-            SheetAction("Als PDF teilen …") { PlanPdf.share(state, context, plan) },
+            SheetAction(tr("Umbenennen")) { renaming = plan },
+            SheetAction(tr("Verschieben nach …")) { moving = plan },
+            SheetAction(tr("Teilen …")) { state.push(Route.Share(plan.id)) },
+            SheetAction(tr("Als PDF teilen …")) { PlanPdf.share(state, context, plan) },
             archiveAction(state, plan),
-            SheetAction("Plan löschen", destructive = true) { sync.delete(plan.id) },
+            SheetAction(tr("Plan löschen"), destructive = true) { sync.delete(plan.id) },
         )) { menu = null }
     }
     moving?.let { plan -> MoveToFolderSheet(state, plan) { moving = null } }
     renaming?.let { plan ->
-        AlertDialog("Plan umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", plan.data.optString("name"))),
+        AlertDialog(tr("Plan umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), plan.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->
             if (values[0].isNotBlank()) sync.update(plan.id) { it.put("name", values[0].trim()) }
             renaming = null
@@ -159,14 +161,14 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
     fun save(data: JSONObject) = sync.put("plan", data, obj.share, planId)
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
-        NavBar("", "Pläne", { state.pop() }, actions = {
-            BarButton(Glyph.Share, "Teilen") { state.push(Route.Share(planId)) }
-            if (Plans.isTimeline(plan)) BarButton(Glyph.Plus, "Aufgabe hinzufügen") { save(addTask(plan, false)); openTask = Plans.tasks(plan).size }
-            else BarButton(Glyph.Plus, "Zeile hinzufügen") { save(Plans.insertRow(plan, Plans.rows(plan).size)) }
-            BarButton(Glyph.More, "Mehr") { menu = true }
+        NavBar("", tr("Pläne"), { state.pop() }, actions = {
+            BarButton(Glyph.Share, tr("Teilen")) { state.push(Route.Share(planId)) }
+            if (Plans.isTimeline(plan)) BarButton(Glyph.Plus, tr("Aufgabe hinzufügen")) { save(addTask(plan, false)); openTask = Plans.tasks(plan).size }
+            else BarButton(Glyph.Plus, tr("Zeile hinzufügen")) { save(Plans.insertRow(plan, Plans.rows(plan).size)) }
+            BarButton(Glyph.More, tr("Mehr")) { menu = true }
         })
-        Text(plan.optString("name").ifEmpty { "Plan" }, style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
-        Text((if (Plans.isTimeline(plan)) "Zeitstrahl" else "Raster") + " · " + shareLabel(sync, obj),
+        Text(plan.optString("name").ifEmpty { tr("Plan") }, style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
+        Text((if (Plans.isTimeline(plan)) tr("Zeitstrahl") else tr("Raster")) + " · " + shareLabel(sync, obj),
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f).navigationBarsPadding()) {
@@ -179,32 +181,32 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
     if (menu) {
         val actions = buildList {
             if (Plans.isTimeline(plan)) {
-                add(SheetAction("Aufgabe hinzufügen") { save(addTask(plan, false)); openTask = Plans.tasks(plan).size })
-                add(SheetAction("Meilenstein hinzufügen") { save(addTask(plan, true)); openTask = Plans.tasks(plan).size })
+                add(SheetAction(tr("Aufgabe hinzufügen")) { save(addTask(plan, false)); openTask = Plans.tasks(plan).size })
+                add(SheetAction(tr("Meilenstein hinzufügen")) { save(addTask(plan, true)); openTask = Plans.tasks(plan).size })
                 if (Plans.tasks(plan).size > 1) {
-                    add(SheetAction("Reihenfolge ändern") { reordering = true })
-                    add(SheetAction("Nach Datum sortieren") { save(Plans.sortTasks(plan)) })
+                    add(SheetAction(tr("Reihenfolge ändern")) { reordering = true })
+                    add(SheetAction(tr("Nach Datum sortieren")) { save(Plans.sortTasks(plan)) })
                 }
             } else {
-                add(SheetAction("Zeile hinzufügen") { save(Plans.insertRow(plan, Plans.rows(plan).size)) })
-                add(SheetAction(if (Plans.columnType(plan) == "free") "Spalte hinzufügen" else "Spalte anhängen") { save(Plans.insertColumn(plan, Plans.columnCount(plan))) })
-                add(SheetAction("Spalten: ${columnTypeName(Plans.columnType(plan))} …") { columnsMenu = true })
-                if (Plans.columnType(plan) == "weeks") add(SheetAction("Rotation …") { rotation = true })
+                add(SheetAction(tr("Zeile hinzufügen")) { save(Plans.insertRow(plan, Plans.rows(plan).size)) })
+                add(SheetAction(if (Plans.columnType(plan) == "free") tr("Spalte hinzufügen") else tr("Spalte anhängen")) { save(Plans.insertColumn(plan, Plans.columnCount(plan))) })
+                add(SheetAction(tr("Spalten: {columnTypeName} …", "columnTypeName" to (columnTypeName(Plans.columnType(plan))))) { columnsMenu = true })
+                if (Plans.columnType(plan) == "weeks") add(SheetAction(tr("Rotation …")) { rotation = true })
             }
-            add(SheetAction("Als PDF teilen …") { PlanPdf.share(state, context, obj) })
+            add(SheetAction(tr("Als PDF teilen …")) { PlanPdf.share(state, context, obj) })
         }
         ActionSheet(null, actions) { menu = false }
     }
     if (columnsMenu) {
-        ActionSheet("Was sind die Spalten?", COLUMN_TYPES.map { (key, label) ->
+        ActionSheet(tr("Was sind die Spalten?"), COLUMN_TYPES.map { (key, label) ->
             SheetAction(label + if (key == Plans.columnType(plan)) " ✓" else "") { save(Plans.setColumnType(plan, key)) }
         }) { columnsMenu = false }
     }
     if (rotation) {
         val rot = plan.optJSONObject("rot")
         val people = rot?.optJSONArray("people")?.let { list -> (0 until list.length()).joinToString(", ") { list.optString(it) } }.orEmpty()
-        AlertDialog("Rotation", "Die Namen rücken jede Woche eine Zeile weiter. Ein eigener Eintrag in einer Zelle gilt nur dort.",
-            confirm = "Übernehmen", fields = listOf(AlertField("z. B. Olaf, Anna, Ben", people)), onDismiss = { rotation = false }) { values ->
+        AlertDialog(tr("Rotation"), tr("Die Namen rücken jede Woche eine Zeile weiter. Ein eigener Eintrag in einer Zelle gilt nur dort."),
+            confirm = tr("Übernehmen"), fields = listOf(AlertField(tr("z. B. Tom, Mia, Ben"), people)), onDismiss = { rotation = false }) { values ->
             val names = values[0].split(",", "\n").map { it.trim() }.filter { it.isNotEmpty() }
             val data = JSONObject(plan.toString())
             if (names.isEmpty()) data.remove("rot")
@@ -215,12 +217,12 @@ fun PlanScreen(state: AppState, planId: String, revision: Long) {
     }
 }
 
-private val COLUMN_TYPES = listOf("free" to "Freie Spalten", "weekdays" to "Wochentage", "dates" to "Datum (Tage)", "weeks" to "Wochen")
-private fun columnTypeName(key: String) = COLUMN_TYPES.firstOrNull { it.first == key }?.second ?: "Freie Spalten"
+private val COLUMN_TYPES = listOf("free" to tr("Freie Spalten"), "weekdays" to tr("Wochentage"), "dates" to tr("Datum (Tage)"), "weeks" to tr("Wochen"))
+private fun columnTypeName(key: String) = COLUMN_TYPES.firstOrNull { it.first == key }?.second ?: tr("Freie Spalten")
 
 private fun addTask(plan: JSONObject, milestone: Boolean): JSONObject {
     val today = LocalDate.now()
-    val task = JSONObject().put("x", if (milestone) "Meilenstein" else "Neue Aufgabe").put("from", today.toString())
+    val task = JSONObject().put("x", if (milestone) tr("Meilenstein") else tr("Neue Aufgabe")).put("from", today.toString())
         .put("to", (if (milestone) today else today.plusDays(4)).toString()).put("k", if (milestone) "pink" else "blue")
     if (milestone) task.put("m", true)
     return JSONObject(plan.toString()).put("tasks", JSONArray(Plans.tasks(plan) + task))
@@ -257,7 +259,7 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
                 Box(Modifier.width(cellWidth).fillMaxHeight().heightIn(min = 40.dp).border(0.5.dp, line)
                     .background(if (c == today) colors.accent.copy(alpha = 0.18f) else headFill)
                     .clickable { target = GridTarget.ColumnHead(c) }.padding(8.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(label.ifEmpty { if (free) "Spalte" else "" }, style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold),
+                    Text(label.ifEmpty { if (free) tr("Spalte") else "" }, style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold),
                         color = if (c == today) colors.accentText else if (label.isEmpty()) colors.tertiary else colors.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -266,7 +268,7 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
             Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
                 Box(Modifier.width(headWidth).fillMaxHeight().heightIn(min = 44.dp).border(0.5.dp, line).background(headFill)
                     .clickable { target = GridTarget.RowHead(r) }.padding(8.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(label.ifEmpty { "Zeile" }, style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold),
+                    Text(label.ifEmpty { tr("Zeile") }, style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold),
                         color = if (label.isEmpty()) colors.tertiary else colors.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 labels.indices.forEach { c ->
@@ -285,8 +287,8 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
         }
     }
         Spacer(Modifier.height(10.dp))
-        Text(if (Plans.columnType(plan) == "weeks" && plan.has("rot")) "Kursiv: durch die Rotation. Antippen zum Ändern, Kopfzeilen für Zeilen und Spalten."
-            else "Zelle antippen zum Bearbeiten, Kopfzeilen für Zeilen und Spalten.", style = Type.footnote, color = colors.secondary,
+        Text(if (Plans.columnType(plan) == "weeks" && plan.has("rot")) tr("Kursiv: durch die Rotation. Antippen zum Ändern, Kopfzeilen für Zeilen und Spalten.")
+            else tr("Zelle antippen zum Bearbeiten, Kopfzeilen für Zeilen und Spalten."), style = Type.footnote, color = colors.secondary,
             modifier = Modifier.padding(horizontal = 16.dp))
     }
 
@@ -294,12 +296,12 @@ private fun Grid(plan: JSONObject, save: (JSONObject) -> Unit) {
         is GridTarget.Cell -> CellDialog(cells[t.row][t.column]?.optString("x").orEmpty(), cells[t.row][t.column]?.optString("k").orEmpty(),
             Plans.rotationName(plan, t.row, t.column), "${rows[t.row].ifEmpty { "Zeile" }} · ${labels[t.column].ifEmpty { "Spalte" }}",
             onDismiss = { target = null }) { text, color -> save(Plans.setCell(plan, t.row, t.column, text, color)); target = null }
-        is GridTarget.RowHead -> HeadSheet("Zeile", rows[t.row], editable = true, canRemove = rows.size > 1, free = true,
+        is GridTarget.RowHead -> HeadSheet(tr("Zeile"), rows[t.row], editable = true, canRemove = rows.size > 1, free = true,
             onDismiss = { target = null }, rename = { save(Plans.setRow(plan, t.row, it)) },
             before = { save(Plans.insertRow(plan, t.row)) }, after = { save(Plans.insertRow(plan, t.row + 1)) }, remove = { save(Plans.removeRow(plan, t.row)) },
             up = if (t.row > 0) ({ save(Plans.moveRow(plan, t.row, t.row - 1)) }) else null,
             down = if (t.row < rows.size - 1) ({ save(Plans.moveRow(plan, t.row, t.row + 1)) }) else null)
-        is GridTarget.ColumnHead -> HeadSheet("Spalte", labels[t.column], editable = free, canRemove = labels.size > 1, free = free,
+        is GridTarget.ColumnHead -> HeadSheet(tr("Spalte"), labels[t.column], editable = free, canRemove = labels.size > 1, free = free,
             onDismiss = { target = null }, rename = { save(Plans.setColumnLabel(plan, t.column, it)) },
             before = { save(Plans.insertColumn(plan, t.column)) }, after = { save(Plans.insertColumn(plan, t.column + 1)) },
             remove = { save(Plans.removeColumn(plan, t.column)) })
@@ -313,21 +315,21 @@ private fun HeadSheet(kind: String, label: String, editable: Boolean, canRemove:
                       up: (() -> Unit)? = null, down: (() -> Unit)? = null) {
     var renaming by remember { mutableStateOf(false) }
     if (renaming) {
-        AlertDialog("$kind umbenennen", confirm = "Sichern", fields = listOf(AlertField(kind, label)), onDismiss = onDismiss) { values ->
+        AlertDialog(tr("{kind} umbenennen", "kind" to kind), confirm = tr("Sichern"), fields = listOf(AlertField(kind, label)), onDismiss = onDismiss) { values ->
             rename(values[0].trim()); onDismiss()
         }
         return
     }
     val rowKind = kind == "Zeile"
     ActionSheet(label.ifEmpty { kind }, buildList {
-        if (editable) add(SheetAction("Umbenennen …") { renaming = true })
+        if (editable) add(SheetAction(tr("Umbenennen …")) { renaming = true })
         if (free) {
-            add(SheetAction(if (rowKind) "Zeile darüber einfügen" else "Spalte links einfügen") { before(); onDismiss() })
-            add(SheetAction(if (rowKind) "Zeile darunter einfügen" else "Spalte rechts einfügen") { after(); onDismiss() })
-        } else add(SheetAction("Spalte anhängen") { after(); onDismiss() })
-        up?.let { add(SheetAction("Zeile nach oben") { it(); onDismiss() }) }
-        down?.let { add(SheetAction("Zeile nach unten") { it(); onDismiss() }) }
-        if (canRemove) add(SheetAction(if (rowKind) "Zeile löschen" else if (free) "Spalte löschen" else "Letzte Spalte entfernen", destructive = true) { remove(); onDismiss() })
+            add(SheetAction(if (rowKind) tr("Zeile darüber einfügen") else tr("Spalte links einfügen")) { before(); onDismiss() })
+            add(SheetAction(if (rowKind) tr("Zeile darunter einfügen") else tr("Spalte rechts einfügen")) { after(); onDismiss() })
+        } else add(SheetAction(tr("Spalte anhängen")) { after(); onDismiss() })
+        up?.let { add(SheetAction(tr("Zeile nach oben")) { it(); onDismiss() }) }
+        down?.let { add(SheetAction(tr("Zeile nach unten")) { it(); onDismiss() }) }
+        if (canRemove) add(SheetAction(if (rowKind) tr("Zeile löschen") else if (free) tr("Spalte löschen") else tr("Letzte Spalte entfernen"), destructive = true) { remove(); onDismiss() })
     }) { if (!renaming) onDismiss() }
 }
 
@@ -340,10 +342,10 @@ private fun CellDialog(text: String, color: String, rotated: String?, title: Str
         Column(Modifier.width(300.dp).clip(RoundedCornerShape(14.dp)).background(if (colors.dark) Color(0xFF2C2C2E) else Color(0xFFF2F2F2))) {
             Column(Modifier.padding(16.dp)) {
                 Text(title, style = Type.headline, color = colors.label)
-                if (rotated != null) Text("Rotation: $rotated – ein Eintrag hier gilt nur für diese Zelle.", style = Type.footnote, color = colors.secondary)
+                if (rotated != null) Text(tr("Rotation: {rotated} – ein Eintrag hier gilt nur für diese Zelle.", "rotated" to rotated), style = Type.footnote, color = colors.secondary)
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(colors.surface).padding(10.dp)) {
-                    if (value.isEmpty()) Text(rotated ?: "Eintrag", style = Type.body, color = colors.tertiary)
+                    if (value.isEmpty()) Text(rotated ?: tr("Eintrag"), style = Type.body, color = colors.tertiary)
                     BasicTextField(value, { value = it }, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
                         modifier = Modifier.fillMaxWidth())
                 }
@@ -361,11 +363,11 @@ private fun CellDialog(text: String, color: String, rotated: String?, title: Str
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable { onSave(value.trim(), chosen) }, contentAlignment = Alignment.Center) {
-                    Text("Sichern", style = Type.headline, color = colors.accentText)
+                    Text(tr("Sichern"), style = Type.headline, color = colors.accentText)
                 }
             }
         }
@@ -397,7 +399,7 @@ private fun Timeline(plan: JSONObject, open: Int?, userId: Int, reordering: Bool
                 Row {
                     for (i in 0 until days step 7) {
                         val d = first.plusDays(i.toLong())
-                        Text("KW ${d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · %02d.%02d.".format(d.dayOfMonth, d.monthValue), style = Type.caption,
+                        Text(tr("KW {week} · {date}", "week" to d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), "date" to "%02d.%02d.".format(d.dayOfMonth, d.monthValue)), style = Type.caption,
                             color = labelColor, maxLines = 1, modifier = Modifier.width(dayWidth * 7))
                     }
                 }
@@ -436,15 +438,15 @@ private fun Timeline(plan: JSONObject, open: Int?, userId: Int, reordering: Bool
         }
         Spacer(Modifier.height(12.dp))
         if (reordering) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Reihenfolge ändern", style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
-            TextButton("Fertig", bold = true, onClick = onReordered)
+            Text(tr("Reihenfolge ändern"), style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
+            TextButton(tr("Fertig"), bold = true, onClick = onReordered)
         }
         tasks.forEachIndexed { index, task ->
             val span = Plans.taskSpan(task)
             Row(Modifier.fillMaxWidth().clickable(enabled = !reordering) { editing = index }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).clip(if (task.optBoolean("m")) RoundedCornerShape(2.dp) else CircleShape).background(planColor(task.optString("k").ifEmpty { "blue" })))
                 Spacer(Modifier.width(10.dp))
-                Text(task.optString("x").ifEmpty { "Aufgabe" }, style = Type.body, color = colors.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(task.optString("x").ifEmpty { tr("Aufgabe") }, style = Type.body, color = colors.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(span?.let { if (task.optBoolean("m")) "◆ " + german(it.first) else "${german(it.first)} – ${german(it.second)}" }.orEmpty(),
                     style = Type.subheadline, color = colors.secondary)
                 if (reordering) {
@@ -467,7 +469,7 @@ private fun Timeline(plan: JSONObject, open: Int?, userId: Int, reordering: Bool
             HorizontalDivider(Modifier.padding(start = 38.dp), 0.5.dp, colors.separator)
         }
         // Like adding a card or list item: a row at the end of the list.
-        for ((label, milestone) in listOf("Aufgabe hinzufügen" to false, "Meilenstein hinzufügen" to true)) {
+        for ((label, milestone) in listOf(tr("Aufgabe hinzufügen") to false, tr("Meilenstein hinzufügen") to true)) {
             Row(Modifier.fillMaxWidth().clickable { onAdd(milestone) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 GlyphIcon(Glyph.Plus, colors.accent, 16.dp)
                 Spacer(Modifier.width(10.dp))
@@ -514,10 +516,10 @@ private fun TaskDialog(task: JSONObject, onDismiss: () -> Unit, onDelete: () -> 
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.width(300.dp).clip(RoundedCornerShape(14.dp)).background(if (colors.dark) Color(0xFF2C2C2E) else Color(0xFFF2F2F2))) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (milestone) "Meilenstein" else "Aufgabe", style = Type.headline, color = colors.label)
-                field(name, if (milestone) "Meilenstein" else "Aufgabe", { name = it })
-                field(from, if (milestone) "Datum (TT.MM.JJJJ)" else "Von (TT.MM.JJJJ)", { from = it }, fromDate == null)
-                if (!milestone) field(to, "Bis (TT.MM.JJJJ)", { to = it }, toDate == null || (fromDate != null && toDate.isBefore(fromDate)))
+                Text(if (milestone) tr("Meilenstein") else tr("Aufgabe"), style = Type.headline, color = colors.label)
+                field(name, if (milestone) tr("Meilenstein") else tr("Aufgabe"), { name = it })
+                field(from, if (milestone) tr("Datum (TT.MM.JJJJ)") else tr("Von (TT.MM.JJJJ)"), { from = it }, fromDate == null)
+                if (!milestone) field(to, tr("Bis (TT.MM.JJJJ)"), { to = it }, toDate == null || (fromDate != null && toDate.isBefore(fromDate)))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Plans.COLORS.keys.forEach { key ->
                         Box(Modifier.size(28.dp).clip(CircleShape).background(planColor(key))
@@ -525,19 +527,19 @@ private fun TaskDialog(task: JSONObject, onDismiss: () -> Unit, onDelete: () -> 
                             .clickable { color = key })
                     }
                 }
-                Text("Löschen", style = Type.body, color = colors.red, modifier = Modifier.clickable(onClick = onDelete).padding(vertical = 6.dp))
+                Text(tr("Löschen"), style = Type.body, color = colors.red, modifier = Modifier.clickable(onClick = onDelete).padding(vertical = 6.dp))
             }
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable(enabled = valid) {
                     val changed = JSONObject(task.toString()).put("x", name.trim()).put("from", fromDate.toString()).put("to", toDate.toString()).put("k", color)
                     onSave(changed)
                 }, contentAlignment = Alignment.Center) {
-                    Text("Sichern", style = Type.headline, color = if (valid) colors.accentText else colors.tertiary)
+                    Text(tr("Sichern"), style = Type.headline, color = if (valid) colors.accentText else colors.tertiary)
                 }
             }
         }
@@ -550,8 +552,8 @@ private fun TaskDialog(task: JSONObject, onDismiss: () -> Unit, onDelete: () -> 
 
 object PlanPdf {
     fun write(plan: JSONObject, file: File, userName: ((Int) -> String)? = null) {
-        val name = plan.optString("name").ifEmpty { "Plan" }
-        val pdf = Report.Pdf(true, "$name · Stand ${german(LocalDate.now())}")
+        val name = plan.optString("name").ifEmpty { tr("Plan") }
+        val pdf = Report.Pdf(true, tr("{name} · Stand {german}", "name" to name, "german" to (german(LocalDate.now()))))
         pdf.text(name, 18f, true, space = 10f)
         val line = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE; strokeWidth = 0.8f; color = AColor.rgb(217, 217, 222) }
@@ -564,7 +566,7 @@ object PlanPdf {
             val small = pdf.paint(8f, color = pdf.grey)
             for (i in 0 until days step 7) {
                 val d = first.plusDays(i.toLong())
-                pdf.canvas.drawText("KW ${d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · %02d.%02d.".format(d.dayOfMonth, d.monthValue),
+                pdf.canvas.drawText(tr("KW {week} · {date}", "week" to d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR), "date" to "%02d.%02d.".format(d.dayOfMonth, d.monthValue)),
                     pdf.margin + labelWidth + i * scale + 2, pdf.y + 9, small)
             }
             pdf.y += 16f
@@ -599,10 +601,10 @@ object PlanPdf {
             val moves = Plans.shifts(plan)
             if (moves.isNotEmpty()) {
                 pdf.y += 14f
-                pdf.text("Terminverschiebungen", 12f, true, space = 6f)
+                pdf.text(tr("Terminverschiebungen"), 12f, true, space = 6f)
                 val stamp = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.GERMANY)
                 fun date(text: String) = Plans.day(text)?.let(::german) ?: "–"
-                pdf.table(listOf("Meilenstein", "Bisher", "Neu", "Verschiebung", "Geändert am", "Von"), listOf(3f, 1.4f, 1.4f, 1.2f, 1.6f, 1.8f),
+                pdf.table(listOf(tr("Meilenstein"), tr("Bisher"), tr("Neu"), tr("Verschiebung"), tr("Geändert am"), tr("Von")), listOf(3f, 1.4f, 1.4f, 1.2f, 1.6f, 1.8f),
                     moves.map { m ->
                         val days = Plans.day(m.was)?.let { was -> Plans.day(m.now)?.let { ChronoUnit.DAYS.between(was, it) } }
                         listOf(m.name, date(m.was), date(m.now), days?.let { "%+d Tage".format(it) } ?: "–",
@@ -642,10 +644,10 @@ object PlanPdf {
     }
 
     fun share(state: AppState, context: android.content.Context, plan: SyncObject) {
-        val name = plan.data.optString("name").ifEmpty { "Plan" }
+        val name = plan.data.optString("name").ifEmpty { tr("Plan") }
         val folder = File(context.cacheDir, "reports").apply { mkdirs() }
         val file = File(folder, "${name.replace(Regex("[/\\\\:*?\"<>|]"), "_")}.pdf")
         write(JSONObject(plan.data.toString()), file) { state.sync.userName(it) }
-        state.shareFile(file, "application/pdf", "Plan: $name")
+        state.shareFile(file, "application/pdf", tr("Plan: {name}", "name" to name))
     }
 }

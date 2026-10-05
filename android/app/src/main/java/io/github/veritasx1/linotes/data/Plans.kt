@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -9,21 +11,21 @@ import java.time.temporal.IsoFields
 /** Plans (timetable, shift plan, cleaning rota, room plan, project plan): the data model.
  *  Same rules and format as Ubuntu's plans.py (see there; PlanTest has the same cases as test_plans.py). */
 object Plans {
-    val WEEKDAYS = listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+    val WEEKDAYS = listOf(tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa"), tr("So"))
     /** name -> ARGB, the same colors as the highlights in notes. */
     val COLORS = linkedMapOf(
         "yellow" to 0xFFFFD93D.toInt(), "orange" to 0xFFFF9E0A.toInt(), "pink" to 0xFFFF70A8.toInt(),
         "purple" to 0xFFBF85F2.toInt(), "mint" to 0xFF4DD9BF.toInt(), "blue" to 0xFF59B3FF.toInt(), "grey" to 0xFF999AA1.toInt(),
     )
-    val COLOR_NAMES = linkedMapOf("yellow" to "Gelb", "orange" to "Orange", "pink" to "Rosa", "purple" to "Lila",
-        "mint" to "Mint", "blue" to "Blau", "grey" to "Grau")
+    val COLOR_NAMES = linkedMapOf("yellow" to tr("Gelb"), "orange" to tr("Orange"), "pink" to tr("Rosa"), "purple" to tr("Lila"),
+        "mint" to tr("Mint"), "blue" to tr("Blau"), "grey" to tr("Grau"))
     val TEMPLATES = listOf(
-        Triple("leer", "Leerer Plan", "Raster mit freien Zeilen und Spalten"),
-        Triple("stundenplan", "Stundenplan", "Mo–Fr × Schulstunden"),
-        Triple("schichtplan", "Schichtplan", "Mo–So × Personen, Schichten farbig"),
-        Triple("putzplan", "Putzplan", "Aufgaben × Wochen, Namen rotieren wöchentlich"),
-        Triple("raumplan", "OP- / Raumplan", "Uhrzeit × Säle oder Räume"),
-        Triple("projektplan", "Projektplan", "Zeitstrahl mit Aufgaben und Meilensteinen"),
+        Triple("leer", tr("Leerer Plan"), tr("Raster mit freien Zeilen und Spalten")),
+        Triple("stundenplan", tr("Stundenplan"), tr("Mo–Fr × Schulstunden")),
+        Triple("schichtplan", tr("Schichtplan"), tr("Mo–So × Personen, Schichten farbig")),
+        Triple("putzplan", tr("Putzplan"), tr("Aufgaben × Wochen, Namen rotieren wöchentlich")),
+        Triple("raumplan", tr("OP- / Raumplan"), tr("Uhrzeit × Säle oder Räume")),
+        Triple("projektplan", tr("Projektplan"), tr("Zeitstrahl mit Aufgaben und Meilensteinen")),
     )
 
     fun day(text: String?): LocalDate? = try { if (text.isNullOrEmpty()) null else LocalDate.parse(text) } catch (error: Exception) { null }
@@ -252,7 +254,7 @@ object Plans {
         val moved = moved(task)
         val days = moved.map { it.optString("was") } + task.optString("from")
         moved.mapIndexed { i, entry ->
-            Shift(task.optString("x").ifEmpty { "Meilenstein" }, entry.optString("was"), days[i + 1],
+            Shift(task.optString("x").ifEmpty { tr("Meilenstein") }, entry.optString("was"), days[i + 1],
                 if (entry.isNull("at")) null else entry.optDouble("at"), if (entry.isNull("by")) null else entry.optInt("by"))
         }
     }
@@ -265,22 +267,22 @@ object Plans {
             "stundenplan" -> JSONObject().put("mode", "grid").put("cols", weekCols("weekdays", 5))
                 .put("rows", JSONArray(listOf("1. 8:00", "2. 8:50", "3. 9:55", "4. 10:45", "5. 11:50", "6. 12:40")))
             "schichtplan" -> JSONObject().put("mode", "grid").put("cols", weekCols("weekdays", 7))
-                .put("rows", JSONArray(listOf("Person 1", "Person 2", "Person 3")))
-                .put("cells", JSONArray().put(JSONArray().put(JSONObject().put("x", "Früh").put("k", "yellow")).put(JSONObject().put("x", "Früh").put("k", "yellow"))
-                    .put(JSONObject().put("x", "Spät").put("k", "blue")).put(JSONObject().put("x", "Spät").put("k", "blue"))
-                    .put(JSONObject().put("x", "Nacht").put("k", "purple")).put(JSONObject.NULL).put(JSONObject.NULL)))
+                .put("rows", JSONArray(listOf(tr("Person 1"), tr("Person 2"), tr("Person 3"))))
+                .put("cells", JSONArray().put(JSONArray().put(JSONObject().put("x", tr("Früh")).put("k", "yellow")).put(JSONObject().put("x", tr("Früh")).put("k", "yellow"))
+                    .put(JSONObject().put("x", tr("Spät")).put("k", "blue")).put(JSONObject().put("x", tr("Spät")).put("k", "blue"))
+                    .put(JSONObject().put("x", tr("Nacht")).put("k", "purple")).put(JSONObject.NULL).put(JSONObject.NULL)))
             "putzplan" -> JSONObject().put("mode", "grid").put("cols", weekCols("weeks", 4))
-                .put("rows", JSONArray(listOf("Bad", "Küche", "Staubsaugen", "Müll")))
-                .put("rot", JSONObject().put("people", JSONArray(listOf("Person 1", "Person 2"))).put("start", monday(today).toString()))
-            "raumplan" -> JSONObject().put("mode", "grid").put("cols", JSONObject().put("type", "free").put("labels", JSONArray(listOf("Saal 1", "Saal 2", "Saal 3"))))
+                .put("rows", JSONArray(listOf(tr("Bad"), tr("Küche"), tr("Staubsaugen"), tr("Müll"))))
+                .put("rot", JSONObject().put("people", JSONArray(listOf(tr("Person 1"), tr("Person 2")))).put("start", monday(today).toString()))
+            "raumplan" -> JSONObject().put("mode", "grid").put("cols", JSONObject().put("type", "free").put("labels", JSONArray(listOf(tr("Saal 1"), tr("Saal 2"), tr("Saal 3")))))
                 .put("rows", JSONArray((7..16).map { "%02d:00".format(it) }))
             "projektplan" -> {
                 val start = monday(today)
                 fun task(name: String, from: Long, to: Long, color: String, milestone: Boolean = false) = JSONObject().put("x", name)
                     .put("from", start.plusDays(from).toString()).put("to", start.plusDays(to).toString()).put("k", color)
                     .also { if (milestone) it.put("m", true) }
-                JSONObject().put("mode", "timeline").put("tasks", JSONArray(listOf(task("Konzept", 0, 4, "blue"),
-                    task("Umsetzung", 7, 18, "orange"), task("Test", 14, 20, "mint"), task("Abnahme", 21, 21, "pink", true))))
+                JSONObject().put("mode", "timeline").put("tasks", JSONArray(listOf(task(tr("Konzept"), 0, 4, "blue"),
+                    task(tr("Umsetzung"), 7, 18, "orange"), task(tr("Test"), 14, 20, "mint"), task(tr("Abnahme"), 21, 21, "pink", true))))
             }
             else -> JSONObject().put("mode", "grid").put("cols", JSONObject().put("type", "free").put("labels", JSONArray(listOf("", "", ""))))
                 .put("rows", JSONArray(listOf("", "", "")))
@@ -291,7 +293,7 @@ object Plans {
     fun textRows(plan: JSONObject, today: LocalDate = LocalDate.now()): List<List<String>> {
         if (isTimeline(plan)) {
             fun german(date: LocalDate) = "%02d.%02d.%d".format(date.dayOfMonth, date.monthValue, date.year)
-            return listOf(listOf("Aufgabe", "Von", "Bis")) + tasks(plan).mapNotNull { task ->
+            return listOf(listOf(tr("Aufgabe"), tr("Von"), tr("Bis"))) + tasks(plan).mapNotNull { task ->
                 taskSpan(task)?.let { (from, to) -> listOf(task.optString("x") + if (task.optBoolean("m")) " ◆" else "", german(from), german(to)) }
             }
         }

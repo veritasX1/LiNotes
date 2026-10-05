@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,7 +17,7 @@ fun LazyListScope.archiveSection(key: String, items: List<SyncObject>, open: Boo
                                  row: @Composable (SyncObject, Boolean) -> Unit) {
     if (items.isEmpty()) return
     section("archive-$key", header = null) {
-        GroupRow("Archiv", Glyph.Archive, detail = "${items.size}", chevron = false, divider = open,
+        GroupRow(tr("Archiv"), Glyph.Archive, detail = "${items.size}", chevron = false, divider = open,
             trailing = { GlyphIcon(Glyph.Chevron, palette.tertiary, 14.dp, Modifier.rotate(if (open) 90f else 0f)) }) { onToggle() }
         if (open) items.forEachIndexed { index, item -> row(item, index < items.lastIndex) }
     }
@@ -24,9 +26,9 @@ fun LazyListScope.archiveSection(key: String, items: List<SyncObject>, open: Boo
 /** "Archivieren" / "Aus dem Archiv holen" for a long-press menu. */
 fun archiveAction(state: AppState, obj: SyncObject): SheetAction {
     val archived = Model.archived(obj)
-    return SheetAction(if (archived) "Aus dem Archiv holen" else "Archivieren") {
+    return SheetAction(if (archived) tr("Aus dem Archiv holen") else tr("Archivieren")) {
         Model.setArchived(state.sync, obj.id, !archived)
-        state.toastLater(if (archived) "Aus dem Archiv geholt" else "Ins Archiv verschoben")
+        state.toastLater(if (archived) tr("Aus dem Archiv geholt") else tr("Ins Archiv verschoben"))
     }
 }
 

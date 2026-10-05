@@ -1,5 +1,8 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+import io.github.veritasx1.linotes.i18n.trn
+
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -70,7 +73,7 @@ object Report {
                 columnId = card.data.optString("column"),
                 files = cardFiles(card.data).joinToString(", ") { it.optString("n") },
                 evidence = cardEvidence(card.data).map { item ->
-                    Evidence(item.optString("n", "Datei"), humanSize(item.optLong("b")), item.optString("h"),
+                    Evidence(item.optString("n", tr("Datei")), humanSize(item.optLong("b")), item.optString("h"),
                         stamp(item.optDouble("at", 0.0)), if (item.has("by")) sync.userName(item.optInt("by")) else "",
                         item.optString("f").takeIf { isImageFile(item) && it.isNotEmpty() }, card.share)
                 },
@@ -78,7 +81,7 @@ object Report {
         }
         val now = LocalDateTime.now()
         return Data(
-            title = board?.data?.optString("name") ?: "Board", dev = isDevBoard(board),
+            title = board?.data?.optString("name") ?: tr("Board"), dev = isDevBoard(board),
             generated = "%02d.%02d.%d %02d:%02d".format(now.dayOfMonth, now.monthValue, now.year, now.hour, now.minute),
             columns = columns.map { column -> column.data.optString("name") to rows.filter { it.columnId == column.id } },
             rows = rows,
@@ -113,7 +116,7 @@ object Report {
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
 
         fun footer() {
-            canvas.drawText("$header · Seite $pageNumber", margin, height - margin + 22, paint(7.5f, color = grey))
+            canvas.drawText(tr("{header} · Seite {pageNumber}", "header" to header, "pageNumber" to pageNumber), margin, height - margin + 22, paint(7.5f, color = grey))
         }
 
         fun newPage(first: Boolean = false) {
@@ -193,34 +196,34 @@ object Report {
 
     /** [fetch] returns the decrypted file of an evidence picture (null: leave it out); runs off the main thread. */
     fun writePdf(report: Data, file: File, fetch: (String, String?) -> File? = { _, _ -> null }) {
-        val pdf = Pdf(report.dev, "${report.title} · Stand ${report.generated}")
-        pdf.text((if (report.dev) "Entwicklungsprojekt – Nachverfolgung" else "Aufgaben-Board").uppercase(), 8f, true, pdf.accent, 2f)
+        val pdf = Pdf(report.dev, tr("{title} · Stand {generated}", "title" to report.title, "generated" to report.generated))
+        pdf.text((if (report.dev) tr("Entwicklungsprojekt – Nachverfolgung") else tr("Aufgaben-Board")).uppercase(), 8f, true, pdf.accent, 2f)
         pdf.text(report.title, 20f, true, space = 2f)
         val counts = report.columns.joinToString(" · ") { "${it.first}: ${it.second.size}" }
-        pdf.text("Stand ${report.generated} · ${report.rows.size} Karten · $counts", 9f, color = pdf.grey, space = 12f)
+        pdf.text(tr("Stand {generated} · {size} Karten · {counts}", "generated" to report.generated, "size" to report.rows.size, "counts" to counts), 9f, color = pdf.grey, space = 12f)
         pdf.rule()
         if (report.dev) {
-            pdf.text("Traceability-Matrix", 13f, true, space = 6f)
-            pdf.table(listOf("ID", "Titel", "Prio", "Status", "Commits", "Verifikation", "Version", "Abnahme"),
+            pdf.text(tr("Traceability-Matrix"), 13f, true, space = 6f)
+            pdf.table(listOf("ID", tr("Titel"), tr("Prio"), tr("Status"), tr("Commits"), tr("Verifikation"), tr("Version"), tr("Abnahme")),
                 listOf(8f, 29f, 6f, 11f, 11f, 19f, 8f, 13f),
                 report.rows.map { listOf(it.id, it.title, it.priority, it.status, it.commits.joinToString(", ") { c -> c.first },
                     it.verification + if (it.evidence.isEmpty()) "" else
-                        "\n+ ${it.evidence.size} Nachweis${if (it.evidence.size != 1) "e" else ""}",
+                        trn("\n+ {n} Nachweis", "\n+ {n} Nachweise", it.evidence.size),
                     it.version, it.accepted) }, mono = setOf(0, 4))
-            pdf.text("Karten im Einzelnen", 13f, true, space = 6f)
+            pdf.text(tr("Karten im Einzelnen"), 13f, true, space = 6f)
             for (row in report.rows) {
                 pdf.need(60f)
                 pdf.rule(6f)
                 pdf.text("[${row.id}]  ${row.title}", 11f, true, space = 2f)
-                val facts = listOf("Status: ${row.status}") + listOf("Priorität" to row.priority, "Zuständig" to row.assignee,
-                    "Erstellt" to row.created, "Erledigt" to row.done, "Version" to row.version, "Abnahme" to row.accepted)
+                val facts = listOf(tr("Status: {status}", "status" to row.status)) + listOf(tr("Priorität") to row.priority, tr("Zuständig") to row.assignee,
+                    tr("Erstellt") to row.created, tr("Erledigt") to row.done, tr("Version") to row.version, tr("Abnahme") to row.accepted)
                     .filter { it.second.isNotEmpty() }.map { "${it.first}: ${it.second}" }
                 pdf.text(facts.joinToString(" · "), 8.5f, color = pdf.grey, space = 6f)
-                for ((label, value) in listOf("Beschreibung" to row.notes, "Auswirkungsanalyse" to row.impact, "Verifikation" to row.verification)) {
+                for ((label, value) in listOf(tr("Beschreibung") to row.notes, tr("Auswirkungsanalyse") to row.impact, tr("Verifikation") to row.verification)) {
                     if (value.isNotBlank()) { pdf.text(label, 9f, true, space = 1f); pdf.text(value.trim(), 9f, space = 5f) }
                 }
                 if (row.evidence.isNotEmpty()) {
-                    pdf.text("Nachweise", 9f, true, space = 2f)
+                    pdf.text(tr("Nachweise"), 9f, true, space = 2f)
                     for (record in row.evidence) {
                         val bitmap = record.image?.let { reference ->
                             runCatching { fetch(reference, record.share) }.getOrNull()?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
@@ -234,16 +237,16 @@ object Report {
                     }
                 }
                 if (row.files.isNotEmpty()) {
-                    pdf.text("Anhänge", 9f, true, space = 1f)
+                    pdf.text(tr("Anhänge"), 9f, true, space = 1f)
                     pdf.text(row.files, 8.5f, space = 5f)
                 }
                 if (row.commits.isNotEmpty()) {
-                    pdf.text("Commits", 9f, true, space = 1f)
+                    pdf.text(tr("Commits"), 9f, true, space = 1f)
                     row.commits.forEach { pdf.text("${it.first}  ${it.second}", 8.5f, space = 1f) }
                     pdf.y += 4
                 }
                 if (row.history.isNotEmpty()) {
-                    pdf.text("Verlauf", 9f, true, space = 1f)
+                    pdf.text(tr("Verlauf"), 9f, true, space = 1f)
                     row.history.forEach { pdf.text("${it.second}  ${it.first}  (${it.third})", 8.5f, color = pdf.grey, space = 1f) }
                     pdf.y += 4
                 }
@@ -251,8 +254,8 @@ object Report {
         } else {
             for ((name, items) in report.columns) {
                 pdf.text("$name (${items.size})", 13f, true, space = 6f)
-                if (items.isEmpty()) pdf.text("Keine Karten", 9f, color = pdf.grey, space = 10f)
-                else pdf.table(listOf("Titel", "Priorität", "Zuständig", "Fällig", "Erledigt"), listOf(42f, 11f, 15f, 14f, 18f),
+                if (items.isEmpty()) pdf.text(tr("Keine Karten"), 9f, color = pdf.grey, space = 10f)
+                else pdf.table(listOf(tr("Titel"), tr("Priorität"), tr("Zuständig"), tr("Fällig"), tr("Erledigt")), listOf(42f, 11f, 15f, 14f, 18f),
                     items.map { listOf(it.title, it.priority, it.assignee, it.due, it.done) })
             }
         }
@@ -268,12 +271,12 @@ object Report {
             val result = runCatching {
                 val folder = File(context.cacheDir, "reports").apply { mkdirs() }
                 val today = LocalDate.now()
-                val file = File(folder, "${data.title.replace(Regex("[/\\\\:*?\"<>|]"), "_")} – Stand %04d-%02d-%02d.pdf".format(today.year, today.monthValue, today.dayOfMonth))
+                val file = File(folder, tr("{replace} – Stand %04d-%02d-%02d.pdf", "replace" to (data.title.replace(Regex("[/\\\\:*?\"<>|]"), "_"))).format(today.year, today.monthValue, today.dayOfMonth))
                 writePdf(data, file) { reference, share -> state.sync.fetchFile(reference, share) }
                 file to data.title
             }
             main.post {
-                result.onSuccess { (file, title) -> state.shareFile(file, "application/pdf", "Bericht: $title") }
+                result.onSuccess { (file, title) -> state.shareFile(file, "application/pdf", tr("Bericht: {title}", "title" to title)) }
                     .onFailure { state.toastLater(errorText(it)) }
             }
         }.start()

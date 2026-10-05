@@ -8,6 +8,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk
 
 from .dialogs import run_async
+from .i18n import _
 
 
 class Upload:
@@ -30,7 +31,7 @@ class UploadRow(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, **properties)
         self.upload = upload
         line = Gtk.Box(spacing=8)
-        line.append(Gtk.Label(label=f"„{upload.name}“ wird hochgeladen", xalign=0, hexpand=True, ellipsize=3))
+        line.append(Gtk.Label(label=_("„{name}“ wird hochgeladen", name=upload.name), xalign=0, hexpand=True, ellipsize=3))
         self.percent = Gtk.Label(label="0 %", css_classes=["dim-label", "numeric"])
         line.append(self.percent)
         self.append(line)

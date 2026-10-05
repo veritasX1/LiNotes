@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import org.json.JSONObject
@@ -64,7 +66,7 @@ object LinkPreview {
             connection.readTimeout = TIMEOUT
             connection.setRequestProperty("User-Agent", AGENT)
             connection.setRequestProperty("Accept", accept)
-            if (connection.url.protocol !in setOf("http", "https")) throw IllegalArgumentException("kein Web-Link")
+            if (connection.url.protocol !in setOf("http", "https")) throw IllegalArgumentException(tr("kein Web-Link"))
             val type = connection.contentType.orEmpty()
             val buffer = ByteArrayOutputStream()
             connection.inputStream.use { input ->
@@ -83,9 +85,9 @@ object LinkPreview {
 
     /** Fetch a page (only its beginning) and its picture. Blocking – run in the background. */
     fun fetch(url: String): Found {
-        if (loneUrl(url) == null) throw IllegalArgumentException("kein Web-Link")
+        if (loneUrl(url) == null) throw IllegalArgumentException(tr("kein Web-Link"))
         val (body, type) = get(url, PAGE_LIMIT, "text/html,application/xhtml+xml")
-        if (type.isNotEmpty() && "html" !in type.lowercase()) throw IllegalArgumentException("keine Webseite")
+        if (type.isNotEmpty() && "html" !in type.lowercase()) throw IllegalArgumentException(tr("keine Webseite"))
         val charset = Regex("charset=([\\w-]+)", RegexOption.IGNORE_CASE).find(type)?.groupValues?.get(1) ?: "UTF-8"
         val found = parse(String(body, runCatching { charset(charset) }.getOrDefault(Charsets.UTF_8)), url)
         val picture = if (found.image.isEmpty()) null else runCatching {

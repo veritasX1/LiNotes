@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.os.Build
 import kotlinx.coroutines.CoroutineScope
@@ -43,9 +45,9 @@ data class User(val id: Int, val username: String, val name: String, val identit
 object Keep {
     const val ALWAYS = "always"
     const val SERVER = "server"
-    val choices = listOf(ALWAYS to "Immer", "90" to "90 Tage", "30" to "30 Tage", "7" to "7 Tage", SERVER to "Nur auf dem Server")
+    val choices = listOf(ALWAYS to tr("Immer"), "90" to tr("90 Tage"), "30" to tr("30 Tage"), "7" to tr("7 Tage"), SERVER to tr("Nur auf dem Server"))
     const val DEFAULT = "90"
-    fun label(value: String) = choices.firstOrNull { it.first == value }?.second ?: "90 Tage"
+    fun label(value: String) = choices.firstOrNull { it.first == value }?.second ?: tr("90 Tage")
 }
 
 /**
@@ -55,7 +57,7 @@ object Keep {
  * are encrypted when queued. Shares carry the keys that let others read.
  */
 /** Same steps as linux/linotes/textsize.py. */
-val TEXT_SIZES = listOf(0.85f to "Klein", 1.0f to "Normal", 1.15f to "Groß", 1.3f to "Sehr groß", 1.5f to "Riesig")
+val TEXT_SIZES = listOf(0.85f to tr("Klein"), 1.0f to tr("Normal"), 1.15f to tr("Groß"), 1.3f to tr("Sehr groß"), 1.5f to tr("Riesig"))
 
 class SyncEngine(private val context: Context) {
     companion object {
@@ -194,7 +196,7 @@ class SyncEngine(private val context: Context) {
     // ACCOUNT
     // ================================================================
 
-    val deviceName: String get() = "Android (${Build.MANUFACTURER} ${Build.MODEL})"
+    val deviceName: String get() = tr("Android ({MANUFACTURER} {MODEL})", "MANUFACTURER" to Build.MANUFACTURER, "MODEL" to Build.MODEL)
     val userId: Int get() = user?.id ?: 0
 
     fun restore(): Boolean {
@@ -246,7 +248,7 @@ class SyncEngine(private val context: Context) {
     fun startLocal(name: String) {
         val newAccount = E2E.Account.create()
         val newIdentity = E2E.Identity.create()
-        val me = User(LOCAL_USER, "", name.ifBlank { "Ich" }, newIdentity.public)
+        val me = User(LOCAL_USER, "", name.ifBlank { tr("Ich") }, newIdentity.public)
         synchronized(lock) {
             remote.clear(); pending.clear(); cursor = 0
             server = ""
@@ -569,7 +571,7 @@ class SyncEngine(private val context: Context) {
             shareKeys[newShare] = key
             val keys = JSONObject()
             for (uid in listOf(userId) + members) {
-                val target = userById(uid) ?: throw IllegalStateException("Unbekanntes Konto")
+                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekanntes Konto"))
                 keys.put(uid.toString(), E2E.wrapKey(key, target.identity, newShare))
             }
             put("share", JSONObject().put("keys", keys).put("target", objectId)
@@ -833,7 +835,7 @@ class SyncEngine(private val context: Context) {
         } ?: return
         if (mine.deleted) return
         val data = JSONObject(mine.data.toString()).put("conflict", true)
-        data.optJSONArray("body")?.optJSONObject(0)?.let { it.put("x", it.optString("x") + " (Konflikt)") }
+        data.optJSONArray("body")?.optJSONObject(0)?.let { it.put("x", it.optString("x") + tr(" (Konflikt)")) }
         put("note", data, mine.share)
     }
 

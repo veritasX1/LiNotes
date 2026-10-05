@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -127,7 +129,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         return
     }
     val folder = sync.get(note.data.optString("folder"))
-    val backLabel = folder?.data?.optString("name") ?: "Notizen"
+    val backLabel = folder?.data?.optString("name") ?: tr("Notizen")
     val locked = note.data.has("enc")
     val trashed = note.data.has("trashed")
 
@@ -141,9 +143,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 val bitmap: Bitmap? = withContext(Dispatchers.IO) {
                     try {
                         val bytes = sync.fetchFile(fileId, sync.get(noteId)?.share).readBytes()
-                        RichEditor.decodeImage(bytes).also { if (it == null) android.util.Log.w("LiNotes", "Bild nicht lesbar: $fileId (${bytes.size} Bytes)") }
+                        RichEditor.decodeImage(bytes).also { if (it == null) android.util.Log.w("LiNotes", tr("Bild nicht lesbar: {fileId} ({size} Bytes)", "fileId" to fileId, "size" to bytes.size)) }
                     } catch (error: Exception) {
-                        android.util.Log.w("LiNotes", "Bild nicht geladen: $fileId", error)
+                        android.util.Log.w("LiNotes", tr("Bild nicht geladen: {fileId}", "fileId" to fileId), error)
                         null
                     }
                 }
@@ -238,7 +240,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
                 if (changes != null) {
                     editor.markChanged(changes)
-                    activityNote = "${sync.userName(current.updatedBy)} hat geändert · ${Model.shortDate(Model.modified(current))} – die Änderungen sind markiert."
+                    activityNote = tr("{person} hat geändert · {shortDate} – die Änderungen sind markiert.", "person" to (sync.userName(current.updatedBy)), "shortDate" to (Model.shortDate(Model.modified(current))))
                 }
                 sync.rememberSeen(current, body)
             }
@@ -286,7 +288,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     val block = LinkPreview.block(url, found, reference)
                     withContext(Dispatchers.Main) { if (editor.isAttachedToWindow) editor.replaceUrlLine(url, block) }
                 } catch (error: Exception) {
-                    android.util.Log.i("LiNotes", "keine Link-Vorschau: $error")
+                    android.util.Log.i("LiNotes", tr("keine Link-Vorschau: {error}", "error" to error))
                 }
             }
         }
@@ -314,7 +316,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             scope.launch {
                 val peaks = withContext(Dispatchers.IO) {
                     runCatching { AudioNotes.waveform(sync.fetchFile(fileId, sync.get(noteId)?.share)) }
-                        .onFailure { android.util.Log.i("LiNotes", "keine Wellenform: $it") }.getOrNull()
+                        .onFailure { android.util.Log.i("LiNotes", tr("keine Wellenform: {it}", "it" to it)) }.getOrNull()
                 }
                 done(peaks)
             }
@@ -329,7 +331,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                         android.graphics.BitmapFactory.decodeFile(source.absolutePath, bounds)
                         val mime = bounds.outMimeType ?: "image/jpeg"
                         val folder = java.io.File(context.cacheDir, "attachments/" + fileId.substringAfter(":").take(12)).apply { mkdirs() }
-                        val target = java.io.File(folder, "Bild." + (android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"))
+                        val target = java.io.File(folder, tr("Bild.") + (android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"))
                         source.copyTo(target, overwrite = true)
                         LookFile(target, mime)
                     }
@@ -363,7 +365,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     val file = withContext(Dispatchers.IO) {
                         val source = sync.fetchFile(block.getString("f"), sync.get(noteId)?.share)
                         val folder = java.io.File(context.cacheDir, "attachments/" + block.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
-                        java.io.File(folder, java.io.File(block.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
+                        java.io.File(folder, java.io.File(block.optString("n", tr("Datei"))).name).also { source.copyTo(it, overwrite = true) }
                     }
                     state.quickLook = LookFile(file, block.optString("m", "application/octet-stream"))
                 } catch (error: Exception) {
@@ -386,7 +388,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                             }
                         }
                     } catch (error: Exception) {
-                        android.util.Log.w("LiNotes", "PDF-Vorschau nicht möglich", error)
+                        android.util.Log.w("LiNotes", tr("PDF-Vorschau nicht möglich"), error)
                         null
                     }
                 })
@@ -394,7 +396,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onOpenNote = { id ->
             val target = sync.get(id)
-            if (target == null || target.data.has("trashed")) state.toastLater("Die verlinkte Notiz gibt es nicht mehr.")
+            if (target == null || target.data.has("trashed")) state.toastLater(tr("Die verlinkte Notiz gibt es nicht mehr."))
             else { save(); state.push(Route.Editor(id)) }
         }
         onDispose {
@@ -418,26 +420,26 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         NavBar(
             title = "", backLabel = backLabel, onBack = { save(); state.pop() }, background = colors.plain,
             actions = {
-                if (!trashed && !locked) BarButton(Glyph.Share, "Teilen") { save(); state.push(Route.Share(note.id)) }
+                if (!trashed && !locked) BarButton(Glyph.Share, tr("Teilen")) { save(); state.push(Route.Share(note.id)) }
                 // Like Apple: the open lock in an unlocked note locks it again right away.
-                if (locked && state.vaultKey != null) BarButton(Glyph.LockOpen, "Jetzt sperren") { state.lockAll() }
-                BarButton(Glyph.More, "Mehr") { save(); showMenu = true }
+                if (locked && state.vaultKey != null) BarButton(Glyph.LockOpen, tr("Jetzt sperren")) { state.lockAll() }
+                BarButton(Glyph.More, tr("Mehr")) { save(); showMenu = true }
             },
         )
         if (trashed) {
             Row(Modifier.fillMaxWidth().background(colors.fill).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Diese Notiz liegt in „Zuletzt gelöscht“.", style = Type.footnote, color = colors.label, modifier = Modifier.weight(1f))
-                TextButton("Wiederherstellen") { restoreNote(state, note) }
+                Text(tr("Diese Notiz liegt in „Zuletzt gelöscht“."), style = Type.footnote, color = colors.label, modifier = Modifier.weight(1f))
+                TextButton(tr("Wiederherstellen")) { restoreNote(state, note) }
             }
         }
         if (note.evicted) {
             Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 GlyphIcon(if (loadFailed) Glyph.CloudOff else Glyph.Cloud, colors.secondary, 56.dp)
                 Spacer(Modifier.height(16.dp))
-                Text(if (loadFailed) "Die Notiz liegt nur auf dem Server" else "Wird vom Server geladen …", style = Type.title3, color = colors.label)
+                Text(if (loadFailed) tr("Die Notiz liegt nur auf dem Server") else tr("Wird vom Server geladen …"), style = Type.title3, color = colors.label)
                 if (loadFailed) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Sie kann geöffnet werden, sobald eine Verbindung besteht.", style = Type.subheadline, color = colors.secondary)
+                    Text(tr("Sie kann geöffnet werden, sobald eine Verbindung besteht."), style = Type.subheadline, color = colors.secondary)
                 }
             }
             return@Column
@@ -492,8 +494,8 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 val choices = if (mention) editor.mentionPeople().filter { it.second.contains(query, ignoreCase = true) }
                     .map { (id, name) -> Triple(id.toString(), name, "@$name") }
                 else Model.linkChoices(sync.all("note"), noteId, query).map { Triple(it.id, Model.title(it), Model.title(it)) }
-                LinkPanel(if (mention) "Person erwähnen" else "Mit Notiz verlinken", if (mention) Glyph.Person else Glyph.Notes,
-                    if (mention) "Keine passende Person" else "Keine passende Notiz", choices, onPick = { (id, title, _) ->
+                LinkPanel(if (mention) tr("Person erwähnen") else tr("Mit Notiz verlinken"), if (mention) Glyph.Person else Glyph.Notes,
+                    if (mention) tr("Keine passende Person") else tr("Keine passende Notiz"), choices, onPick = { (id, title, _) ->
                     linkQuery = null
                     editor.finishLink(id, title)
                 }) { linkQuery = null; editor.finishLink(null, null) }
@@ -506,13 +508,13 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 // Like Apple: a 3×3 table, editing starts right away.
                 onTable = { Model.newTable().let { block -> editor.insertTable(block); tableEditing = block } },
                 onPhoto = {
-                    if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos und Anhänge möglich.")
+                    if (locked) state.toastLater(tr("In gesperrten Notizen sind keine Fotos und Anhänge möglich."))
                     else photoMenu = true
                 },
                 // Like Apple: record audio into the note (encrypted like every attachment).
                 onRecord = {
-                    if (locked) state.toastLater("In gesperrten Notizen sind keine Aufnahmen möglich.")
-                    else state.requestMicrophone { granted -> if (granted) recording = true else state.toastLater("Ohne Mikrofon-Erlaubnis keine Aufnahme.") }
+                    if (locked) state.toastLater(tr("In gesperrten Notizen sind keine Aufnahmen möglich."))
+                    else state.requestMicrophone { granted -> if (granted) recording = true else state.toastLater(tr("Ohne Mikrofon-Erlaubnis keine Aufnahme.")) }
                 },
                 onCompose = { save(); state.pop(); newNote(state, note.data.optString("folder").let { "folder:$it" }) },
             )
@@ -522,7 +524,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     /** Like Apple: the open note as PDF, to the share sheet or the print dialog. */
     fun exportPdf(print: Boolean) {
         val blocks = editor.toBlocks()
-        val title = blocks.firstOrNull { it.optString("x").isNotBlank() }?.optString("x")?.trim()?.take(120) ?: "Notiz"
+        val title = blocks.firstOrNull { it.optString("x").isNotBlank() }?.optString("x")?.trim()?.take(120) ?: tr("Notiz")
         val header = "$title · ${Model.longDate(Model.modified(note))}"
         val share = note.share
         scope.launch {
@@ -541,71 +543,71 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     if (showMenu) {
         ActionSheet(null, buildList {
             if (trashed) {
-                add(SheetAction("Wiederherstellen") { restoreNote(state, note) })
-                add(SheetAction("Endgültig löschen", destructive = true) { sync.delete(note.id); state.pop() })
+                add(SheetAction(tr("Wiederherstellen")) { restoreNote(state, note) })
+                add(SheetAction(tr("Endgültig löschen"), destructive = true) { sync.delete(note.id); state.pop() })
             } else {
-                add(SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
-                add(SheetAction("Verschieben …") { moving = true })
+                add(SheetAction(if (note.data.optBoolean("pinned")) tr("Lösen") else tr("Anheften")) { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
+                add(SheetAction(tr("Verschieben …")) { moving = true })
                 add(archiveAction(state, note))
                 if (!locked) add(templateAction(state, note))
-                if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
-                add(SheetAction("Als PDF senden …") { exportPdf(print = false) })
-                add(SheetAction("Drucken …") { exportPdf(print = true) })
-                add(SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = !locked })
-                if (!sync.isLocal) add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
-                add(SheetAction(if (sortChecked) "Abgehakte nicht mehr sortieren" else "Abgehakte nach unten sortieren") { sortChecked = !sortChecked })
-                add(SheetAction("Löschen", destructive = true) { trashNote(state, note); state.pop() })
+                if (!locked) add(SheetAction(tr("Teilen …")) { state.push(Route.Share(note.id)) })
+                add(SheetAction(tr("Als PDF senden …")) { exportPdf(print = false) })
+                add(SheetAction(tr("Drucken …")) { exportPdf(print = true) })
+                add(SheetAction(if (locked) tr("Sperre entfernen") else tr("Notiz sperren")) { locking = !locked })
+                if (!sync.isLocal) add(SheetAction(tr("Auf dem Gerät behalten: ") + Keep.label(sync.keepOf(note))) { keepChoice = true })
+                add(SheetAction(if (sortChecked) tr("Abgehakte nicht mehr sortieren") else tr("Abgehakte nach unten sortieren")) { sortChecked = !sortChecked })
+                add(SheetAction(tr("Löschen"), destructive = true) { trashNote(state, note); state.pop() })
             }
         }) { showMenu = false }
     }
     if (moving) MoveSheet(state, note) { moving = false }
     if (keepChoice) {
         val current = note.data.optString("keep")
-        ActionSheet("Wie lange soll diese Notiz auf dem Handy bleiben?",
-            listOf(SheetAction("Wie in den Einstellungen (${Keep.label(sync.keepDefault())})" + if (current.isEmpty()) " ✓" else "") {
+        ActionSheet(tr("Wie lange soll diese Notiz auf dem Handy bleiben?"),
+            listOf(SheetAction(tr("Wie in den Einstellungen ({label})", "label" to (Keep.label(sync.keepDefault()))) + if (current.isEmpty()) " ✓" else "") {
                 sync.update(note.id) { it.remove("keep") }
             }) + Keep.choices.map { (value, label) ->
                 SheetAction(label + if (value == current) " ✓" else "") { sync.update(note.id) { it.put("keep", value) } }
             }) { keepChoice = false }
     }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
-    if (footnoteNew) AlertDialog("Fußnote oder Quelle", "An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF.",
-        confirm = "Einfügen", fields = listOf(AlertField("z. B. Müller, Gartenbau, 2020, S. 41")), onDismiss = { footnoteNew = false }) { values ->
+    if (footnoteNew) AlertDialog(tr("Fußnote oder Quelle"), tr("An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF."),
+        confirm = tr("Einfügen"), fields = listOf(AlertField(tr("z. B. Müller, Gartenbau, 2020, S. 41"))), onDismiss = { footnoteNew = false }) { values ->
         if (values[0].isNotBlank()) editor.insertFootnote(values[0])
         footnoteNew = false
     }
     footnoteMenu?.let { span ->
-        ActionSheet(span.note.ifEmpty { "Fußnote" }, listOf(
-            SheetAction("Bearbeiten …") { footnoteEdit = span },
-            SheetAction("Entfernen", destructive = true) { editor.editFootnote(span, null) },
+        ActionSheet(span.note.ifEmpty { tr("Fußnote") }, listOf(
+            SheetAction(tr("Bearbeiten …")) { footnoteEdit = span },
+            SheetAction(tr("Entfernen"), destructive = true) { editor.editFootnote(span, null) },
         )) { footnoteMenu = null }
     }
     footnoteEdit?.let { span ->
-        AlertDialog("Fußnote", confirm = "Sichern", fields = listOf(AlertField("Text", span.note)), onDismiss = { footnoteEdit = null }) { values ->
+        AlertDialog(tr("Fußnote"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Text"), span.note)), onDismiss = { footnoteEdit = null }) { values ->
             if (values[0].isNotBlank()) editor.editFootnote(span, values[0])
             footnoteEdit = null
         }
     }
     linkMenu?.let { block ->
         ActionSheet(block.optString("dm").ifEmpty { block.optString("u") }, listOf(
-            SheetAction("Im Browser öffnen") {
+            SheetAction(tr("Im Browser öffnen")) {
                 runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(block.optString("u")))) }
             },
-            SheetAction("Nur als Adresse zeigen") { editor.unlinkPreview(block) },
+            SheetAction(tr("Nur als Adresse zeigen")) { editor.unlinkPreview(block) },
         )) { linkMenu = null }
     }
     if (photoMenu) {
         // Like Notes: take a photo or choose one.
         fun insert(bytes: ByteArray, @Suppress("UNUSED_PARAMETER") mime: String) {
-            state.upload("Foto", bytes, note.share) { id ->
+            state.upload(tr("Foto"), bytes, note.share) { id ->
                 if (editor.isAttachedToWindow) editor.insertImage(id) else appendBlock(state, noteId, JSONObject().put("t", "image").put("f", id))
             }
         }
         ActionSheet(null, listOf(
-            SheetAction("Foto aufnehmen") { state.takePhoto(::insert) },
-            SheetAction("Aus Fotos wählen") { state.pickImage(::insert) },
+            SheetAction(tr("Foto aufnehmen")) { state.takePhoto(::insert) },
+            SheetAction(tr("Aus Fotos wählen")) { state.pickImage(::insert) },
             // Like Apple: attach a PDF or any other file (encrypted like photos).
-            SheetAction("Datei anhängen …") {
+            SheetAction(tr("Datei anhängen …")) {
                 state.pickFile { name, mime, bytes ->
                     state.upload(name, bytes, note.share) { id ->
                         val block = JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size)
@@ -667,28 +669,28 @@ private fun LockedPlaceholder(state: AppState, onUnlocked: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         GlyphIcon(Glyph.Lock, colors.secondary, 56.dp)
         Spacer(Modifier.height(16.dp))
-        Text("Diese Notiz ist gesperrt", style = Type.title3, color = colors.label)
+        Text(tr("Diese Notiz ist gesperrt"), style = Type.title3, color = colors.label)
         Spacer(Modifier.height(6.dp))
-        Text(if (state.biometricEnabled) "Entsperre sie mit Fingerabdruck, PIN oder Muster." else "Gib dein Notizen-Passwort ein, um sie anzusehen.", style = Type.subheadline, color = colors.secondary)
+        Text(if (state.biometricEnabled) tr("Entsperre sie mit Fingerabdruck, PIN oder Muster.") else tr("Gib dein Notizen-Passwort ein, um sie anzusehen."), style = Type.subheadline, color = colors.secondary)
         Spacer(Modifier.height(24.dp))
-        PrimaryButton("Notiz anzeigen", modifier = Modifier.width(220.dp)) { unlock() }
+        PrimaryButton(tr("Notiz anzeigen"), modifier = Modifier.width(220.dp)) { unlock() }
     }
     if (asking) UnlockDialog(state, onDismiss = { asking = false }) { asking = false; onUnlocked() }
 }
 
 @Composable
-fun UnlockDialog(state: AppState, reason: String = "Gib dein Notizen-Passwort ein.", onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+fun UnlockDialog(state: AppState, reason: String = tr("Gib dein Notizen-Passwort ein."), onDismiss: () -> Unit, onUnlocked: () -> Unit) {
     val scope = rememberCoroutineScope()
     val hint = state.vaultObject()?.data?.optString("hint").orEmpty()
     AlertDialog(
-        "Gesperrte Notizen", reason + if (hint.isNotEmpty()) "\nMerkhilfe: $hint" else "", "OK",
-        fields = listOf(AlertField("Passwort", password = true)), onDismiss = onDismiss,
+        tr("Gesperrte Notizen"), reason + if (hint.isNotEmpty()) tr("\nMerkhilfe: {hint}", "hint" to hint) else "", "OK",
+        fields = listOf(AlertField(tr("Passwort"), password = true)), onDismiss = onDismiss,
     ) { values ->
         scope.launch {
             val ok = withContext(Dispatchers.Default) {
                 try { state.unlock(values[0]); true } catch (error: Exception) { false }
             }
-            if (ok) onUnlocked() else state.showToast("Falsches Passwort.")
+            if (ok) onUnlocked() else state.showToast(tr("Falsches Passwort."))
         }
     }
 }
@@ -708,7 +710,7 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             data.remove("body")
             data.put("enc", Vault.sealBody(key, body)).put("title", Model.blocksTitle(body)).put("modified", Model.now())
             sync.put("note", data, current.share, current.id)
-            state.toastLater("Notiz gesperrt")
+            state.toastLater(tr("Notiz gesperrt"))
             // Locking hides the content right away.
             state.lockAll()
         } else {
@@ -717,27 +719,27 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             data.remove("title")
             data.put("body", body)
             sync.put("note", data, current.share, current.id)
-            state.toastLater("Sperre entfernt")
+            state.toastLater(tr("Sperre entfernt"))
         }
         onDone()
     }
 
     when {
         lock && note.share != null -> {
-            LaunchedEffect(Unit) { state.showToast("Geteilte Notizen können nicht gesperrt werden."); onDone() }
+            LaunchedEffect(Unit) { state.showToast(tr("Geteilte Notizen können nicht gesperrt werden.")); onDone() }
         }
         state.vaultKey != null -> LaunchedEffect(Unit) { state.touchVault(); perform() }
         !state.hasVault() -> AlertDialog(
-            "Notizen-Passwort festlegen",
-            "Gesperrte Notizen werden auf dem Gerät mit diesem Passwort verschlüsselt – nicht einmal der Server kann sie lesen. " +
-                "Vergisst du es, lassen sich gesperrte Notizen nicht wiederherstellen.",
-            "Festlegen",
-            fields = listOf(AlertField("Passwort", password = true), AlertField("Bestätigen", password = true), AlertField("Merkhilfe")),
+            tr("Notizen-Passwort festlegen"),
+            tr("Gesperrte Notizen werden auf dem Gerät mit diesem Passwort verschlüsselt – nicht einmal der Server kann sie lesen. ") +
+                tr("Vergisst du es, lassen sich gesperrte Notizen nicht wiederherstellen."),
+            tr("Festlegen"),
+            fields = listOf(AlertField(tr("Passwort"), password = true), AlertField(tr("Bestätigen"), password = true), AlertField(tr("Merkhilfe"))),
             onDismiss = onDone,
         ) { values ->
             when {
-                values[0].length < 6 -> state.toastLater("Mindestens 6 Zeichen.")
-                values[0] != values[1] -> state.toastLater("Die Passwörter stimmen nicht überein.")
+                values[0].length < 6 -> state.toastLater(tr("Mindestens 6 Zeichen."))
+                values[0] != values[1] -> state.toastLater(tr("Die Passwörter stimmen nicht überein."))
                 else -> scope.launch {
                     withContext(Dispatchers.Default) { state.createVault(values[0], values[2]) }
                     perform()
@@ -763,12 +765,12 @@ private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onTable
         HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(48.dp).padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Glyph.Format, "Format", onClick = onFormat)
-            BarButton(Glyph.Checklist, "Checkliste", onClick = onChecklist)
-            BarButton(Glyph.Table, "Tabelle", onClick = onTable)
-            BarButton(Glyph.Photo, "Foto", onClick = onPhoto)
-            BarButton(Glyph.Mic, "Audio aufnehmen", onClick = onRecord)
-            BarButton(Glyph.Compose, "Neue Notiz", onClick = onCompose)
+            BarButton(Glyph.Format, tr("Format"), onClick = onFormat)
+            BarButton(Glyph.Checklist, tr("Checkliste"), onClick = onChecklist)
+            BarButton(Glyph.Table, tr("Tabelle"), onClick = onTable)
+            BarButton(Glyph.Photo, tr("Foto"), onClick = onPhoto)
+            BarButton(Glyph.Mic, tr("Audio aufnehmen"), onClick = onRecord)
+            BarButton(Glyph.Compose, tr("Neue Notiz"), onClick = onCompose)
         }
     }
 }
@@ -803,7 +805,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
     val inline = remember(tick) { editor.activeInline() }
     Column(Modifier.fillMaxWidth().background(colors.background).padding(horizontal = 14.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Format", style = Type.headline, color = colors.label, modifier = Modifier.weight(1f))
+            Text(tr("Format"), style = Type.headline, color = colors.label, modifier = Modifier.weight(1f))
             Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.fill).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
                 GlyphIcon(Glyph.Close, colors.secondary, 12.dp)
             }
@@ -811,8 +813,8 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((type, label, size, weight) in listOf(
-                Quad("title", "Titel", 20, FontWeight.Bold), Quad("heading", "Überschrift", 17, FontWeight.Bold),
-                Quad("subheading", "Unterüberschrift", 15, FontWeight.SemiBold), Quad("body", "Text", 15, FontWeight.Normal),
+                Quad("title", tr("Titel"), 20, FontWeight.Bold), Quad("heading", tr("Überschrift"), 17, FontWeight.Bold),
+                Quad("subheading", tr("Unterüberschrift"), 15, FontWeight.SemiBold), Quad("body", tr("Text"), 15, FontWeight.Normal),
             )) {
                 val active = current == type
                 Text(label, fontSize = size.sp, fontWeight = weight, color = if (active) Color.White else colors.label, maxLines = 1,
@@ -838,7 +840,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         Spacer(Modifier.height(8.dp))
         // Highlight colors like in Apple's Notes; the active color is ringed, tapping it again removes it.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Markieren", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            Text(tr("Markieren"), fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
             for ((name, rgb) in HIGHLIGHTS) {
                 val active = name in inline
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp))
@@ -854,7 +856,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         Spacer(Modifier.height(8.dp))
         // Text color (like Apple: purple, pink, orange, mint, blue).
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Textfarbe", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            Text(tr("Textfarbe"), fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
             for ((name, rgb) in TEXT_COLORS) {
                 val active = name in inline
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(if (active) colors.fill else colors.surface)
@@ -871,14 +873,14 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         // Font and paragraph alignment.
         val align = remember(tick) { editor.currentAlignment() }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((name, label, family) in listOf(Triple(null, "Standard", FontFamily.Default), Triple("f:serif", "Serif", FontFamily.Serif),
-                Triple("f:mono", "Mono", FontFamily.Monospace))) {
+            for ((name, label, family) in listOf(Triple(null, tr("Standard"), FontFamily.Default), Triple("f:serif", tr("Serif"), FontFamily.Serif),
+                Triple("f:mono", tr("Mono"), FontFamily.Monospace))) {
                 val active = if (name == null) FONTS.keys.none { it in inline } else name in inline
                 Text(label, fontSize = 14.sp, fontFamily = family, color = if (active) Color.White else colors.label,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
                         .clickable { editor.setFont(name) }.padding(horizontal = 9.dp, vertical = 8.dp))
             }
-            for ((name, label) in listOf(null to "Links", "center" to "Mitte", "right" to "Rechts")) {
+            for ((name, label) in listOf(null to tr("Links"), "center" to tr("Mitte"), "right" to tr("Rechts"))) {
                 val active = align == name
                 Text(label, fontSize = 14.sp, color = if (active) Color.White else colors.label,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
@@ -887,7 +889,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((type, label) in listOf("bullet" to "• Liste", "dash" to "– Liste", "number" to "1. Liste", "mono" to "Mono", "quote" to "Zitat")) {
+            for ((type, label) in listOf("bullet" to tr("• Liste"), "dash" to tr("– Liste"), "number" to tr("1. Liste"), "mono" to tr("Mono"), "quote" to tr("Zitat"))) {
                 val active = current == type
                 Text(label, fontSize = 14.sp, color = if (active) Color.White else colors.label,
                     fontFamily = if (type == "mono") FontFamily.Monospace else FontFamily.Default,
@@ -897,19 +899,19 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Ausrücken", fontSize = 14.sp, color = colors.label,
+            Text(tr("Ausrücken"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(-1) }.padding(horizontal = 10.dp, vertical = 8.dp))
-            Text("Einrücken", fontSize = 14.sp, color = colors.label,
+            Text(tr("Einrücken"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(1) }.padding(horizontal = 10.dp, vertical = 8.dp))
             // Also: "---" and Enter on an empty line.
-            Text("Trennlinie", fontSize = 14.sp, color = colors.label,
+            Text(tr("Trennlinie"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.insertDivider() }.padding(horizontal = 10.dp, vertical = 8.dp))
         }
         // Profi-Funktionen only when switched on (Settings) – Tante Erna sees a calm panel.
         if (pro) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Code", fontSize = 15.sp, color = colors.label, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
+                Text(tr("Code"), fontSize = 15.sp, color = colors.label, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
                 for ((lang, label) in io.github.veritasx1.linotes.data.Syntax.LANGUAGES) {
                     Text(label, fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Monospace,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.makeCode(lang) }
@@ -918,10 +920,10 @@ private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote:
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Fußnote / Quelle …", fontSize = 14.sp, color = colors.label,
+                Text(tr("Fußnote / Quelle …"), fontSize = 14.sp, color = colors.label,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onFootnote)
                         .padding(horizontal = 10.dp, vertical = 8.dp))
-                Text("Formel (LaTeX) …", fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Serif,
+                Text(tr("Formel (LaTeX) …"), fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Serif,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onMath)
                         .padding(horizontal = 10.dp, vertical = 8.dp))
             }
@@ -949,7 +951,7 @@ private fun FootnoteList(notes: List<String>) {
     val colors = palette
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
         HorizontalDivider(Modifier.width(120.dp), 0.8.dp, colors.separator)
-        Text("Fußnoten und Quellen", style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = colors.label,
+        Text(tr("Fußnoten und Quellen"), style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = colors.label,
             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
         notes.forEachIndexed { index, note ->
             Row(Modifier.padding(vertical = 2.dp)) {

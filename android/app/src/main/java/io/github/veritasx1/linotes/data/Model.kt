@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -11,22 +13,22 @@ import java.time.temporal.ChronoUnit
 /** Helpers shared by the screens, mirroring linux/linotes/model.py. */
 object Model {
     // --- templates (Vorlagen), the same as model.py ---
-    private val WEEKDAY_NAMES = listOf("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+    private val WEEKDAY_NAMES = listOf(tr("Montag"), tr("Dienstag"), tr("Mittwoch"), tr("Donnerstag"), tr("Freitag"), tr("Samstag"), tr("Sonntag"))
     private val PLACEHOLDER = Regex("\\{\\{(Datum|Uhrzeit|Wochentag)\\}\\}")
     private fun t(kind: String, text: String = "") = JSONObject().put("t", kind).put("x", text)
 
     /** Shipped templates: key, name, blocks (fresh copies on every call). */
     val BUILTIN_TEMPLATES: List<Triple<String, String, List<JSONObject>>> get() = listOf(
-        Triple("besprechung", "Besprechung", listOf(t("title", "Besprechung {{Datum}}"), t("body", "{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr"),
-            t("heading", "Teilnehmer"), t("bullet"), t("heading", "Themen"), t("number"), t("heading", "Beschlüsse"), t("body"),
-            t("heading", "Aufgaben"), t("check"))),
-        Triple("protokoll", "Protokoll", listOf(t("title", "Protokoll {{Datum}}"), t("body", "Ort: "), t("body", "Anwesend: "),
-            t("heading", "Verlauf"), t("body"), t("heading", "Ergebnisse"), t("bullet"))),
-        Triple("reise", "Reisecheckliste", listOf(t("title", "Packliste"), t("heading", "Dokumente"), t("check", "Ausweis oder Reisepass"),
-            t("check", "Tickets"), t("check", "Versicherungskarte"), t("heading", "Kleidung"), t("check"), t("heading", "Technik"),
-            t("check", "Ladegerät"), t("check", "Kopfhörer"), t("heading", "Vor der Abreise"), t("check", "Pflanzen gießen"),
-            t("check", "Fenster schließen"))),
-        Triple("tagebuch", "Tagebuch", listOf(t("title", "{{Wochentag}}, {{Datum}}"), t("body"))),
+        Triple("besprechung", tr("Besprechung"), listOf(t("title", tr("Besprechung {{Datum}}")), t("body", tr("{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr")),
+            t("heading", tr("Teilnehmer")), t("bullet"), t("heading", tr("Themen")), t("number"), t("heading", tr("Beschlüsse")), t("body"),
+            t("heading", tr("Aufgaben")), t("check"))),
+        Triple("protokoll", tr("Protokoll"), listOf(t("title", tr("Protokoll {{Datum}}")), t("body", tr("Ort: ")), t("body", tr("Anwesend: ")),
+            t("heading", tr("Verlauf")), t("body"), t("heading", tr("Ergebnisse")), t("bullet"))),
+        Triple("reise", tr("Reisecheckliste"), listOf(t("title", tr("Packliste")), t("heading", tr("Dokumente")), t("check", tr("Ausweis oder Reisepass")),
+            t("check", tr("Tickets")), t("check", tr("Versicherungskarte")), t("heading", tr("Kleidung")), t("check"), t("heading", tr("Technik")),
+            t("check", tr("Ladegerät")), t("check", tr("Kopfhörer")), t("heading", tr("Vor der Abreise")), t("check", tr("Pflanzen gießen")),
+            t("check", tr("Fenster schließen")))),
+        Triple("tagebuch", tr("Tagebuch"), listOf(t("title", tr("{{Wochentag}}, {{Datum}}")), t("body"))),
     )
 
     /** A copy of the blocks with {{Datum}}, {{Uhrzeit}}, {{Wochentag}} filled in; formatting spans move with the text. */
@@ -119,13 +121,13 @@ object Model {
 
     fun title(note: SyncObject): String {
         // Locked notes keep their title visible, like in Apple's Notes.
-        if (isLocked(note)) return note.data.optString("title").ifEmpty { "Gesperrte Notiz" }
+        if (isLocked(note)) return note.data.optString("title").ifEmpty { tr("Gesperrte Notiz") }
         val body = blocks(note)
         for (index in 0 until body.length()) {
             val text = body.optJSONObject(index)?.optString("x")?.trim().orEmpty()
             if (text.isNotEmpty()) return text.take(120)
         }
-        return note.data.optString("title").ifEmpty { "Neue Notiz" }
+        return note.data.optString("title").ifEmpty { tr("Neue Notiz") }
     }
 
     fun preview(note: SyncObject): String {
@@ -278,16 +280,16 @@ object Model {
 
     fun modified(obj: SyncObject): Double = obj.data.optDouble("modified", obj.updated).let { if (it.isNaN()) obj.updated else it }
 
-    private val months = listOf("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
-        "September", "Oktober", "November", "Dezember")
-    private val weekdays = listOf("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+    private val months = listOf(tr("Januar"), tr("Februar"), tr("März"), tr("April"), tr("Mai"), tr("Juni"), tr("Juli"), tr("August"),
+        tr("September"), tr("Oktober"), tr("November"), tr("Dezember"))
+    private val weekdays = listOf(tr("Montag"), tr("Dienstag"), tr("Mittwoch"), tr("Donnerstag"), tr("Freitag"), tr("Samstag"), tr("Sonntag"))
 
     private fun date(seconds: Double): LocalDate =
         Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(ZoneId.systemDefault()).toLocalDate()
 
     fun created(obj: SyncObject): Double = obj.data.optDouble("created", Double.NaN).let { if (it.isNaN()) modified(obj) else it }
 
-    val NOTE_SORTS = listOf("modified" to "Bearbeitungsdatum", "created" to "Erstellungsdatum", "title" to "Titel")
+    val NOTE_SORTS = listOf("modified" to tr("Bearbeitungsdatum"), "created" to tr("Erstellungsdatum"), "title" to tr("Titel"))
 
     class Sorted(val note: SyncObject, val group: String, val stamp: Double)
 
@@ -299,8 +301,8 @@ object Model {
         val others = notes - pinned.toSet()
         fun arrange(part: List<SyncObject>) =
             if (order == "title") part.sortedBy { title(it).lowercase() } else part.sortedByDescending(stamp)
-        return arrange(pinned).map { Sorted(it, "Angeheftet", stamp(it)) } + arrange(others).map {
-            Sorted(it, if (order == "title") (if (pinned.isNotEmpty()) "Notizen" else "") else dateGroup(stamp(it)), stamp(it))
+        return arrange(pinned).map { Sorted(it, tr("Angeheftet"), stamp(it)) } + arrange(others).map {
+            Sorted(it, if (order == "title") (if (pinned.isNotEmpty()) tr("Notizen") else "") else dateGroup(stamp(it)), stamp(it))
         }
     }
 
@@ -309,10 +311,10 @@ object Model {
         val day = date(seconds)
         val delta = ChronoUnit.DAYS.between(day, today)
         return when {
-            delta <= 0 -> "Heute"
-            delta == 1L -> "Gestern"
-            delta < 7 -> "Vorherige 7 Tage"
-            delta < 30 -> "Vorherige 30 Tage"
+            delta <= 0 -> tr("Heute")
+            delta == 1L -> tr("Gestern")
+            delta < 7 -> tr("Vorherige 7 Tage")
+            delta < 30 -> tr("Vorherige 30 Tage")
             day.year == today.year -> months[day.monthValue - 1]
             else -> "${months[day.monthValue - 1]} ${day.year}"
         }
@@ -323,7 +325,7 @@ object Model {
         val delta = ChronoUnit.DAYS.between(moment.toLocalDate(), LocalDate.now())
         return when {
             delta <= 0 -> moment.format(DateTimeFormatter.ofPattern("HH:mm"))
-            delta == 1L -> "Gestern"
+            delta == 1L -> tr("Gestern")
             delta < 7 -> weekdays[moment.dayOfWeek.value - 1]
             else -> moment.format(DateTimeFormatter.ofPattern("dd.MM.yy"))
         }
@@ -331,7 +333,7 @@ object Model {
 
     fun longDate(seconds: Double): String {
         val moment = Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(ZoneId.systemDefault())
-        return "${moment.dayOfMonth}. ${months[moment.monthValue - 1]} ${moment.year} um ${moment.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        return tr("{dayOfMonth}. {value} {year} um {value2}", "dayOfMonth" to moment.dayOfMonth, "value" to (months[moment.monthValue - 1]), "year" to moment.year, "value2" to (moment.format(DateTimeFormatter.ofPattern("HH:mm"))))
     }
 
     fun now() = System.currentTimeMillis() / 1000.0
@@ -341,18 +343,18 @@ object Model {
     fun privateFolder(userId: Int) = "notes-$userId"
     fun defaultList(userId: Int) = "list-$userId"
     fun defaultBoard(userId: Int) = "board-$userId"
-    val defaultColumns = listOf("offen" to "Offen", "arbeit" to "In Arbeit", "fertig" to "Erledigt")
+    val defaultColumns = listOf("offen" to tr("Offen"), "arbeit" to tr("In Arbeit"), "fertig" to tr("Erledigt"))
 
     fun ensureDefaults(sync: SyncEngine) {
         val userId = sync.userId
         if (userId == 0) return
         if (!sync.exists(privateFolder(userId)))
-            sync.put("folder", JSONObject().put("name", "Notizen").put("order", 0), null, privateFolder(userId))
+            sync.put("folder", JSONObject().put("name", tr("Notizen")).put("order", 0), null, privateFolder(userId))
         if (!sync.exists(defaultList(userId)))
-            sync.put("list", JSONObject().put("name", "Einkaufsliste").put("grocery", true).put("order", 0), null, defaultList(userId))
+            sync.put("list", JSONObject().put("name", tr("Einkaufsliste")).put("grocery", true).put("order", 0), null, defaultList(userId))
         val board = defaultBoard(userId)
         if (!sync.exists(board)) {
-            sync.put("board", JSONObject().put("name", "Aufgaben").put("order", 0), null, board)
+            sync.put("board", JSONObject().put("name", tr("Aufgaben")).put("order", 0), null, board)
             defaultColumns.forEachIndexed { order, (key, name) ->
                 sync.put("column", JSONObject().put("board", board).put("name", name).put("order", order), null, "$board-$key")
             }

@@ -18,6 +18,7 @@ from .api import Api, ApiError, OfflineError
 from .dialogs import error_text, run_async
 from .qrcodegen import QrCode
 from .sync import device_name
+from .i18n import _
 
 
 def contacts_id(sync):
@@ -135,7 +136,7 @@ class Onboarding(Gtk.Box):
         self.back = Gtk.Button(icon_name="go-previous-symbolic", visible=False)
         self.back.connect("clicked", lambda _b: self.go_back())
         header.pack_start(self.back)
-        help_button = Gtk.Button(icon_name="help-about-symbolic", tooltip_text="Hilfe")
+        help_button = Gtk.Button(icon_name="help-about-symbolic", tooltip_text=_("Hilfe"))
         help_button.connect("clicked", lambda _b: show_help(self.window))
         header.pack_end(help_button)
         view.add_top_bar(header)
@@ -167,7 +168,7 @@ class Onboarding(Gtk.Box):
     def set_connecting(self, connecting):
         self.connecting = connecting
         self.local_button.set_visible(not connecting)
-        self.server_title.set_label("Mit Server verbinden" if connecting else "LiNotes")
+        self.server_title.set_label(_("Mit Server verbinden") if connecting else _("LiNotes"))
         self.show("server")
 
     def wrap(self, child, name):
@@ -189,37 +190,35 @@ class Onboarding(Gtk.Box):
     # --- server ------------------------------------------------
 
     def build_server(self):
-        box = page("LiNotes", "Deine Notizen liegen auf deinem eigenen Server – Ende-zu-Ende verschlüsselt.")
+        box = page(_("LiNotes"), _("Deine Notizen liegen auf deinem eigenen Server – Ende-zu-Ende verschlüsselt."))
         self.server_title = box.get_first_child()
         icon = Gtk.Image.new_from_icon_name("io.github.veritasx1.LiNotes")
         icon.set_pixel_size(96)
         box.prepend(icon)
-        group = Adw.PreferencesGroup(description="Die Adresse bekommst du von der Person, die den Server betreibt.")
-        self.server_row = Adw.EntryRow(title="Serveradresse, z. B. notizen.example.org")
+        group = Adw.PreferencesGroup(description=_("Die Adresse bekommst du von der Person, die den Server betreibt."))
+        self.server_row = Adw.EntryRow(title=_("Serveradresse, z. B. notizen.example.org"))
         self.server_row.connect("entry-activated", lambda _r: self.check_server())
         group.add(self.server_row)
         box.append(group)
         self.server_error = self.error_label()
         box.append(self.server_error)
-        button = pill("Weiter")
+        button = pill(_("Weiter"))
         button.connect("clicked", lambda _b: self.check_server())
         box.append(button)
-        self.local_button = Gtk.Button(label="Ohne Server nutzen", halign=Gtk.Align.CENTER,
-                                       tooltip_text="Einfach als Notizen-Programm auf diesem Computer. Einen Server kannst du später eintragen.")
+        self.local_button = Gtk.Button(label=_("Ohne Server nutzen"), halign=Gtk.Align.CENTER,
+                                       tooltip_text=_("Einfach als Notizen-Programm auf diesem Computer. Einen Server kannst du später eintragen."))
         self.local_button.add_css_class("flat")
         self.local_button.connect("clicked", lambda _b: self.show("local"))
         box.append(self.local_button)
         self.wrap(box, "server")
 
     def build_local(self):
-        box = page("Ohne Server", "Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Computer. "
-                   "Geht er verloren, sind sie weg – verbinde LiNotes später mit einem Server (Kontomenü), "
-                   "um sie zu sichern und zu teilen.")
+        box = page(_("Ohne Server"), _("Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Computer. Geht er verloren, sind sie weg – verbinde LiNotes später mit einem Server (Kontomenü), um sie zu sichern und zu teilen."))
         group = Adw.PreferencesGroup()
-        name_row = Adw.EntryRow(title="Dein Name (optional)")
+        name_row = Adw.EntryRow(title=_("Dein Name (optional)"))
         group.add(name_row)
         box.append(group)
-        button = pill("Los geht’s")
+        button = pill(_("Los geht’s"))
         button.connect("clicked", lambda _b: self.emit("local", name_row.get_text().strip()))
         name_row.connect("entry-activated", lambda _r: self.emit("local", name_row.get_text().strip()))
         box.append(button)
@@ -235,10 +234,10 @@ class Onboarding(Gtk.Box):
 
         def done(result, error):
             if error is not None or result.get("app") != "LiNotes":
-                self.fail(self.server_error, "Unter dieser Adresse läuft kein LiNotes-Server." if error is None else error_text(error))
+                self.fail(self.server_error, _("Unter dieser Adresse läuft kein LiNotes-Server.") if error is None else error_text(error))
                 return
             if result.get("protocol") != 2:
-                self.fail(self.server_error, "Dieser Server ist zu alt für diese App.")
+                self.fail(self.server_error, _("Dieser Server ist zu alt für diese App."))
                 return
             self.server = text
             self.show("choice")
@@ -247,12 +246,12 @@ class Onboarding(Gtk.Box):
     # --- choice ------------------------------------------------
 
     def build_choice(self):
-        box = page("Wie möchtest du starten?")
+        box = page(_("Wie möchtest du starten?"))
         group = Adw.PreferencesGroup()
         for title, subtitle, target in (
-            ("Neues Konto erstellen", "Du hast einen Einladungscode bekommen.", "register"),
-            ("Mit anderem Gerät verbinden", "Dein Konto gibt es schon, z. B. auf dem Handy.", "link"),
-            ("Mit Schlüsseldatei wiederherstellen", "Aus deiner Notfall-Sicherung.", "keyfile"),
+            (_("Neues Konto erstellen"), _("Du hast einen Einladungscode bekommen."), "register"),
+            (_("Mit anderem Gerät verbinden"), _("Dein Konto gibt es schon, z. B. auf dem Handy."), "link"),
+            (_("Mit Schlüsseldatei wiederherstellen"), _("Aus deiner Notfall-Sicherung."), "keyfile"),
         ):
             row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
             row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
@@ -264,17 +263,17 @@ class Onboarding(Gtk.Box):
     # --- new account -------------------------------------------
 
     def build_register(self):
-        box = page("Neues Konto", "Es gibt kein Passwort: Dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.")
+        box = page(_("Neues Konto"), _("Es gibt kein Passwort: Dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."))
         group = Adw.PreferencesGroup()
-        self.invite_row = Adw.EntryRow(title="Einladungscode")
-        self.username_row = Adw.EntryRow(title="Benutzername (klein, ohne Leerzeichen)")
-        self.name_row = Adw.EntryRow(title="Dein Name")
+        self.invite_row = Adw.EntryRow(title=_("Einladungscode"))
+        self.username_row = Adw.EntryRow(title=_("Benutzername (klein, ohne Leerzeichen)"))
+        self.name_row = Adw.EntryRow(title=_("Dein Name"))
         for row in (self.invite_row, self.username_row, self.name_row):
             group.add(row)
         box.append(group)
         self.register_error = self.error_label()
         box.append(self.register_error)
-        button = pill("Konto erstellen")
+        button = pill(_("Konto erstellen"))
         button.connect("clicked", lambda _b: self.register())
         box.append(button)
         self.wrap(box, "register")
@@ -304,15 +303,15 @@ class Onboarding(Gtk.Box):
     # --- link --------------------------------------------------
 
     def build_link(self):
-        self.link_box = page("Mit anderem Gerät verbinden", "Gib deinen Benutzernamen ein. Danach bestätigst du auf dem anderen Gerät.")
+        self.link_box = page(_("Mit anderem Gerät verbinden"), _("Gib deinen Benutzernamen ein. Danach bestätigst du auf dem anderen Gerät."))
         group = Adw.PreferencesGroup()
-        self.link_user = Adw.EntryRow(title="Benutzername")
+        self.link_user = Adw.EntryRow(title=_("Benutzername"))
         self.link_user.connect("entry-activated", lambda _r: self.start_link())
         group.add(self.link_user)
         self.link_box.append(group)
         self.link_error = self.error_label()
         self.link_box.append(self.link_error)
-        self.link_button = pill("Verbinden")
+        self.link_button = pill(_("Verbinden"))
         self.link_button.connect("clicked", lambda _b: self.start_link())
         self.link_box.append(self.link_button)
         self.link_code_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -334,11 +333,11 @@ class Onboarding(Gtk.Box):
 
         def created(link, error):
             if error is not None:
-                message = "Diesen Benutzernamen gibt es auf dem Server nicht." if getattr(error, "status", 0) == 404 else error_text(error)
+                message = _("Diesen Benutzernamen gibt es auf dem Server nicht.") if getattr(error, "status", 0) == 404 else error_text(error)
                 self.fail(self.link_error, message)
                 return
             info = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER,
-                             label="Auf deinem anderen Gerät erscheint „Neues Gerät verbinden“. Gib dort diesen Code ein oder scanne den QR-Code:")
+                             label=_("Auf deinem anderen Gerät erscheint „Neues Gerät verbinden“. Gib dort diesen Code ein oder scanne den QR-Code:"))
             self.link_code_area.append(info)
             self.link_code_area.append(code_label(link.code))
             self.link_code_area.append(QrView(link.qr))
@@ -365,28 +364,28 @@ class Onboarding(Gtk.Box):
     # --- key file ----------------------------------------------
 
     def build_keyfile(self):
-        box = page("Wiederherstellen", "Wähle deine Schlüsseldatei und gib die Passphrase ein, mit der du sie geschützt hast.")
+        box = page(_("Wiederherstellen"), _("Wähle deine Schlüsseldatei und gib die Passphrase ein, mit der du sie geschützt hast."))
         self.keyfile_path = None
-        choose = Gtk.Button(label="Schlüsseldatei auswählen …")
+        choose = Gtk.Button(label=_("Schlüsseldatei auswählen …"))
         choose.connect("clicked", lambda _b: self.choose_keyfile())
         box.append(choose)
         self.keyfile_label = Gtk.Label(wrap=True)
         self.keyfile_label.add_css_class("dim-label")
         box.append(self.keyfile_label)
         group = Adw.PreferencesGroup()
-        self.passphrase_row = Adw.PasswordEntryRow(title="Passphrase")
+        self.passphrase_row = Adw.PasswordEntryRow(title=_("Passphrase"))
         self.passphrase_row.connect("entry-activated", lambda _r: self.restore())
         group.add(self.passphrase_row)
         box.append(group)
         self.keyfile_error = self.error_label()
         box.append(self.keyfile_error)
-        button = pill("Wiederherstellen")
+        button = pill(_("Wiederherstellen"))
         button.connect("clicked", lambda _b: self.restore())
         box.append(button)
         self.wrap(box, "keyfile")
 
     def choose_keyfile(self):
-        dialog = Gtk.FileDialog(title="Schlüsseldatei")
+        dialog = Gtk.FileDialog(title=_("Schlüsseldatei"))
 
         def chosen(dialog, result):
             try:
@@ -398,7 +397,7 @@ class Onboarding(Gtk.Box):
 
     def restore(self):
         if not self.keyfile_path:
-            self.fail(self.keyfile_error, "Bitte zuerst die Schlüsseldatei auswählen.")
+            self.fail(self.keyfile_error, _("Bitte zuerst die Schlüsseldatei auswählen."))
             return
         passphrase = self.passphrase_row.get_text()
 
@@ -409,7 +408,7 @@ class Onboarding(Gtk.Box):
 
         def done(result, error):
             if error is not None:
-                message = "Falsche Passphrase oder keine gültige Schlüsseldatei." if isinstance(error, (e2e.CryptoError, ValueError, KeyError)) else error_text(error)
+                message = _("Falsche Passphrase oder keine gültige Schlüsseldatei.") if isinstance(error, (e2e.CryptoError, ValueError, KeyError)) else error_text(error)
                 self.fail(self.keyfile_error, message)
                 return
             server, account, response = result
@@ -424,28 +423,26 @@ class Onboarding(Gtk.Box):
 class KeyfileDialog(Adw.Dialog):
 
     def __init__(self, window):
-        super().__init__(title="Schlüsseldatei sichern")
+        super().__init__(title=_("Schlüsseldatei sichern"))
         self.window = window
         self.sync = window.sync
         self.set_content_width(440)
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         box = page(
-            "Notfall-Schlüssel",
-            "Nur mit dieser Datei oder einem deiner Geräte kommst du an deine Notizen. "
-            "Lege sie z. B. auf einen USB-Stick an einen sicheren Ort. Die Passphrase schützt die Datei, "
-              "falls sie in falsche Hände gerät – merke sie dir gut.",
+            _("Notfall-Schlüssel"),
+            _("Nur mit dieser Datei oder einem deiner Geräte kommst du an deine Notizen. Lege sie z. B. auf einen USB-Stick an einen sicheren Ort. Die Passphrase schützt die Datei, falls sie in falsche Hände gerät – merke sie dir gut."),
         )
         group = Adw.PreferencesGroup()
-        self.first = Adw.PasswordEntryRow(title="Passphrase (mind. 10 Zeichen)")
-        self.second = Adw.PasswordEntryRow(title="Passphrase wiederholen")
+        self.first = Adw.PasswordEntryRow(title=_("Passphrase (mind. 10 Zeichen)"))
+        self.second = Adw.PasswordEntryRow(title=_("Passphrase wiederholen"))
         group.add(self.first)
         group.add(self.second)
         box.append(group)
         self.error = Gtk.Label(wrap=True, visible=False)
         self.error.add_css_class("error")
         box.append(self.error)
-        save = pill("Schlüsseldatei speichern …")
+        save = pill(_("Schlüsseldatei speichern …"))
         save.connect("clicked", lambda _b: self.save())
         box.append(save)
         view.set_content(box)
@@ -454,14 +451,14 @@ class KeyfileDialog(Adw.Dialog):
     def save(self):
         passphrase = self.first.get_text()
         if len(passphrase) < 10:
-            self.error.set_label("Die Passphrase muss mindestens 10 Zeichen haben.")
+            self.error.set_label(_("Die Passphrase muss mindestens 10 Zeichen haben."))
             self.error.set_visible(True)
             return
         if passphrase != self.second.get_text():
-            self.error.set_label("Die Passphrasen stimmen nicht überein.")
+            self.error.set_label(_("Die Passphrasen stimmen nicht überein."))
             self.error.set_visible(True)
             return
-        dialog = Gtk.FileDialog(title="Schlüsseldatei speichern")
+        dialog = Gtk.FileDialog(title=_("Schlüsseldatei speichern"))
         dialog.set_initial_name(f"LiNotes-{self.sync.user['username']}.linoteskey")
 
         def chosen(dialog, result):
@@ -473,7 +470,7 @@ class KeyfileDialog(Adw.Dialog):
             Path(path).write_text(json.dumps(data, indent=1))
             Path(path).chmod(0o600)
             self.sync.mark_keyfile_saved()
-            self.window.toast("Schlüsseldatei gespeichert")
+            self.window.toast(_("Schlüsseldatei gespeichert"))
             self.close()
         dialog.save(self.window, None, chosen)
 
@@ -485,14 +482,13 @@ class KeyfileDialog(Adw.Dialog):
 def approve_device(window, channel):
     sync = window.sync
     dialog = Adw.AlertDialog(
-        heading="Neues Gerät verbinden?",
-        body=f"„{channel.get('note') or 'Ein neues Gerät'}“ möchte sich mit deinem Konto verbinden. "
-             "Gib den 6-stelligen Code ein, der dort angezeigt wird. Wenn du das nicht selbst warst, tippe auf „Ablehnen“.",
+        heading=_("Neues Gerät verbinden?"),
+        body=_("„{value}“ möchte sich mit deinem Konto verbinden. Gib den 6-stelligen Code ein, der dort angezeigt wird. Wenn du das nicht selbst warst, tippe auf „Ablehnen“.", value=channel.get('note') or 'Ein neues Gerät'),
     )
     entry = Gtk.Entry(placeholder_text="123 456", max_length=7, input_purpose=Gtk.InputPurpose.DIGITS, activates_default=True)
     dialog.set_extra_child(entry)
-    dialog.add_response("reject", "Ablehnen")
-    dialog.add_response("ok", "Verbinden")
+    dialog.add_response("reject", _("Ablehnen"))
+    dialog.add_response("ok", _("Verbinden"))
     dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
     dialog.set_default_response("ok")
 
@@ -506,7 +502,7 @@ def approve_device(window, channel):
             if error is not None:
                 window.toast(str(error) if isinstance(error, pairing.PairingError) else error_text(error))
             else:
-                window.toast("Neues Gerät verbunden")
+                window.toast(_("Neues Gerät verbunden"))
         run_async(lambda: pairing.approve_link(sync.api, channel["channel"], code, sync.account), done)
     dialog.connect("response", on_response)
     dialog.present(window)
@@ -519,7 +515,7 @@ def approve_device(window, channel):
 class PeopleDialog(Adw.Dialog):
 
     def __init__(self, window):
-        super().__init__(title="Personen")
+        super().__init__(title=_("Personen"))
         self.window = window
         self.sync = window.sync
         self.set_content_width(460)
@@ -534,23 +530,22 @@ class PeopleDialog(Adw.Dialog):
         if hasattr(self, "group"):
             self.page.remove(self.group)
         self.group = Adw.PreferencesGroup(
-            description="Bevor du etwas teilst, verifiziert ihr euch einmal gegenseitig – "
-                        "so kann niemand, auch nicht der Server, einen falschen Schlüssel unterschieben.",
+            description=_("Bevor du etwas teilst, verifiziert ihr euch einmal gegenseitig – so kann niemand, auch nicht der Server, einen falschen Schlüssel unterschieben."),
         )
         users = other_users(self.sync)
         if not users:
-            self.group.add(Adw.ActionRow(title="Noch niemand", subtitle="Erzeuge einen Einladungscode im Kontomenü."))
+            self.group.add(Adw.ActionRow(title=_("Noch niemand"), subtitle=_("Erzeuge einen Einladungscode im Kontomenü.")))
         for user in users:
             state = verified_state(self.sync, user)
-            subtitle = {"verified": "✓ verifiziert", "unverified": "noch nicht verifiziert",
-                        "changed": "⚠ Schlüssel hat sich geändert – bitte neu verifizieren"}[state]
+            subtitle = {"verified": _("✓ verifiziert"), "unverified": _("noch nicht verifiziert"),
+                        "changed": _("⚠ Schlüssel hat sich geändert – bitte neu verifizieren")}[state]
             row = Adw.ActionRow(title=user["name"], subtitle=f"@{user['username']} · {subtitle}")
             if state != "verified":
-                button = Gtk.Button(label="Verifizieren", valign=Gtk.Align.CENTER)
+                button = Gtk.Button(label=_("Verifizieren"), valign=Gtk.Align.CENTER)
                 button.connect("clicked", lambda _b, u=user: VerifyDialog(self.window, u, on_done=self.fill).present(self.window))
                 row.add_suffix(button)
             safety = e2e.safety_number(self.sync.identity.public, user["identity"])
-            row.set_tooltip_text(f"Sicherheitsnummer: {safety}")
+            row.set_tooltip_text(_("Sicherheitsnummer: {safety}", safety=safety))
             self.group.add(row)
         self.page.add(self.group)
 
@@ -559,7 +554,7 @@ class VerifyDialog(Adw.Dialog):
     """Show a code (the other person types it or scans the QR code)."""
 
     def __init__(self, window, user, on_done=None):
-        super().__init__(title=f"{user['name']} verifizieren")
+        super().__init__(title=_("{value} verifizieren", value=user['name']))
         self.window = window
         self.sync = window.sync
         self.user = user
@@ -568,12 +563,11 @@ class VerifyDialog(Adw.Dialog):
         self.set_content_width(420)
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
-        self.box = page(f"{user['name']} verifizieren",
-                        f"Auf dem Gerät von {user['name']} erscheint gleich eine Anfrage. "
-                        "Dort diesen Code eintippen (oder vorlesen lassen) oder den QR-Code scannen.")
+        self.box = page(_("{value} verifizieren", value=user['name']),
+                        _("Auf dem Gerät von {value} erscheint gleich eine Anfrage. Dort diesen Code eintippen (oder vorlesen lassen) oder den QR-Code scannen.", value=user['name']))
         self.spinner = Gtk.Spinner(spinning=True)
         self.box.append(self.spinner)
-        safety = Gtk.Label(label="Sicherheitsnummer zum Vergleichen:\n" + e2e.safety_number(self.sync.identity.public, user["identity"]),
+        safety = Gtk.Label(label=_("Sicherheitsnummer zum Vergleichen:\n") + e2e.safety_number(self.sync.identity.public, user["identity"]),
                            justify=Gtk.Justification.CENTER, selectable=True)
         safety.add_css_class("caption")
         safety.add_css_class("dim-label")
@@ -599,7 +593,7 @@ class VerifyDialog(Adw.Dialog):
                     self.close()
                 return
             mark_verified(self.sync, self.user["id"], fingerprint)
-            self.window.toast(f"{self.user['name']} ist jetzt verifiziert ✓")
+            self.window.toast(_("{value} ist jetzt verifiziert ✓", value=self.user['name']))
             if self.on_done:
                 self.on_done()
             self.close()
@@ -613,13 +607,13 @@ def answer_verification(window, channel):
     if other is None:
         return
     dialog = Adw.AlertDialog(
-        heading=f"{other['name']} möchte euch verifizieren",
-        body=f"Gib den Code ein, den {other['name']} dir zeigt oder vorliest.",
+        heading=_("{value} möchte euch verifizieren", value=other['name']),
+        body=_("Gib den Code ein, den {value} dir zeigt oder vorliest.", value=other['name']),
     )
     entry = Gtk.Entry(placeholder_text="123 456", max_length=7, input_purpose=Gtk.InputPurpose.DIGITS, activates_default=True)
     dialog.set_extra_child(entry)
-    dialog.add_response("cancel", "Abbrechen")
-    dialog.add_response("ok", "Bestätigen")
+    dialog.add_response("cancel", _("Abbrechen"))
+    dialog.add_response("ok", _("Bestätigen"))
     dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
     dialog.set_default_response("ok")
 
@@ -633,7 +627,7 @@ def answer_verification(window, channel):
                 window.toast(str(error) if isinstance(error, pairing.PairingError) else error_text(error))
                 return
             mark_verified(sync, other["id"], fingerprint)
-            window.toast(f"{other['name']} ist jetzt verifiziert ✓")
+            window.toast(_("{value} ist jetzt verifiziert ✓", value=other['name']))
         run_async(lambda: pairing.verify_enter(sync.api, channel["channel"], code, other["id"],
                                                sync.identity.public, sync.users()), done)
     dialog.connect("response", on_response)
@@ -647,8 +641,8 @@ def answer_verification(window, channel):
 class ShareDialog(Adw.Dialog):
 
     def __init__(self, window, obj):
-        kinds = {"folder": "Ordner", "note": "Notiz", "list": "Liste", "board": "Board"}
-        super().__init__(title=f"{kinds.get(obj['kind'], 'Objekt')} teilen")
+        kinds = {"folder": _("Ordner"), "note": _("Notiz"), "list": _("Liste"), "board": _("Board")}
+        super().__init__(title=_("{name} teilen", name=kinds.get(obj['kind'], 'Objekt')))
         self.window = window
         self.sync = window.sync
         self.obj = obj
@@ -656,16 +650,16 @@ class ShareDialog(Adw.Dialog):
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         page_widget = Adw.PreferencesPage()
-        description = "Wähle, wer mitlesen und mitbearbeiten darf."
+        description = _("Wähle, wer mitlesen und mitbearbeiten darf.")
         if obj["kind"] == "folder":
-            description += " Alles in diesem Ordner wird mitgeteilt – Unterordner, Notizen, Listen und Boards."
+            description += _(" Alles in diesem Ordner wird mitgeteilt – Unterordner, Notizen, Listen und Boards.")
         group = Adw.PreferencesGroup(title=obj["data"].get("name") or "", description=description)
         current = set(self.sync.share_members(obj.get("share"))) - {self.sync.user_id}
         self.checks = {}
         users = other_users(self.sync)
         if not users:
-            group.add(Adw.ActionRow(title="Noch niemand zum Teilen da",
-                                    subtitle="Erzeuge im Kontomenü einen Einladungscode."))
+            group.add(Adw.ActionRow(title=_("Noch niemand zum Teilen da"),
+                                    subtitle=_("Erzeuge im Kontomenü einen Einladungscode.")))
         for user in users:
             state = verified_state(self.sync, user)
             row = Adw.ActionRow(title=user["name"])
@@ -673,21 +667,21 @@ class ShareDialog(Adw.Dialog):
                 check = Gtk.CheckButton(active=user["id"] in current, valign=Gtk.Align.CENTER)
                 row.add_prefix(check)
                 row.set_activatable_widget(check)
-                row.set_subtitle("✓ verifiziert")
+                row.set_subtitle(_("✓ verifiziert"))
                 self.checks[user["id"]] = check
             else:
-                row.set_subtitle("Erst verifizieren, dann teilen")
-                button = Gtk.Button(label="Verifizieren", valign=Gtk.Align.CENTER)
+                row.set_subtitle(_("Erst verifizieren, dann teilen"))
+                button = Gtk.Button(label=_("Verifizieren"), valign=Gtk.Align.CENTER)
                 button.connect("clicked", lambda _b, u=user: (self.close(), VerifyDialog(window, u).present(window)))
                 row.add_suffix(button)
             group.add(row)
         page_widget.add(group)
         if obj["owner"] != self.sync.user_id:
-            group.set_description(f"Geteilt von {self.sync.user_name(obj['owner'])}. Nur wer es erstellt hat, kann die Freigabe ändern.")
+            group.set_description(_("Geteilt von {person}. Nur wer es erstellt hat, kann die Freigabe ändern.", person=self.sync.user_name(obj['owner'])))
             for check in self.checks.values():
                 check.set_sensitive(False)
         actions = Adw.PreferencesGroup()
-        save = pill("Übernehmen")
+        save = pill(_("Übernehmen"))
         save.set_sensitive(obj["owner"] == self.sync.user_id)
         save.connect("clicked", lambda _b: self.apply())
         actions.add(save)
@@ -698,15 +692,15 @@ class ShareDialog(Adw.Dialog):
     def apply(self):
         members = [uid for uid, check in self.checks.items() if check.get_active()]
         if self.obj["kind"] == "note" and self.obj["data"].get("enc") and members:
-            self.window.toast("Gesperrte Notizen können nicht geteilt werden.")
+            self.window.toast(_("Gesperrte Notizen können nicht geteilt werden."))
             return
         sync = self.sync
 
         def done(_result, error):
             if error is not None:
-                self.window.toast(f"Teilen fehlgeschlagen: {error}")
+                self.window.toast(_("Teilen fehlgeschlagen: {error}", error=error))
             else:
-                self.window.toast("Geteilt" if members else "Nicht mehr geteilt")
+                self.window.toast(_("Geteilt") if members else _("Nicht mehr geteilt"))
             self.window.refresh_all()
         # Re-encrypting (and re-uploading pictures) may take a moment.
         run_async(lambda: sync.set_sharing(self.obj["id"], members), done)
@@ -718,69 +712,40 @@ class ShareDialog(Adw.Dialog):
 # ================================================================
 
 HELP = [
-    ("Erste Schritte", [
-        ("Ohne Server", "Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach ein Notizen-Programm, alles liegt "
-         "verschlüsselt nur auf diesem Computer. Später im Kontomenü „Mit Server verbinden …“ wählen – deine Notizen werden dann "
-         "hochgeladen und lassen sich teilen und auf anderen Geräten nutzen."),
-        ("Konto anlegen", "Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. "
-         "Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – "
-         "dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."),
-        ("Schlüsseldatei sichern", "Speichere direkt danach die Schlüsseldatei (Kontomenü → „Schlüsseldatei sichern“) "
-         "und lege sie z. B. auf einem USB-Stick an einen sicheren Ort. Ohne Gerät und ohne Schlüsseldatei kann niemand "
-         "– auch nicht der Server-Betreiber – deine Notizen wiederherstellen."),
-        ("Weiteres Gerät", "Auf dem neuen Gerät „Mit anderem Gerät verbinden“ wählen und deinen Benutzernamen eingeben. "
-         "Auf einem Gerät, auf dem du schon angemeldet bist, erscheint dann eine Anfrage: dort den 6-stelligen Code "
-         "eintippen oder mit dem Handy den QR-Code scannen."),
+    (_("Erste Schritte"), [
+        (_("Ohne Server"), _("Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach ein Notizen-Programm, alles liegt verschlüsselt nur auf diesem Computer. Später im Kontomenü „Mit Server verbinden …“ wählen – deine Notizen werden dann hochgeladen und lassen sich teilen und auf anderen Geräten nutzen.")),
+        (_("Konto anlegen"), _("Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.")),
+        (_("Schlüsseldatei sichern"), _("Speichere direkt danach die Schlüsseldatei (Kontomenü → „Schlüsseldatei sichern“) und lege sie z. B. auf einem USB-Stick an einen sicheren Ort. Ohne Gerät und ohne Schlüsseldatei kann niemand – auch nicht der Server-Betreiber – deine Notizen wiederherstellen.")),
+        (_("Weiteres Gerät"), _("Auf dem neuen Gerät „Mit anderem Gerät verbinden“ wählen und deinen Benutzernamen eingeben. Auf einem Gerät, auf dem du schon angemeldet bist, erscheint dann eine Anfrage: dort den 6-stelligen Code eintippen oder mit dem Handy den QR-Code scannen.")),
     ]),
-    ("Notizen", [
-        ("Formatieren", "Über „Aa“ wählst du Titel, Überschrift, Unterüberschrift, Text, Monospace, Listen oder Zitat. "
-         "Tastenkürzel wie auf dem Mac: Strg+Umschalt+T (Titel), +H (Überschrift), +J (Unterüberschrift), +B (Text), "
-         "+L (Checkliste), +7/8/9 (Listen); Strg+B/I/U für fett, kursiv, unterstrichen."),
-        ("Checklisten", "Kreis anklicken, um einen Punkt abzuhaken. Tab rückt ein, Umschalt+Tab aus. Eine leere Zeile "
-         "beendet die Liste. Im Format-Menü kannst du abgehakte Punkte automatisch nach unten sortieren lassen."),
-        ("Tags", "Schreibe #Wort in eine Notiz – der Tag erscheint unten in der Seitenleiste zum Filtern."),
-        ("Profi-Funktionen", "Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Im Darstellungsmenü (⋯) „Profi-Funktionen“ einschalten – dann gibt es im Format-Menü zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel anklicken zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für dein Konto auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block."),
-        ("Vorlagen", "„+“ über der Seitenleiste → „Neue Notiz aus Vorlage …“: mitgeliefert sind Besprechung, Protokoll, Reisecheckliste und Tagebuch. Eigene Vorlage: eine Notiz anlegen und Rechtsklick → „Als Vorlage verwenden“. {{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen durch die aktuellen Werte ersetzt, z. B. „Besprechung {{Datum}}“."),
-        ("Link-Vorschau", "Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du „Link-Vorschau (Webseite abrufen)“ im Darstellungsmenü (⋯) einschaltest; ab Werk ist sie aus. Dafür ruft nur dieser Computer die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Rechtsklick auf die Vorschau → „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau."),
-        ("Gesperrte Notizen", "Über das Schloss sperrst du eine Notiz mit deinem Notizen-Passwort. Sie wird zusätzlich "
-         "verschlüsselt und sperrt sich nach 10 Minuten ohne Benutzung wieder. Geteilte Notizen können nicht gesperrt werden."),
-        ("Gelöschte Notizen", "Gelöschte Notizen liegen 30 Tage in „Zuletzt gelöscht“ und lassen sich dort wiederherstellen."),
+    (_("Notizen"), [
+        (_("Formatieren"), _("Über „Aa“ wählst du Titel, Überschrift, Unterüberschrift, Text, Monospace, Listen oder Zitat. Tastenkürzel wie auf dem Mac: Strg+Umschalt+T (Titel), +H (Überschrift), +J (Unterüberschrift), +B (Text), +L (Checkliste), +7/8/9 (Listen); Strg+B/I/U für fett, kursiv, unterstrichen.")),
+        (_("Checklisten"), _("Kreis anklicken, um einen Punkt abzuhaken. Tab rückt ein, Umschalt+Tab aus. Eine leere Zeile beendet die Liste. Im Format-Menü kannst du abgehakte Punkte automatisch nach unten sortieren lassen.")),
+        (_("Tags"), _("Schreibe #Wort in eine Notiz – der Tag erscheint unten in der Seitenleiste zum Filtern.")),
+        (_("Profi-Funktionen"), _("Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Im Darstellungsmenü (⋯) „Profi-Funktionen“ einschalten – dann gibt es im Format-Menü zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel anklicken zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für dein Konto auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block.")),
+        (_("Vorlagen"), _("„+“ über der Seitenleiste → „Neue Notiz aus Vorlage …“: mitgeliefert sind Besprechung, Protokoll, Reisecheckliste und Tagebuch. Eigene Vorlage: eine Notiz anlegen und Rechtsklick → „Als Vorlage verwenden“. {{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen durch die aktuellen Werte ersetzt, z. B. „Besprechung {{Datum}}“.")),
+        (_("Link-Vorschau"), _("Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du „Link-Vorschau (Webseite abrufen)“ im Darstellungsmenü (⋯) einschaltest; ab Werk ist sie aus. Dafür ruft nur dieser Computer die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Rechtsklick auf die Vorschau → „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau.")),
+        (_("Gesperrte Notizen"), _("Über das Schloss sperrst du eine Notiz mit deinem Notizen-Passwort. Sie wird zusätzlich verschlüsselt und sperrt sich nach 10 Minuten ohne Benutzung wieder. Geteilte Notizen können nicht gesperrt werden.")),
+        (_("Gelöschte Notizen"), _("Gelöschte Notizen liegen 30 Tage in „Zuletzt gelöscht“ und lassen sich dort wiederherstellen.")),
     ]),
-    ("Teilen", [
-        ("Personen verifizieren", "Bevor du etwas teilst, verifiziert ihr euch einmal: Kontomenü → „Personen“ → „Verifizieren“. "
-         "Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch "
-         "nicht der Server – euch einen falschen Schlüssel unterschieben."),
-        ("Etwas teilen", "Rechtsklick auf einen Ordner, eine Liste, ein Board oder eine Notiz → „Teilen …“ und die Personen "
-         "auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt."),
+    (_("Teilen"), [
+        (_("Personen verifizieren"), _("Bevor du etwas teilst, verifiziert ihr euch einmal: Kontomenü → „Personen“ → „Verifizieren“. Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch nicht der Server – euch einen falschen Schlüssel unterschieben.")),
+        (_("Etwas teilen"), _("Rechtsklick auf einen Ordner, eine Liste, ein Board oder eine Notiz → „Teilen …“ und die Personen auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt.")),
     ]),
-    ("Listen und Aufgaben", [
-        ("Listen", "Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen "
-         "einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis."),
-        ("Aufgaben-Board", "Karten per Ziehen zwischen Spalten verschieben. Ein Klick öffnet Fälligkeit, Zuständigkeit, "
-         "Priorität, Farbe und Notizen."),
-        ("Entwicklungsprojekt", "Rechtsklick auf ein Board → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten "
-         "ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche "
-         "Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. "
-         "Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). "
-         "Für einfache Boards bleibt alles wie gewohnt."),
-        ("Pläne", "„+“ über der Seitenleiste → „Neuer Plan …“ und eine Vorlage wählen: Stundenplan, Schichtplan, Putzplan, "
-         "OP-/Raumplan oder Projektplan. Raster: direkt in die Zellen schreiben, Rechtsklick für Farbe sowie Zeilen und "
-         "Spalten (einfügen, verschieben, löschen). Projektplan: Aufgaben mit den Pfeilen ordnen oder „Nach Datum sortieren“; "
-         "verschiebst du einen Meilenstein, bleibt der alte Termin blass sichtbar und das Plan-PDF listet die Verschiebung. "
-         "„PDF …“ speichert den Plan zum Aushängen."),
-        ("Bericht", "Export-Symbol (Kasten mit Pfeil) oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand "
-         "als PDF (z. B. als Nachweis für Kunden) oder als CSV für Excel. Bei Entwicklungsprojekten mit "
-         "Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet."),
+    (_("Listen und Aufgaben"), [
+        (_("Listen"), _("Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis.")),
+        (_("Aufgaben-Board"), _("Karten per Ziehen zwischen Spalten verschieben. Ein Klick öffnet Fälligkeit, Zuständigkeit, Priorität, Farbe und Notizen.")),
+        (_("Entwicklungsprojekt"), _("Rechtsklick auf ein Board → „Als Entwicklungsprojekt führen“. Dann zeigen die Karten ihre Kurz-ID (zum Zitieren in Commits und Berichten) und im Dialog den Verlauf: wer die Karte wann in welche Spalte geschoben hat. Unter „Verifikation“ hängst du Nachweise an – Prüfprotokolle, Screenshots, Messdaten. Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). Für einfache Boards bleibt alles wie gewohnt.")),
+        (_("Pläne"), _("„+“ über der Seitenleiste → „Neuer Plan …“ und eine Vorlage wählen: Stundenplan, Schichtplan, Putzplan, OP-/Raumplan oder Projektplan. Raster: direkt in die Zellen schreiben, Rechtsklick für Farbe sowie Zeilen und Spalten (einfügen, verschieben, löschen). Projektplan: Aufgaben mit den Pfeilen ordnen oder „Nach Datum sortieren“; verschiebst du einen Meilenstein, bleibt der alte Termin blass sichtbar und das Plan-PDF listet die Verschiebung. „PDF …“ speichert den Plan zum Aushängen.")),
+        (_("Bericht"), _("Export-Symbol (Kasten mit Pfeil) oben im Board oder Rechtsklick aufs Board → „Bericht exportieren“: der aktuelle Stand als PDF (z. B. als Nachweis für Kunden) oder als CSV für Excel. Bei Entwicklungsprojekten mit Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Abnahme); Nachweise stehen mit Prüfsumme darin, Bilder eingebettet.")),
     ]),
-    ("Agiles Arbeiten", [
-        ("Das agile Manifest", "Manifest für Agile Softwareentwicklung\n\nWir erschließen bessere Wege, Software zu entwickeln, indem wir es selbst tun und anderen dabei helfen. Durch diese Tätigkeit haben wir diese Werte zu schätzen gelernt:\n\nIndividuen und Interaktionen mehr als Prozesse und Werkzeuge\nFunktionierende Software mehr als umfassende Dokumentation\nZusammenarbeit mit dem Kunden mehr als Vertragsverhandlung\nReagieren auf Veränderung mehr als das Befolgen eines Plans\n\nDas heißt, obwohl wir die Werte auf der rechten Seite wichtig finden, schätzen wir die Werte auf der linken Seite höher ein.\n\nKent Beck, Mike Beedle, Arie van Bennekum, Alistair Cockburn, Ward Cunningham, Martin Fowler, James Grenning, Jim Highsmith, Andrew Hunt, Ron Jeffries, Jon Kern, Brian Marick, Robert C. Martin, Steve Mellor, Ken Schwaber, Jeff Sutherland, Dave Thomas\n\n© 2001, the above authors – this declaration may be freely copied in any form, but only in its entirety through this notice.\n\nWortlaut und deutsche Übersetzung: agilemanifesto.org/iso/de/manifesto.html"),
-        ("Die zwölf Prinzipien – kurz gefasst", "1. Früh und regelmäßig etwas Nützliches liefern – das stellt Kunden am besten zufrieden.\n2. Geänderte Anforderungen sind willkommen, auch spät.\n3. In kurzen Abständen funktionierende Ergebnisse liefern, lieber Wochen als Monate.\n4. Fachleute und Entwickler arbeiten täglich zusammen.\n5. Projekte um motivierte Menschen bauen, ihnen Umfeld, Unterstützung und Vertrauen geben.\n6. Am besten informiert das direkte Gespräch.\n7. Fortschritt misst sich an dem, was funktioniert.\n8. Ein Tempo halten, das alle dauerhaft durchhalten können.\n9. Technische Qualität und gutes Design machen beweglich.\n10. Einfachheit: möglichst viel Arbeit gar nicht erst tun müssen.\n11. Gute Lösungen entstehen in Teams, die sich selbst organisieren.\n12. Regelmäßig innehalten, gemeinsam besser werden und das Vorgehen anpassen.\n\nIn eigenen Worten zusammengefasst; Wortlaut: agilemanifesto.org/iso/de/principles.html"),
-        ("Agil arbeiten mit LiNotes", "Ein Board zeigt den Arbeitsfluss auf einen Blick: Spalten wie „Offen – In Arbeit – Erledigt“, jede Karte ein kleines, abgeschlossenes Stück Arbeit. So passen die vier Werte dazu:\n• Individuen und Interaktionen: Boards teilen, Karten zuweisen und mit @-Erwähnungen ins Gespräch holen – LiNotes unterstützt das Gespräch, ersetzt es aber nicht.\n• Funktionierende Software: Karten klein schneiden und erst nach „Erledigt“ schieben, wenn es wirklich funktioniert; bei Entwicklungsprojekten belegen Nachweise das.\n• Zusammenarbeit mit dem Kunden: Auftraggeber ins Board einladen: Sie schreiben Wünsche als Karten und nehmen selbst ab – z. B. so vereinbart, dass nur sie nach „Erledigt“ schieben.\n• Reagieren auf Veränderung: Prioritäten jederzeit ändern und Karten umsortieren; Pläne zeigen verschobene Meilensteine offen, statt sie zu verstecken.\n\nRegelmäßig reflektieren: den Bericht als PDF erzeugen und gemeinsam durchgehen – was lief gut, was ändern wir? Dokumentation nur so viel wie nötig: Auswirkungsanalyse, Verifikation und Nachweise sind für Projekte gedacht, die sie brauchen (z. B. nach ISO 26262 oder Automotive SPICE) – einfache Boards bleiben schlank."),
+    (_("Agiles Arbeiten"), [
+        (_("Das agile Manifest"), _("Manifest für Agile Softwareentwicklung\n\nWir erschließen bessere Wege, Software zu entwickeln, indem wir es selbst tun und anderen dabei helfen. Durch diese Tätigkeit haben wir diese Werte zu schätzen gelernt:\n\nIndividuen und Interaktionen mehr als Prozesse und Werkzeuge\nFunktionierende Software mehr als umfassende Dokumentation\nZusammenarbeit mit dem Kunden mehr als Vertragsverhandlung\nReagieren auf Veränderung mehr als das Befolgen eines Plans\n\nDas heißt, obwohl wir die Werte auf der rechten Seite wichtig finden, schätzen wir die Werte auf der linken Seite höher ein.\n\nKent Beck, Mike Beedle, Arie van Bennekum, Alistair Cockburn, Ward Cunningham, Martin Fowler, James Grenning, Jim Highsmith, Andrew Hunt, Ron Jeffries, Jon Kern, Brian Marick, Robert C. Martin, Steve Mellor, Ken Schwaber, Jeff Sutherland, Dave Thomas\n\n© 2001, the above authors – this declaration may be freely copied in any form, but only in its entirety through this notice.\n\nWortlaut und deutsche Übersetzung: agilemanifesto.org/iso/de/manifesto.html")),
+        (_("Die zwölf Prinzipien – kurz gefasst"), _("1. Früh und regelmäßig etwas Nützliches liefern – das stellt Kunden am besten zufrieden.\n2. Geänderte Anforderungen sind willkommen, auch spät.\n3. In kurzen Abständen funktionierende Ergebnisse liefern, lieber Wochen als Monate.\n4. Fachleute und Entwickler arbeiten täglich zusammen.\n5. Projekte um motivierte Menschen bauen, ihnen Umfeld, Unterstützung und Vertrauen geben.\n6. Am besten informiert das direkte Gespräch.\n7. Fortschritt misst sich an dem, was funktioniert.\n8. Ein Tempo halten, das alle dauerhaft durchhalten können.\n9. Technische Qualität und gutes Design machen beweglich.\n10. Einfachheit: möglichst viel Arbeit gar nicht erst tun müssen.\n11. Gute Lösungen entstehen in Teams, die sich selbst organisieren.\n12. Regelmäßig innehalten, gemeinsam besser werden und das Vorgehen anpassen.\n\nIn eigenen Worten zusammengefasst; Wortlaut: agilemanifesto.org/iso/de/principles.html")),
+        (_("Agil arbeiten mit LiNotes"), _("Ein Board zeigt den Arbeitsfluss auf einen Blick: Spalten wie „Offen – In Arbeit – Erledigt“, jede Karte ein kleines, abgeschlossenes Stück Arbeit. So passen die vier Werte dazu:\n• Individuen und Interaktionen: Boards teilen, Karten zuweisen und mit @-Erwähnungen ins Gespräch holen – LiNotes unterstützt das Gespräch, ersetzt es aber nicht.\n• Funktionierende Software: Karten klein schneiden und erst nach „Erledigt“ schieben, wenn es wirklich funktioniert; bei Entwicklungsprojekten belegen Nachweise das.\n• Zusammenarbeit mit dem Kunden: Auftraggeber ins Board einladen: Sie schreiben Wünsche als Karten und nehmen selbst ab – z. B. so vereinbart, dass nur sie nach „Erledigt“ schieben.\n• Reagieren auf Veränderung: Prioritäten jederzeit ändern und Karten umsortieren; Pläne zeigen verschobene Meilensteine offen, statt sie zu verstecken.\n\nRegelmäßig reflektieren: den Bericht als PDF erzeugen und gemeinsam durchgehen – was lief gut, was ändern wir? Dokumentation nur so viel wie nötig: Auswirkungsanalyse, Verifikation und Nachweise sind für Projekte gedacht, die sie brauchen (z. B. nach ISO 26262 oder Automotive SPICE) – einfache Boards bleiben schlank.")),
     ]),
-    ("Datenschutz", [
-        ("Was der Server weiß", "Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, "
-         "bevor es den Server erreicht. Der Server sieht nur, dass es Einträge gibt, wie groß sie sind und wann sie "
-         "geändert wurden – nicht, was darin steht."),
+    (_("Datenschutz"), [
+        (_("Was der Server weiß"), _("Alles – Notizen, Listen, Boards, Ordnernamen und Bilder – wird auf deinem Gerät verschlüsselt, bevor es den Server erreicht. Der Server sieht nur, dass es Einträge gibt, wie groß sie sind und wann sie geändert wurden – nicht, was darin steht.")),
     ]),
 ]
 
@@ -799,7 +764,7 @@ def help_pictures(title):
 
 
 def show_help(parent):
-    dialog = Adw.Dialog(title="Hilfe")
+    dialog = Adw.Dialog(title=_("Hilfe"))
     dialog.set_content_width(680)  # room for the screenshots
     dialog.set_content_height(760)
     view = Adw.ToolbarView()
@@ -825,7 +790,7 @@ def show_help(parent):
                 except GLib.Error:
                     continue
                 picture = PagePicture(paintable=texture, can_shrink=True, margin_start=12, margin_end=12,
-                                      tooltip_text="Groß ansehen", css_classes=["help-picture"])
+                                      tooltip_text=_("Groß ansehen"), css_classes=["help-picture"])
                 picture.set_cursor_from_name("zoom-in")
                 click = Gtk.GestureClick()
                 click.connect("released", lambda *_a, path=path: QuickLook(parent, path, title).present(dialog))

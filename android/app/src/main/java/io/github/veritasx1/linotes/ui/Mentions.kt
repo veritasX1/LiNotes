@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -43,15 +45,15 @@ object Mentions {
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         val manager = context.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(CHANNEL) == null) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Erwähnungen", NotificationManager.IMPORTANCE_DEFAULT))
+            manager.createNotificationChannel(NotificationChannel(CHANNEL, tr("Erwähnungen"), NotificationManager.IMPORTANCE_DEFAULT))
         }
         val open = Intent(context, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_NOTE)
             .putExtra(MainActivity.EXTRA_NOTE, noteId).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pending = PendingIntent.getActivity(context, noteId.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_new_note)
-            .setContentTitle("$who hat dich erwähnt")
-            .setContentText("in „$title“")
+            .setContentTitle(tr("{who} hat dich erwähnt", "who" to who))
+            .setContentText(tr("in „{title}“", "title" to title))
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()

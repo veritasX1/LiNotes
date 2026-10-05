@@ -21,14 +21,15 @@ The same rules are in Android's Plans.kt (PlanTest has the same cases as tests/t
 """
 
 import datetime
+from .i18n import _
 
-WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+WEEKDAYS = [_("Mo"), _("Di"), _("Mi"), _("Do"), _("Fr"), _("Sa"), _("So")]
 COLORS = {  # name -> RGB (0..1), the same as the highlight colors in notes
     "yellow": (1.0, 0.85, 0.24), "orange": (1.0, 0.62, 0.04), "pink": (1.0, 0.44, 0.66),
     "purple": (0.75, 0.52, 0.95), "mint": (0.3, 0.85, 0.75), "blue": (0.35, 0.7, 1.0), "grey": (0.6, 0.6, 0.63),
 }
-COLOR_NAMES = {"yellow": "Gelb", "orange": "Orange", "pink": "Rosa", "purple": "Lila", "mint": "Mint", "blue": "Blau",
-               "grey": "Grau"}
+COLOR_NAMES = {"yellow": _("Gelb"), "orange": _("Orange"), "pink": _("Rosa"), "purple": _("Lila"), "mint": _("Mint"), "blue": _("Blau"),
+               "grey": _("Grau")}
 
 
 def day(text):
@@ -267,7 +268,7 @@ def shifts(plan):
         moved = task.get("moved") or []
         days = [entry.get("was") for entry in moved] + [task.get("from")]
         for entry, new in zip(moved, days[1:]):
-            result.append((task.get("x") or "Meilenstein", entry.get("was"), new, entry.get("at"), entry.get("by")))
+            result.append((task.get("x") or _("Meilenstein"), entry.get("was"), new, entry.get("at"), entry.get("by")))
     return result
 
 
@@ -279,39 +280,39 @@ def template(key, today=None):
         return {"mode": "grid", "cols": {"type": "weekdays", "count": 5},
                 "rows": ["1. 8:00", "2. 8:50", "3. 9:55", "4. 10:45", "5. 11:50", "6. 12:40"]}
     if key == "schichtplan":
-        return {"mode": "grid", "cols": {"type": "weekdays", "count": 7}, "rows": ["Person 1", "Person 2", "Person 3"],
-                "cells": [[{"x": "Früh", "k": "yellow"}, {"x": "Früh", "k": "yellow"}, {"x": "Spät", "k": "blue"},
-                           {"x": "Spät", "k": "blue"}, {"x": "Nacht", "k": "purple"}, None, None]]}
+        return {"mode": "grid", "cols": {"type": "weekdays", "count": 7}, "rows": [_("Person 1"), _("Person 2"), _("Person 3")],
+                "cells": [[{"x": _("Früh"), "k": "yellow"}, {"x": _("Früh"), "k": "yellow"}, {"x": _("Spät"), "k": "blue"},
+                           {"x": _("Spät"), "k": "blue"}, {"x": _("Nacht"), "k": "purple"}, None, None]]}
     if key == "putzplan":
-        return {"mode": "grid", "cols": {"type": "weeks", "count": 4}, "rows": ["Bad", "Küche", "Staubsaugen", "Müll"],
-                "rot": {"people": ["Person 1", "Person 2"], "start": monday(today).isoformat()}}
+        return {"mode": "grid", "cols": {"type": "weeks", "count": 4}, "rows": [_("Bad"), _("Küche"), _("Staubsaugen"), _("Müll")],
+                "rot": {"people": [_("Person 1"), _("Person 2")], "start": monday(today).isoformat()}}
     if key == "raumplan":
-        return {"mode": "grid", "cols": {"type": "free", "labels": ["Saal 1", "Saal 2", "Saal 3"]},
+        return {"mode": "grid", "cols": {"type": "free", "labels": [_("Saal 1"), _("Saal 2"), _("Saal 3")]},
                 "rows": [f"{hour:02d}:00" for hour in range(7, 17)]}
     if key == "projektplan":
         start = monday(today)
         def at(days):
             return (start + datetime.timedelta(days=days)).isoformat()
         return {"mode": "timeline", "tasks": [
-            {"x": "Konzept", "from": at(0), "to": at(4), "k": "blue"},
-            {"x": "Umsetzung", "from": at(7), "to": at(18), "k": "orange"},
-            {"x": "Test", "from": at(14), "to": at(20), "k": "mint"},
-            {"x": "Abnahme", "from": at(21), "to": at(21), "k": "pink", "m": True}]}
+            {"x": _("Konzept"), "from": at(0), "to": at(4), "k": "blue"},
+            {"x": _("Umsetzung"), "from": at(7), "to": at(18), "k": "orange"},
+            {"x": _("Test"), "from": at(14), "to": at(20), "k": "mint"},
+            {"x": _("Abnahme"), "from": at(21), "to": at(21), "k": "pink", "m": True}]}
     return {"mode": "grid", "cols": {"type": "free", "labels": ["", "", ""]}, "rows": ["", "", ""]}
 
 
-TEMPLATES = [("leer", "Leerer Plan", "Raster mit freien Zeilen und Spalten"),
-             ("stundenplan", "Stundenplan", "Mo–Fr × Schulstunden"),
-             ("schichtplan", "Schichtplan", "Mo–So × Personen, Schichten farbig"),
-             ("putzplan", "Putzplan", "Aufgaben × Wochen, Namen rotieren wöchentlich"),
-             ("raumplan", "OP- / Raumplan", "Uhrzeit × Säle oder Räume"),
-             ("projektplan", "Projektplan", "Zeitstrahl mit Aufgaben und Meilensteinen")]
+TEMPLATES = [("leer", _("Leerer Plan"), _("Raster mit freien Zeilen und Spalten")),
+             ("stundenplan", _("Stundenplan"), _("Mo–Fr × Schulstunden")),
+             ("schichtplan", _("Schichtplan"), _("Mo–So × Personen, Schichten farbig")),
+             ("putzplan", _("Putzplan"), _("Aufgaben × Wochen, Namen rotieren wöchentlich")),
+             ("raumplan", _("OP- / Raumplan"), _("Uhrzeit × Säle oder Räume")),
+             ("projektplan", _("Projektplan"), _("Zeitstrahl mit Aufgaben und Meilensteinen"))]
 
 
 def text_rows(plan, today=None):
     """The plan as rows of text (PDF, search, plain text)."""
     if plan.get("mode") == "timeline":
-        lines = [["Aufgabe", "Von", "Bis"]]
+        lines = [[_("Aufgabe"), _("Von"), _("Bis")]]
         for task in plan.get("tasks") or []:
             span = task_span(task)
             if span:

@@ -12,6 +12,7 @@ gi.require_version("Gst", "1.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Adw, GLib, Gst, Gtk
+from .i18n import _
 
 MIME = "audio/ogg"
 
@@ -57,8 +58,7 @@ def waveform(path, bars=BARS):
     thread. Only loudness leaves this function, nothing is stored."""
     from array import array
     ensure_gst()
-    pipeline = Gst.parse_launch("filesrc name=source ! decodebin ! audioconvert ! audioresample ! "
-                                f"audio/x-raw,format=S16LE,channels=1,rate={WAVE_RATE} ! appsink name=sink sync=false")
+    pipeline = Gst.parse_launch(f"filesrc name=source ! decodebin ! audioconvert ! audioresample ! audio/x-raw,format=S16LE,channels=1,rate={WAVE_RATE} ! appsink name=sink sync=false")
     pipeline.get_by_name("source").set_property("location", str(path))
     sink = pipeline.get_by_name("sink")
     pipeline.set_state(Gst.State.PLAYING)
@@ -80,7 +80,7 @@ def waveform(path, bars=BARS):
     return peaks(samples, bars)
 
 
-MONTHS = ("Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.")
+MONTHS = (_("Jan."), _("Feb."), _("März"), _("Apr."), _("Mai"), _("Juni"), _("Juli"), _("Aug."), _("Sept."), _("Okt."), _("Nov."), _("Dez."))
 
 
 def recording_label(block, today=None):
@@ -90,11 +90,11 @@ def recording_label(block, today=None):
     match = re.match(r"^(.*?)\s*(\d{4})-(\d{2})-(\d{2})[ _](\d{2})-(\d{2})\.\w+$", name)
     duration = duration_text(block.get("d")) if block.get("d") else ""
     if match and 1 <= int(match.group(3)) <= 12:
-        title = match.group(1).strip() or "Aufnahme"
+        title = match.group(1).strip() or _("Aufnahme")
         date = f"{int(match.group(4))}. {MONTHS[int(match.group(3)) - 1]} {match.group(2)}, {match.group(5)}:{match.group(6)}"
         return title, " · ".join(part for part in (date, duration) if part)
     title = name.rsplit(".", 1)[0] if "." in name else name
-    return title or "Audioaufnahme", duration
+    return title or _("Audioaufnahme"), duration
 
 
 def is_audio(block):
@@ -115,7 +115,7 @@ class Recorder:
 
     def start(self):
         if self.pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
-            raise RuntimeError("Das Mikrofon lässt sich nicht öffnen.")
+            raise RuntimeError(_("Das Mikrofon lässt sich nicht öffnen."))
         self.started = time.monotonic()
 
     def elapsed(self):
@@ -137,7 +137,7 @@ class RecordDialog(Adw.Dialog):
     """Red dot, running time, "Fertig" attaches, "Abbrechen" throws it away."""
 
     def __init__(self, path, done):
-        super().__init__(title="Audioaufnahme", content_width=320)
+        super().__init__(title=_("Audioaufnahme"), content_width=320)
         self.done = done
         self.recorder = Recorder(path)
         self.finished = False
@@ -149,11 +149,11 @@ class RecordDialog(Adw.Dialog):
         self.time = Gtk.Label(label="0:00", css_classes=["title-1", "numeric"])
         row.append(self.time)
         box.append(row)
-        box.append(Gtk.Label(label="Aufnahme läuft …", css_classes=["dim-label"]))
+        box.append(Gtk.Label(label=_("Aufnahme läuft …"), css_classes=["dim-label"]))
         buttons = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER, homogeneous=True)
-        cancel = Gtk.Button(label="Abbrechen", css_classes=["pill"])
+        cancel = Gtk.Button(label=_("Abbrechen"), css_classes=["pill"])
         cancel.connect("clicked", lambda _button: self.finish(False))
-        stop = Gtk.Button(label="Fertig", css_classes=["pill", "suggested-action"])
+        stop = Gtk.Button(label=_("Fertig"), css_classes=["pill", "suggested-action"])
         stop.connect("clicked", lambda _button: self.finish(True))
         buttons.append(cancel)
         buttons.append(stop)
@@ -181,7 +181,7 @@ class RecordDialog(Adw.Dialog):
         if keep and self.recorder.error is None and self.recorder.path.exists() and length >= 0.5:
             self.done(self.recorder.path, length, None)
         elif keep:
-            self.done(None, 0, self.recorder.error or "Die Aufnahme war zu kurz.")
+            self.done(None, 0, self.recorder.error or _("Die Aufnahme war zu kurz."))
         else:
             self.recorder.path.unlink(missing_ok=True)
 

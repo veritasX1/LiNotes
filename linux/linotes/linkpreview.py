@@ -8,6 +8,7 @@ import re
 import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
+from .i18n import _
 
 LONE_URL = re.compile(r"^\s*(https?://[^\s<>\"']+)\s*$")
 PAGE_LIMIT = 512 * 1024        # only the head is needed
@@ -82,17 +83,17 @@ def _get(url, limit, accept):
     request = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept": accept})
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
         if urllib.parse.urlsplit(response.geturl()).scheme not in ("http", "https"):
-            raise ValueError("kein Web-Link")
+            raise ValueError(_("kein Web-Link"))
         return response.read(limit), response.headers
 
 
 def fetch(url):
     """Fetch a page (only its beginning) and its picture. Blocking – run in a thread."""
     if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
-        raise ValueError("kein Web-Link")
+        raise ValueError(_("kein Web-Link"))
     body, headers = _get(url, PAGE_LIMIT, "text/html,application/xhtml+xml")
     if "html" not in (headers.get_content_type() or "html"):
-        raise ValueError("keine Webseite")
+        raise ValueError(_("keine Webseite"))
     charset = headers.get_content_charset() or "utf-8"
     found = parse(body.decode(charset, errors="replace"), url)
     picture = None

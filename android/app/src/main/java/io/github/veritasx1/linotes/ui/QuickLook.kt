@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
@@ -87,7 +89,7 @@ internal fun lookKind(file: File, mime: String): String = when {
 
 internal fun sizeText(bytes: Long): String {
     var size = bytes.toDouble()
-    for (unit in listOf("Bytes", "KB", "MB")) {
+    for (unit in listOf(tr("Bytes"), "KB", "MB")) {
         if (size < 1024) return if (unit == "Bytes") "${size.toLong()} $unit" else String.format(java.util.Locale.GERMANY, "%.1f %s", size, unit)
         size /= 1024
     }
@@ -120,13 +122,13 @@ fun QuickLookOverlay(state: AppState) {
                 .statusBarsPadding().navigationBarsPadding(),
         ) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { TextButton("Fertig", bold = true) { state.quickLook = null } }
+                Box(Modifier.weight(1f)) { TextButton(tr("Fertig"), bold = true) { state.quickLook = null } }
                 Column(Modifier.weight(2f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(look.file.name, style = Type.headline, color = colors.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(sizeText(look.file.length()), style = Type.caption, color = colors.secondary)
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                    BarButton(Glyph.Export, "Teilen") { shareMenu = true }
+                    BarButton(Glyph.Export, tr("Teilen")) { shareMenu = true }
                 }
             }
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
@@ -142,8 +144,8 @@ fun QuickLookOverlay(state: AppState) {
         }
     }
     if (shareMenu) ActionSheet(look.file.name, listOf(
-        SheetAction("Teilen …") { state.shareFile(look.file, look.mime, look.file.name) },
-        SheetAction("Mit anderer App öffnen …") { state.openFile(look.file, look.mime) },
+        SheetAction(tr("Teilen …")) { state.shareFile(look.file, look.mime, look.file.name) },
+        SheetAction(tr("Mit anderer App öffnen …")) { state.openFile(look.file, look.mime) },
     )) { shareMenu = false }
 }
 
@@ -243,11 +245,11 @@ private fun PdfLook(file: File, failed: @Composable () -> Unit) {
                         }
                     }
                     Box(Modifier.fillMaxWidth().aspectRatio(pageWidth.toFloat() / pageHeight).background(Color.White)) {
-                        page?.let { Image(it.asImageBitmap(), "Seite ${index + 1}", Modifier.fillMaxSize()) }
+                        page?.let { Image(it.asImageBitmap(), tr("Seite {value}", "value" to (index + 1)), Modifier.fillMaxSize()) }
                     }
                 }
                 if (count > PDF_PAGE_LIMIT) item {
-                    Text("Die ersten $PDF_PAGE_LIMIT von $count Seiten – alle über „Teilen“ in einer anderen App.",
+                    Text(tr("Die ersten {PDF_PAGE_LIMIT} von {count} Seiten – alle über „Teilen“ in einer anderen App.", "PDF_PAGE_LIMIT" to PDF_PAGE_LIMIT, "count" to count),
                         style = Type.footnote, color = palette.secondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
@@ -304,11 +306,11 @@ private fun OtherLook(state: AppState, look: LookFile) {
         Spacer(Modifier.height(14.dp))
         Text(look.file.name, style = Type.title3, color = colors.label, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
-        Text("Für diese Datei gibt es keine Vorschau.", style = Type.subheadline, color = colors.secondary, textAlign = TextAlign.Center)
+        Text(tr("Für diese Datei gibt es keine Vorschau."), style = Type.subheadline, color = colors.secondary, textAlign = TextAlign.Center)
         Spacer(Modifier.height(20.dp))
         Box(Modifier.clip(RoundedCornerShape(22.dp)).background(colors.accent).clickable { state.openFile(look.file, look.mime) }
             .padding(horizontal = 22.dp, vertical = 12.dp)) {
-            Text("Mit anderer App öffnen …", style = Type.headline.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
+            Text(tr("Mit anderer App öffnen …"), style = Type.headline.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
         }
     }
 }

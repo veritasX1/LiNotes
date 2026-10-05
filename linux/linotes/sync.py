@@ -29,6 +29,7 @@ from gi.repository import GLib, Secret
 
 from . import e2e
 from .api import Api, ApiError, OfflineError
+from .i18n import _
 
 
 DATA_DIR = Path(GLib.get_user_data_dir()) / "linotes"
@@ -52,14 +53,14 @@ def new_id():
 
 
 def device_name():
-    return f"Ubuntu ({socket.gethostname()})"
+    return _("Ubuntu ({gethostname})", gethostname=socket.gethostname())
 
 
 def store_credentials(server, username, token, secret):
     value = json.dumps({"token": token, "secret": e2e.b64(secret)})
     Secret.password_store_sync(
         SECRET_SCHEMA, {"server": server, "username": username},
-        Secret.COLLECTION_DEFAULT, f"LiNotes ({username})", value, None,
+        Secret.COLLECTION_DEFAULT, _("LiNotes ({username})", username=username), value, None,
     )
 
 
@@ -242,7 +243,7 @@ class SyncEngine:
         identity = e2e.Identity()
         with self.lock:
             self.state = empty_state("")
-            self.state["user"] = {"id": LOCAL_USER, "username": "", "name": name or "Ich", "identity": identity.public}
+            self.state["user"] = {"id": LOCAL_USER, "username": "", "name": name or _("Ich"), "identity": identity.public}
             self.state["users"] = [self.state["user"]]
             self.state["identity"] = identity.export_sealed(account)
         store_credentials("", "", "", account.secret)
@@ -586,7 +587,7 @@ class SyncEngine:
             for uid in [self.user_id] + member_ids:
                 user = self.user_by_id(uid)
                 if user is None or not user.get("identity"):
-                    raise ValueError(f"Unbekanntes Konto {uid}")
+                    raise ValueError(_("Unbekanntes Konto {uid}", uid=uid))
                 keys[str(uid)] = e2e.wrap_key(key, user["identity"], new_share)
             self.put("share", {"keys": keys, "target": object_id, "name": obj["data"].get("name") or obj["kind"]},
                      new_share, new_share, notify=False, members=member_ids)
@@ -789,7 +790,7 @@ class SyncEngine:
             body = data.get("body")
             if body and body[0].get("x") is not None:
                 body = copy.deepcopy(body)
-                body[0]["x"] = body[0]["x"] + " (Konflikt)"
+                body[0]["x"] = body[0]["x"] + _(" (Konflikt)")
                 data["body"] = body
             self.put("note", data, mine.get("share"), notify=False)
 

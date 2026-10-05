@@ -14,6 +14,7 @@ from . import model
 from . import smoothscroll
 from .editor import NoteEditor
 from .icons import Icon, drag_source
+from .i18n import _
 
 
 class NoteRow(Gtk.ListBoxRow):
@@ -32,7 +33,7 @@ class NoteRow(Gtk.ListBoxRow):
         if unread:
             # Changed by someone else since I looked (like Apple's blue dot).
             dot = Gtk.Box(css_classes=["unread-dot"], valign=Gtk.Align.CENTER)
-            dot.set_tooltip_text("Neu geändert")
+            dot.set_tooltip_text(_("Neu geändert"))
             title_row.append(dot)
         if data.get("enc"):
             title_row.append(Icon("lock", 13))
@@ -41,25 +42,25 @@ class NoteRow(Gtk.ListBoxRow):
         title_row.append(title)
         if note.get("share"):
             shared = Icon("person", 13)
-            shared.set_tooltip_text("Geteilt")
+            shared.set_tooltip_text(_("Geteilt"))
             title_row.append(shared)
         text.append(title_row)
 
         meta = Gtk.Box()
         meta.add_css_class("note-row-meta")
         # Found by a search although archived: say so.
-        date = Gtk.Label(label=("Vorlage · " if data.get("template") else "") + ("im Archiv · " if model.archived(note) else "")
+        date = Gtk.Label(label=(_("Vorlage · ") if data.get("template") else "") + (_("im Archiv · ") if model.archived(note) else "")
                          + model.short_date(stamp or model.modified(note)), xalign=0)
         date.add_css_class("note-row-date")
         meta.append(date)
-        preview_text = model.note_preview(note) or ("Gesperrt" if data.get("enc") else "Kein weiterer Text")
+        preview_text = model.note_preview(note) or (_("Gesperrt") if data.get("enc") else _("Kein weiterer Text"))
         preview = Gtk.Label(label=preview_text, xalign=0, ellipsize=3, hexpand=True)
         preview.add_css_class("note-row-preview")
         meta.append(preview)
         text.append(meta)
 
         if note.get("share") and note.get("updated_by") and note.get("updated_by") != sync.user_id:
-            who = Gtk.Label(label=f"Zuletzt bearbeitet von {sync.user_name(note['updated_by'])}", xalign=0, ellipsize=3)
+            who = Gtk.Label(label=_("Zuletzt bearbeitet von {person}", person=sync.user_name(note['updated_by'])), xalign=0, ellipsize=3)
             who.add_css_class("note-row-preview")
             who.add_css_class("caption")
             text.append(who)
@@ -130,7 +131,7 @@ class NoteList(Gtk.Box):
         self.is_unread = lambda _note: False
         self.add_css_class("note-list-pane")
 
-        self.search = Gtk.SearchEntry(placeholder_text="Suchen")
+        self.search = Gtk.SearchEntry(placeholder_text=_("Suchen"))
         self.search.set_margin_start(10)
         self.search.set_margin_end(10)
         self.search.set_margin_top(8)
@@ -187,7 +188,7 @@ class NoteList(Gtk.Box):
         gallery_scroller = Gtk.ScrolledWindow(vexpand=True, child=self.gallery)
         smoothscroll.enable(gallery_scroller)
         gallery_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.empty = Adw.StatusPage(title="Keine Notizen", vexpand=True)
+        self.empty = Adw.StatusPage(title=_("Keine Notizen"), vexpand=True)
         self.empty.add_css_class("compact")
         self.stack.add_named(list_scroller, "list")
         self.stack.add_named(gallery_scroller, "gallery")
@@ -230,11 +231,11 @@ class NoteList(Gtk.Box):
         if mode == "gallery":
             self.fill_gallery()
 
-    def show(self, title, notes, selected_id=None, empty_text="Keine Notizen"):
+    def show(self, title, notes, selected_id=None, empty_text=_("Keine Notizen")):
         self.updating = True
         self.heading.set_label(title)
         count = len(notes)
-        self.count.set_label("1 Notiz" if count == 1 else f"{count} Notizen")
+        self.count.set_label(_("1 Notiz") if count == 1 else _("{count} Notizen", count=count))
         ordered = list(model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")))
         if self.update_rows(ordered, selected_id):
             self.stack.set_visible_child_name(self.mode)
@@ -365,17 +366,17 @@ class NotePane(Gtk.Stack):
         self.add_css_class("note-pane")
         self.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
 
-        empty = Adw.StatusPage(title="Keine Notiz ausgewählt")
+        empty = Adw.StatusPage(title=_("Keine Notiz ausgewählt"))
         empty.add_css_class("note-pane")
         self.add_named(empty, "empty")
 
         locked = Adw.StatusPage(
-            title="Diese Notiz ist gesperrt",
-            description="Gib dein Notizen-Passwort ein, um sie anzusehen.",
+            title=_("Diese Notiz ist gesperrt"),
+            description=_("Gib dein Notizen-Passwort ein, um sie anzusehen."),
         )
         lock_icon = Icon("lock", 64)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, halign=Gtk.Align.CENTER)
-        button = Gtk.Button(label="Notiz anzeigen")
+        button = Gtk.Button(label=_("Notiz anzeigen"))
         button.add_css_class("pill")
         button.add_css_class("suggested-action")
         button.connect("clicked", lambda _button: self.emit("unlock-requested"))
@@ -390,7 +391,7 @@ class NotePane(Gtk.Stack):
         self.add_named(locked_box, "locked")
 
         editing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.banner = Adw.Banner(title="Diese Notiz liegt in „Zuletzt gelöscht“.", button_label="Wiederherstellen")
+        self.banner = Adw.Banner(title=_("Diese Notiz liegt in „Zuletzt gelöscht“."), button_label=_("Wiederherstellen"))
         self.banner.connect("button-clicked", lambda _banner: self.emit("restore-requested"))
         editing.append(self.banner)
         self.image_share = None
@@ -440,7 +441,7 @@ class NotePane(Gtk.Stack):
     def show_changes(self, lines, who, when):
         """Mark lines someone else changed and say who and when."""
         self.editor.mark_changed(lines)
-        self.activity.set_label(f"{who} hat geändert · {model.short_date(when)} – die Änderungen sind markiert.")
+        self.activity.set_label(_("{who} hat geändert · {short_date} – die Änderungen sind markiert.", who=who, short_date=model.short_date(when)))
         self.activity.set_visible(True)
 
     def update_date(self, note):

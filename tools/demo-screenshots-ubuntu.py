@@ -83,7 +83,7 @@ def seed(sync):
         {"t": "check", "x": "Fahrradschloss und Helm"},
         {"t": "check", "x": "Ladekabel und Powerbank"},
         {"t": "heading", "x": "Budget"},
-        model.table_block([["Posten", "Betrag", "Wer"], ["Unterkunft", "240 €", "Anna"], ["Bahn", "78 €", "Olaf"], ["Essen", "120 €", "beide"]]),
+        model.table_block([["Posten", "Betrag", "Wer"], ["Unterkunft", "240 €", "Mia"], ["Bahn", "78 €", "Olaf"], ["Essen", "120 €", "beide"]]),
         {"t": "body", "x": calc_line, "s": [span(calc_line, "438", "b")]},
         {"t": "body", "x": link_line, "s": [span(link_line, "Radtour Kühlungsborn", "n:" + tour["id"])]},
     ], 3, pinned=True)
@@ -110,7 +110,7 @@ def seed(sync):
     pdf_id = sync.upload_file(open(os.path.join(SCRATCH, "tab.pdf"), "rb").read(), None)
     ogg = open(os.path.join(SCRATCH, "probe.ogg"), "rb").read()
     ogg_id = sync.upload_file(ogg, None)
-    meeting_text = "Kurz besprochen: Lieferung kommt Dienstag, Anna übernimmt die Abholung."
+    meeting_text = "Kurz besprochen: Lieferung kommt Dienstag, Mia übernimmt die Abholung."
     meeting = note(folder, [
         {"t": "title", "x": "Elternabend 2b"},
         {"t": "body", "x": meeting_text, "s": [span(meeting_text, "Dienstag", "b")]},
@@ -122,7 +122,7 @@ def seed(sync):
     ], 40)
     ideas = note(folder, [
         {"t": "title", "x": "Geschenkideen"},
-        {"t": "heading", "x": "Anna", "z": True},
+        {"t": "heading", "x": "Mia", "z": True},
         {"t": "bullet", "x": "Kochkurs Thai"},
         {"t": "bullet", "x": "Konzertkarten"},
         {"t": "heading", "x": "Ben"},
@@ -140,13 +140,15 @@ def seed(sync):
 
     # board
     board = model.default_board(uid)
-    columns = {c["data"]["name"]: c["id"] for c in model.board_columns(sync, board)}
+    # By position, not by name – the names follow the app's language.
+    names = ["Offen", "In Arbeit", "Erledigt"]
+    columns = {names[i]: c["id"] for i, c in enumerate(model.board_columns(sync, board)[:3])}
     cards = [("Offen", "Steuererklärung abgeben", "rot", "hoch", "Belege liegen im Ordner „Haushalt“."),
              ("Offen", "Fahrrad zur Inspektion", "blau", "mittel", ""),
              ("Offen", "Fenster putzen", None, None, ""),
              ("In Arbeit", "Gartenhaus planen", "grün", "mittel", "Projektplan steht, Material bestellen."),
              ("In Arbeit", "Fotobuch Sommerurlaub", "lila", None, ""),
-             ("Erledigt", "Geburtstagsgeschenk für Anna", "orange", None, "")]
+             ("Erledigt", "Geburtstagsgeschenk für Mia", "orange", None, "")]
     for order, (column, title, color, priority, notes) in enumerate(cards):
         data = {"board": board, "column": columns[column], "title": title, "order": order, **model.new_card_fields(sync, columns[column])}
         if color: data["color"] = color
@@ -157,7 +159,7 @@ def seed(sync):
     # plans
     today = datetime.date.today()
     putz = {**plans.template("putzplan"), "name": "Putzplan WG", "order": 1}
-    putz["rot"] = {"people": ["Olaf", "Anna", "Ben"], "start": plans.monday(today).isoformat()}
+    putz["rot"] = {"people": ["Olaf", "Mia", "Ben"], "start": plans.monday(today).isoformat()}
     putz["cols"]["count"] = 5
     putz = plans.set_cell(putz, 2, 1, "Ben (Urlaub)", "yellow")
     ids = {"putz": sync.put("plan", putz, None, notify=False)["id"]}

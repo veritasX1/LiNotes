@@ -13,6 +13,7 @@ gi.require_version("PangoCairo", "1.0")
 from gi.repository import GLib, Pango, PangoCairo
 
 from . import model
+from .i18n import _, ngettext
 
 A4 = (595.0, 842.0)  # points
 MARGIN = 48.0
@@ -36,7 +37,7 @@ def german_date(iso):
 # --- data -------------------------------------------------------------
 
 def human_size(size):
-    for unit in ("Bytes", "KB", "MB"):
+    for unit in (_("Bytes"), "KB", "MB"):
         if size < 1024 or unit == "MB":
             return f"{size:.0f} {unit}" if unit != "MB" else f"{size:.1f} MB".replace(".", ",")
         size /= 1024
@@ -51,7 +52,7 @@ def evidence_row(sync, item, share):
         except Exception as error:  # offline, deleted on the server …
             print("LiNotes: Nachweis-Bild nicht geladen:", error)
     return {
-        "name": item.get("n") or "Datei",
+        "name": item.get("n") or _("Datei"),
         "size": human_size(item.get("b") or 0),
         "sha256": item.get("h") or "",
         "added": stamp(item.get("at")),
@@ -98,7 +99,7 @@ def build(sync, board_id):
             "history": [(step.get("n", ""), stamp(step.get("at")), sync.user_name(step.get("by"))) for step in history],
         })
     return {
-        "title": board["data"].get("name", "Board") if board else "Board",
+        "title": board["data"].get("name", "Board") if board else _("Board"),
         "dev": bool(board and board["data"].get("dev")),
         "generated": datetime.datetime.now().strftime("%d.%m.%Y %H:%M"),
         "columns": [(column["data"].get("name", ""), [r for r, c in zip(rows, cards) if c["data"].get("column") == column["id"]])
@@ -109,12 +110,12 @@ def build(sync, board_id):
 
 # --- CSV --------------------------------------------------------------
 
-CSV_FIELDS = [("id", "ID"), ("title", "Titel"), ("status", "Status"), ("priority", "Priorität"),
-              ("assignee", "Zuständig"), ("due", "Fällig"), ("created", "Erstellt"), ("done", "Erledigt"),
-              ("files", "Anhänge")]
-CSV_DEV_FIELDS = [("commits", "Commits"), ("verification", "Verifikation"), ("evidence_text", "Nachweise"),
-                  ("impact", "Auswirkungsanalyse"),
-                  ("version", "Version"), ("accepted", "Abnahme")]
+CSV_FIELDS = [("id", "ID"), ("title", _("Titel")), ("status", _("Status")), ("priority", _("Priorität")),
+              ("assignee", _("Zuständig")), ("due", _("Fällig")), ("created", _("Erstellt")), ("done", _("Erledigt")),
+              ("files", _("Anhänge"))]
+CSV_DEV_FIELDS = [("commits", _("Commits")), ("verification", _("Verifikation")), ("evidence_text", _("Nachweise")),
+                  ("impact", _("Auswirkungsanalyse")),
+                  ("version", _("Version")), ("accepted", _("Abnahme"))]
 
 
 def write_csv(report, path):
@@ -142,7 +143,7 @@ class Pdf:
 
     def layout(self, text, size=10, bold=False, width=None, color=(0, 0, 0), mono=False):
         layout = PangoCairo.create_layout(self.cr)
-        font = Pango.FontDescription.from_string(("Monospace " if mono else "Ubuntu, Sans ") + str(size))
+        font = Pango.FontDescription.from_string((_("Monospace ") if mono else _("Ubuntu, Sans ")) + str(size))
         if bold:
             font.set_weight(Pango.Weight.BOLD)
         layout.set_font_description(font)
@@ -160,7 +161,7 @@ class Pdf:
         PangoCairo.show_layout(self.cr, layout[0])
 
     def footer(self):
-        layout = self.layout(f"{self.header} · Seite {self.page}", size=7.5, color=GREY)
+        layout = self.layout(_("{header} · Seite {page}", header=self.header, page=self.page), size=7.5, color=GREY)
         self.draw(layout, MARGIN, self.height_ - MARGIN + 14)
 
     def need(self, height):
@@ -228,48 +229,48 @@ class Pdf:
 
 def write_pdf(report, path):
     title = report["title"]
-    pdf = Pdf(path, f"{title} · Stand {report['generated']}", landscape=report["dev"])
-    kind = "Entwicklungsprojekt – Nachverfolgung" if report["dev"] else "Aufgaben-Board"
+    pdf = Pdf(path, _("{title} · Stand {value}", title=title, value=report['generated']), landscape=report["dev"])
+    kind = _("Entwicklungsprojekt – Nachverfolgung") if report["dev"] else _("Aufgaben-Board")
     pdf.text(kind.upper(), size=8, bold=True, color=ACCENT, space=2)
     pdf.text(title, size=20, bold=True, space=2)
     rows = report["rows"]
     counts = " · ".join(f"{name}: {len(items)}" for name, items in report["columns"])
-    pdf.text(f"Stand {report['generated']} · {len(rows)} Karten · {counts}", size=9, color=GREY, space=12)
+    pdf.text(_("Stand {value} · {count} Karten · {counts}", value=report['generated'], count=len(rows), counts=counts), size=9, color=GREY, space=12)
     pdf.rule()
 
     if report["dev"]:
-        pdf.text("Traceability-Matrix", size=13, bold=True, space=6)
-        pdf.table(["ID", "Titel", "Prio", "Status", "Commits", "Verifikation", "Version", "Abnahme"],
+        pdf.text(_("Traceability-Matrix"), size=13, bold=True, space=6)
+        pdf.table(["ID", _("Titel"), _("Prio"), _("Status"), _("Commits"), _("Verifikation"), _("Version"), _("Abnahme")],
                   [8, 29, 6, 11, 11, 19, 8, 13],
                   [[r["id"], r["title"], r["priority"], r["status"], r["commits"],
-                    r["verification"] + (f"\n+ {len(r['evidence'])} Nachweis{'e' if len(r['evidence']) != 1 else ''}"
+                    r["verification"] + (ngettext("\n+ {n} Nachweis", "\n+ {n} Nachweise", len(r['evidence']))
                                          if r["evidence"] else ""),
                     r["version"], r["accepted"]] for r in rows], mono=(0, 4))
-        pdf.text("Karten im Einzelnen", size=13, bold=True, space=6)
+        pdf.text(_("Karten im Einzelnen"), size=13, bold=True, space=6)
         for r in rows:
             pdf.need(60)
             pdf.rule(6)
             pdf.text(f"[{r['id']}]  {r['title']}", size=11, bold=True, space=2)
-            facts = [f"Status: {r['status']}"] + [f"{label}: {r[key]}" for key, label in (
-                ("priority", "Priorität"), ("assignee", "Zuständig"), ("created", "Erstellt"),
-                ("done", "Erledigt"), ("version", "Version"), ("accepted", "Abnahme")) if r[key]]
+            facts = [_("Status: {value}", value=r['status'])] + [f"{label}: {r[key]}" for key, label in (
+                ("priority", _("Priorität")), ("assignee", _("Zuständig")), ("created", _("Erstellt")),
+                ("done", _("Erledigt")), ("version", _("Version")), ("accepted", _("Abnahme"))) if r[key]]
             pdf.text(" · ".join(facts), size=8.5, color=GREY, space=6)
-            for key, label in (("notes", "Beschreibung"), ("impact", "Auswirkungsanalyse"), ("verification", "Verifikation")):
+            for key, label in (("notes", _("Beschreibung")), ("impact", _("Auswirkungsanalyse")), ("verification", _("Verifikation"))):
                 if r[key].strip():
                     pdf.text(label, size=9, bold=True, space=1)
                     pdf.text(r[key].strip(), size=9, space=5)
             if r["evidence"]:
                 write_evidence(pdf, r["evidence"])
             if r["files"]:
-                pdf.text("Anhänge", size=9, bold=True, space=1)
+                pdf.text(_("Anhänge"), size=9, bold=True, space=1)
                 pdf.text(r["files"], size=8.5, space=5)
             if r["commit_list"]:
-                pdf.text("Commits", size=9, bold=True, space=1)
+                pdf.text(_("Commits"), size=9, bold=True, space=1)
                 for commit in r["commit_list"]:
                     pdf.text(f"{commit.get('h', '')}  {commit.get('s', '')}", size=8.5, space=1)
                 pdf.y += 4
             if r["history"]:
-                pdf.text("Verlauf", size=9, bold=True, space=1)
+                pdf.text(_("Verlauf"), size=9, bold=True, space=1)
                 for name, when, who in r["history"]:
                     pdf.text(f"{when}  {name}  ({who})", size=8.5, color=GREY, space=1)
                 pdf.y += 4
@@ -277,10 +278,10 @@ def write_pdf(report, path):
         for name, items in report["columns"]:
             pdf.text(f"{name} ({len(items)})", size=13, bold=True, space=6)
             if items:
-                pdf.table(["Titel", "Priorität", "Zuständig", "Fällig", "Erledigt"], [42, 11, 15, 14, 18],
+                pdf.table([_("Titel"), _("Priorität"), _("Zuständig"), _("Fällig"), _("Erledigt")], [42, 11, 15, 14, 18],
                           [[r["title"], r["priority"], r["assignee"], r["due"], r["done"]] for r in items])
             else:
-                pdf.text("Keine Karten", size=9, color=GREY, space=10)
+                pdf.text(_("Keine Karten"), size=9, color=GREY, space=10)
     pdf.close()
 
 
@@ -288,7 +289,7 @@ def write_evidence(pdf, records):
     """Verification records: name, size, when/who, full SHA-256; pictures embedded."""
     gi.require_version("Gdk", "4.0")
     from gi.repository import Gdk, GdkPixbuf
-    pdf.text("Nachweise", size=9, bold=True, space=2)
+    pdf.text(_("Nachweise"), size=9, bold=True, space=2)
     for record in records:
         pixbuf = None
         if record["image"]:
@@ -424,7 +425,7 @@ def write_note_pdf(blocks, path, header, image_path=None):
         if kind == "file":
             # Attachments are listed with name and size (their content is not part of the PDF).
             from .editor import file_details
-            layout = pdf.layout(f"📎 {block.get('n') or 'Datei'}  ({file_details(block)})", 10.5, color=GREY)
+            layout = pdf.layout(f"📎 {block.get('n') or _("Datei")}  ({file_details(block)})", 10.5, color=GREY)
             pdf.need(layout[0].get_pixel_extents()[1].height)
             pdf.draw(layout, MARGIN, pdf.y)
             pdf.y += layout[0].get_pixel_extents()[1].height + 6
@@ -529,7 +530,7 @@ def write_note_pdf(blocks, path, header, image_path=None):
         pdf.cr.rectangle(MARGIN, pdf.y, 120, 0.8)
         pdf.cr.fill()
         pdf.y += 8
-        heading = pdf.layout("Fußnoten und Quellen", 10.5, bold=True)
+        heading = pdf.layout(_("Fußnoten und Quellen"), 10.5, bold=True)
         pdf.draw(heading, MARGIN, pdf.y)
         pdf.y += pdf.height(heading) + 4
         for number, text in enumerate(notes, 1):
@@ -545,8 +546,8 @@ def write_plan_pdf(plan, path, user_name=None):
     every milestone shift, for the project report)."""
     import datetime
     from . import plans
-    name = plan.get("name") or "Plan"
-    pdf = Pdf(path, f"{name} · Stand {datetime.date.today().strftime('%d.%m.%Y')}", landscape=True)
+    name = plan.get("name") or _("Plan")
+    pdf = Pdf(path, _("{name} · Stand {date}", name=name, date=datetime.date.today().strftime('%d.%m.%Y')), landscape=True)
     title = pdf.layout(name, 18, bold=True)
     pdf.draw(title, MARGIN, pdf.y)
     pdf.y += pdf.height(title) + 12
@@ -607,7 +608,7 @@ def write_plan_pdf(plan, path, user_name=None):
         moves = plans.shifts(plan)
         if moves:
             pdf.y += 14
-            pdf.text("Terminverschiebungen", 12, bold=True, space=6)
+            pdf.text(_("Terminverschiebungen"), 12, bold=True, space=6)
 
             def when(at):
                 return datetime.datetime.fromtimestamp(at).strftime("%d.%m.%Y %H:%M") if at else "–"
@@ -616,9 +617,9 @@ def write_plan_pdf(plan, path, user_name=None):
                 value = plans.day(text)
                 return value.strftime("%d.%m.%Y") if value else "–"
 
-            pdf.table(["Meilenstein", "Bisher", "Neu", "Verschiebung", "Geändert am", "Von"], [3, 1.4, 1.4, 1.2, 1.6, 1.8],
+            pdf.table([_("Meilenstein"), _("Bisher"), _("Neu"), _("Verschiebung"), _("Geändert am"), _("Von")], [3, 1.4, 1.4, 1.2, 1.6, 1.8],
                       [[name, date(was), date(new),
-                        (f"{(plans.day(new) - plans.day(was)).days:+d} Tage" if plans.day(new) and plans.day(was) else "–"),
+                        (_("{days:+d} Tage", days=(plans.day(new) - plans.day(was)).days) if plans.day(new) and plans.day(was) else "–"),
                         when(at), (user_name(by) if user_name and by is not None else "–")]
                        for name, was, new, at, by in moves], size=9)
         pdf.close()
