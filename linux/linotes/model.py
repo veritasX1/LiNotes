@@ -563,13 +563,13 @@ def ensure_defaults(sync):
     Everything starts private; sharing is a deliberate step."""
     user_id = sync.user_id
     if sync.get(default_private_folder(user_id)) is None and default_private_folder(user_id) not in sync.state["remote"]:
-        sync.put("folder", {"name": "Notizen", "order": 0}, None, default_private_folder(user_id), notify=False)
+        sync.put("folder", {"name": _("Notizen"), "order": 0}, None, default_private_folder(user_id), notify=False)
     if sync.get(default_list(user_id)) is None and default_list(user_id) not in sync.state["remote"]:
-        sync.put("list", {"name": "Einkaufsliste", "color": "gelb", "grocery": True, "order": 0},
+        sync.put("list", {"name": _("Einkaufsliste"), "color": "gelb", "grocery": True, "order": 0},
                  None, default_list(user_id), notify=False)
     board = default_board(user_id)
     if sync.get(board) is None and board not in sync.state["remote"]:
-        sync.put("board", {"name": "Aufgaben", "order": 0}, None, board, notify=False)
+        sync.put("board", {"name": _("Aufgaben"), "order": 0}, None, board, notify=False)
         for order, (key, name) in enumerate(DEFAULT_COLUMNS):
             sync.put("column", {"board": board, "name": name, "order": order}, None, f"{board}-{key}", notify=False)
 
@@ -638,13 +638,101 @@ GROCERY_CATEGORIES = [
 OTHER_CATEGORY = "Sonstiges"
 CATEGORY_ORDER = [name for name, _words in GROCERY_CATEGORIES] + [OTHER_CATEGORY]
 
+# The same aisles for lists written in English or French. The German names stay the keys (they are
+# stored with items); category_name() shows them in the app's language. Only the app language's words
+# count – "pommes" are apples in French but chips in German.
+GROCERY_WORDS = {
+    "en": {
+        "Obst & Gemüse": ["apple", "banana", "pear", "orange", "lemon", "lime", "grape", "berry", "berries", "strawberr",
+                          "raspberr", "blueberr", "cherr", "peach", "nectarine", "mango", "pineapple", "kiwi", "melon",
+                          "plum", "tomato", "cucumber", "lettuce", "salad", "pepper", "onion", "garlic", "potato", "carrot",
+                          "courgette", "zucchini", "aubergine", "eggplant", "broccoli", "cauliflower", "cabbage", "spinach",
+                          "leek", "celery", "mushroom", "avocado", "ginger", "parsley", "chives", "basil", "radish",
+                          "rocket", "arugula", "sweetcorn", "corn", "pumpkin", "fruit", "veg", "herbs", "fennel",
+                          "asparagus", "beetroot"],
+        "Brot & Backwaren": ["bread", "roll", "toast", "baguette", "croissant", "pretzel", "cake", "bagel", "muffin",
+                             "crispbread", "wrap", "tortilla", "loaf", "wholemeal"],
+        "Milchprodukte & Eier": ["milk", "butter", "cheese", "yoghurt", "yogurt", "quark", "cream", "creme fraiche",
+                                 "crème fraîche", "cream cheese", "mozzarella", "parmesan", "feta", "egg", "eggs",
+                                 "margarine", "kefir", "buttermilk", "skyr", "cheddar"],
+        "Fleisch & Fisch": ["meat", "chicken", "turkey", "beef", "pork", "mince", "sausage", "ham", "salami", "bacon",
+                            "fish", "salmon", "tuna", "prawn", "shrimp", "cold cuts", "steak", "lamb"],
+        "Tiefkühl": ["frozen", "ice cream", "ice lolly", "pizza", "chips", "fries", "fish fingers", "peas"],
+        "Vorrat": ["pasta", "spaghetti", "noodle", "rice", "flour", "sugar", "salt", "oil", "vinegar", "lentil", "beans",
+                   "chickpea", "tin", "can", "cereal", "muesli", "oats", "porridge", "cornflakes", "honey", "jam",
+                   "peanut butter", "baking powder", "yeast", "stock", "tomato paste", "passata", "couscous",
+                   "quinoa", "olive oil"],
+        "Gewürze & Soßen": ["spice", "paprika", "curry", "ketchup", "mustard", "mayo", "sauce", "soy sauce", "cinnamon",
+                            "oregano", "chilli", "chili", "vanilla", "seasoning"],
+        "Getränke": ["water", "juice", "cola", "lemonade", "beer", "wine", "prosecco", "coffee", "tea", "sparkling",
+                     "cocoa", "energy drink", "iced tea", "smoothie", "squash"],
+        "Süßes & Snacks": ["chocolate", "crisps", "biscuit", "cookie", "sweets", "candy", "nuts", "cracker", "bar",
+                           "popcorn", "pretzels", "snack"],
+        "Drogerie": ["toothpaste", "toothbrush", "shampoo", "shower gel", "soap", "deodorant", "lotion", "razor",
+                     "tissues", "toilet paper", "toilet roll", "cotton", "plaster", "tampon", "pad", "nappies",
+                     "diaper", "sunscreen", "conditioner"],
+        "Haushalt": ["washing-up liquid", "dish soap", "detergent", "laundry", "bin bag", "trash bag", "kitchen roll",
+                     "paper towel", "sponge", "cleaner", "foil", "cling film", "baking paper", "battery", "batteries",
+                     "light bulb", "dishwasher", "tablets", "fabric softener", "candle", "napkins"],
+        "Tierbedarf": ["cat food", "dog food", "pet food", "cat litter", "treats"],
+    },
+    "fr": {
+        "Obst & Gemüse": ["pomme", "banane", "poire", "orange", "citron", "raisin", "fraise", "framboise", "myrtille",
+                          "cerise", "pêche", "nectarine", "mangue", "ananas", "kiwi", "melon", "prune", "tomate",
+                          "concombre", "salade", "laitue", "poivron", "oignon", "ail", "carotte", "courgette",
+                          "aubergine", "brocoli", "chou", "épinard", "poireau", "céleri", "champignon", "avocat",
+                          "gingembre", "persil", "ciboulette", "basilic", "radis", "roquette", "maïs", "potiron",
+                          "citrouille", "fruit", "légume", "herbes", "fenouil", "asperge", "betterave", "pomme de terre"],
+        "Brot & Backwaren": ["pain", "baguette", "croissant", "brioche", "gâteau", "biscotte", "tortilla", "viennoiserie",
+                             "pain de mie"],
+        "Milchprodukte & Eier": ["lait", "beurre", "fromage", "yaourt", "crème", "crème fraîche", "mozzarella",
+                                 "parmesan", "feta", "œuf", "oeuf", "œufs", "oeufs", "margarine", "kéfir", "comté",
+                                 "emmental", "camembert"],
+        "Fleisch & Fisch": ["viande", "poulet", "dinde", "bœuf", "boeuf", "porc", "haché", "saucisse", "jambon",
+                            "saucisson", "lardons", "bacon", "poisson", "saumon", "thon", "crevette", "steak", "agneau",
+                            "charcuterie"],
+        "Tiefkühl": ["surgelé", "glace", "pizza", "frites", "bâtonnets de poisson", "congelé"],
+        "Vorrat": ["pâtes", "spaghetti", "riz", "farine", "sucre", "sel", "huile", "vinaigre", "lentilles", "haricots",
+                   "pois chiches", "conserve", "boîte", "céréales", "muesli", "flocons d'avoine", "miel", "confiture",
+                   "levure", "bouillon", "concentré de tomate", "coulis", "semoule", "couscous", "quinoa",
+                   "huile d'olive"],
+        "Gewürze & Soßen": ["poivre", "épice", "paprika", "curry", "ketchup", "moutarde", "mayonnaise", "sauce",
+                            "sauce soja", "cannelle", "origan", "piment", "vanille"],
+        "Getränke": ["eau", "jus", "cola", "limonade", "bière", "vin", "champagne", "café", "thé", "eau gazeuse",
+                     "cacao", "sirop", "thé glacé"],
+        "Süßes & Snacks": ["chocolat", "chips", "biscuit", "gâteaux secs", "bonbon", "noix", "noisettes", "cacahuètes",
+                           "crackers", "barre", "pop-corn", "bretzels"],
+        "Drogerie": ["dentifrice", "brosse à dents", "shampooing", "gel douche", "savon", "déodorant", "crème",
+                     "rasoir", "mouchoirs", "papier toilette", "coton", "pansement", "tampon", "serviettes hygiéniques",
+                     "couches", "crème solaire", "après-shampooing"],
+        "Haushalt": ["liquide vaisselle", "lessive", "sacs poubelle", "essuie-tout", "éponge", "nettoyant",
+                     "papier alu", "film alimentaire", "papier cuisson", "pile", "piles", "ampoule",
+                     "lave-vaisselle", "tablettes", "adoucissant", "bougie", "serviettes"],
+        "Tierbedarf": ["croquettes", "pâtée", "litière", "friandises"],
+    },
+}
+
+
+# Listed so the catalogue tool sees them (shown through category_name()).
+_CATEGORY_LABELS = (_("Obst & Gemüse"), _("Brot & Backwaren"), _("Milchprodukte & Eier"), _("Fleisch & Fisch"), _("Tiefkühl"),
+                    _("Vorrat"), _("Gewürze & Soßen"), _("Getränke"), _("Süßes & Snacks"), _("Drogerie"), _("Haushalt"),
+                    _("Tierbedarf"), _("Sonstiges"))
+
+
+def category_name(category):
+    """An aisle's name in the app's language (the German name is the stored key)."""
+    return _(category)
+
 
 def grocery_category(text):
     lowered = " " + text.lower() + " "
     # The longest matching keyword wins ("reis" over "eis"); very short
     # keywords must be whole words ("ei" is not "Eistee").
+    from .i18n import language
+    words_for = GROCERY_WORDS.get(language())
     best = None
-    for name, words in GROCERY_CATEGORIES:
+    for name, german in GROCERY_CATEGORIES:
+        words = words_for.get(name, []) if words_for else german
         for word in words:
             key = word.strip()
             if len(key) <= 3:

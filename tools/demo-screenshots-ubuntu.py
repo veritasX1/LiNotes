@@ -19,6 +19,9 @@ from linotes.application import LiNotesApplication
 assert "/scratchpad/demodata/" in str(_sync.DATA_DIR), _sync.DATA_DIR
 application.APP_ID = "io.github.veritasx1.LiNotesDemo"
 OUT = os.path.join(SCRATCH, "shots")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from demo_texts import translator  # noqa: E402  – LINOTES_LANGUAGE=en|fr: demo contents in that language
+L, TRANSLATE = translator(os.environ.get("LINOTES_LANGUAGE", "de"))
 
 
 class App(LiNotesApplication):
@@ -47,6 +50,9 @@ def span(text, part, name):
 
 
 def seed(sync):
+    put, update = sync.put, sync.update
+    sync.put = lambda kind, data, *args, **kwargs: put(kind, TRANSLATE(data), *args, **kwargs)
+    sync.update = lambda object_id, *args, **fields: update(object_id, *args, **TRANSLATE(fields))
     uid = sync.user_id
     model.ensure_defaults(sync)
     now = time.time()
@@ -247,11 +253,11 @@ def add_evidence(sync, card_id):
     cr = cairo.Context(surface)
     cr.set_source_rgb(1, 1, 1); cr.paint()
     cr.set_source_rgb(0.13, 0.13, 0.15); cr.select_font_face("Sans", 0, 1); cr.set_font_size(26)
-    cr.move_to(28, 52); cr.show_text("SIL-Testlauf LKA – Abschaltgrenze")
+    cr.move_to(28, 52); cr.show_text(L("SIL-Testlauf LKA – Abschaltgrenze"))
     cr.select_font_face("Sans", 0, 0); cr.set_font_size(19)
     for i, case in enumerate(["TC-LKA-031", "TC-LKA-032", "TC-LKA-033", "TC-LKA-034", "TC-LKA-035", "TC-LKA-036"]):
         cr.set_source_rgb(0.13, 0.13, 0.15); cr.move_to(28, 100 + i * 31); cr.show_text(case)
-        cr.set_source_rgb(0.18, 0.66, 0.31); cr.move_to(240, 100 + i * 31); cr.show_text("bestanden")
+        cr.set_source_rgb(0.18, 0.66, 0.31); cr.move_to(240, 100 + i * 31); cr.show_text(L("bestanden"))
     surface.write_to_png(picture)
     card = sync.get(card_id)
     items = []

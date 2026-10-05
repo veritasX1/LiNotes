@@ -1047,5 +1047,18 @@
  "◆ Meilenstein": "◆ Milestone",
  "⚠ Schlüssel hat sich geändert – bitte neu verifizieren": "⚠ Key has changed – please verify again",
  "⚠ Schlüssel hat sich geändert – neu verifizieren": "⚠ Key has changed – verify again",
- "✓ verifiziert": "✓ verified"
+ "✓ verifiziert": "✓ verified",
+ "Obst & Gemüse": "Fruit & Vegetables",
+ "Brot & Backwaren": "Bread & Bakery",
+ "Milchprodukte & Eier": "Dairy & Eggs",
+ "Fleisch & Fisch": "Meat & Fish",
+ "Tiefkühl": "Frozen",
+ "Vorrat": "Pantry",
+ "Gewürze & Soßen": "Spices & Sauces",
+ "Getränke": "Drinks",
+ "Süßes & Snacks": "Sweets & Snacks",
+ "Drogerie": "Toiletries",
+ "Haushalt": "Household",
+ "Tierbedarf": "Pets",
+ "Sonstiges": "Other"
 }

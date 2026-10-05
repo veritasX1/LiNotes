@@ -174,7 +174,7 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
                     val grouped = open.groupBy { it.data.optString("category").ifEmpty { Model.groceryCategory(it.data.optString("text")) } }
                     for (category in Model.categoryOrder) {
                         val group = grouped[category] ?: continue
-                        section("cat-$category", header = category) {
+                        section("cat-$category", header = tr(category)) {
                             group.forEachIndexed { index, item -> ItemRow(state, item, accent, index < group.lastIndex) }
                         }
                     }
