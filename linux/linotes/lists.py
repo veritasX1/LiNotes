@@ -245,7 +245,7 @@ class ShoppingListView(Gtk.Box):
                 by_category.setdefault(category, []).append(item)
             for category in model.CATEGORY_ORDER:
                 if category in by_category:
-                    self.add_section(category, sorted(by_category[category], key=order))
+                    self.add_section(model.category_name(category), sorted(by_category[category], key=order))
         else:
             self.add_section(None, sorted(open_items, key=order))
 

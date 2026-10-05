@@ -1047,5 +1047,18 @@
  "◆ Meilenstein": "◆ Jalon",
  "⚠ Schlüssel hat sich geändert – bitte neu verifizieren": "⚠ La clé a changé – veuillez vérifier à nouveau",
  "⚠ Schlüssel hat sich geändert – neu verifizieren": "⚠ La clé a changé – vérifier à nouveau",
- "✓ verifiziert": "✓ vérifié"
+ "✓ verifiziert": "✓ vérifié",
+ "Obst & Gemüse": "Fruits et légumes",
+ "Brot & Backwaren": "Pain et viennoiseries",
+ "Milchprodukte & Eier": "Produits laitiers et œufs",
+ "Fleisch & Fisch": "Viande et poisson",
+ "Tiefkühl": "Surgelés",
+ "Vorrat": "Épicerie",
+ "Gewürze & Soßen": "Épices et sauces",
+ "Getränke": "Boissons",
+ "Süßes & Snacks": "Sucreries et snacks",
+ "Drogerie": "Hygiène",
+ "Haushalt": "Entretien",
+ "Tierbedarf": "Animaux",
+ "Sonstiges": "Divers"
 }

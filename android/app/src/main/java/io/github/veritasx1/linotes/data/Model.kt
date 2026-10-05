@@ -1,5 +1,6 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.I18n
 import io.github.veritasx1.linotes.i18n.tr
 
 import org.json.JSONArray
@@ -399,14 +400,45 @@ object Model {
         "Tierbedarf" to listOf("katzenfutter", "hundefutter", "futter", "katzenstreu", "leckerli"),
     )
 
+    /** The same aisles for English and French lists (keys stay German) – generated from Ubuntu's model.GROCERY_WORDS;
+     *  only the app language's words count ("pommes" are apples in French, chips in German). */
+    val groceryWords: Map<String, Map<String, List<String>>> = mapOf(
+        "en" to mapOf(
+            "Obst & Gemüse" to listOf("apple", "banana", "pear", "orange", "lemon", "lime", "grape", "berry", "berries", "strawberr", "raspberr", "blueberr", "cherr", "peach", "nectarine", "mango", "pineapple", "kiwi", "melon", "plum", "tomato", "cucumber", "lettuce", "salad", "pepper", "onion", "garlic", "potato", "carrot", "courgette", "zucchini", "aubergine", "eggplant", "broccoli", "cauliflower", "cabbage", "spinach", "leek", "celery", "mushroom", "avocado", "ginger", "parsley", "chives", "basil", "radish", "rocket", "arugula", "sweetcorn", "corn", "pumpkin", "fruit", "veg", "herbs", "fennel", "asparagus", "beetroot"),
+            "Brot & Backwaren" to listOf("bread", "roll", "toast", "baguette", "croissant", "pretzel", "cake", "bagel", "muffin", "crispbread", "wrap", "tortilla", "loaf", "wholemeal"),
+            "Milchprodukte & Eier" to listOf("milk", "butter", "cheese", "yoghurt", "yogurt", "quark", "cream", "creme fraiche", "crème fraîche", "cream cheese", "mozzarella", "parmesan", "feta", "egg", "eggs", "margarine", "kefir", "buttermilk", "skyr", "cheddar"),
+            "Fleisch & Fisch" to listOf("meat", "chicken", "turkey", "beef", "pork", "mince", "sausage", "ham", "salami", "bacon", "fish", "salmon", "tuna", "prawn", "shrimp", "cold cuts", "steak", "lamb"),
+            "Tiefkühl" to listOf("frozen", "ice cream", "ice lolly", "pizza", "chips", "fries", "fish fingers", "peas"),
+            "Vorrat" to listOf("pasta", "spaghetti", "noodle", "rice", "flour", "sugar", "salt", "oil", "vinegar", "lentil", "beans", "chickpea", "tin", "can", "cereal", "muesli", "oats", "porridge", "cornflakes", "honey", "jam", "peanut butter", "baking powder", "yeast", "stock", "tomato paste", "passata", "couscous", "quinoa", "olive oil"),
+            "Gewürze & Soßen" to listOf("spice", "paprika", "curry", "ketchup", "mustard", "mayo", "sauce", "soy sauce", "cinnamon", "oregano", "chilli", "chili", "vanilla", "seasoning"),
+            "Getränke" to listOf("water", "juice", "cola", "lemonade", "beer", "wine", "prosecco", "coffee", "tea", "sparkling", "cocoa", "energy drink", "iced tea", "smoothie", "squash"),
+            "Süßes & Snacks" to listOf("chocolate", "crisps", "biscuit", "cookie", "sweets", "candy", "nuts", "cracker", "bar", "popcorn", "pretzels", "snack"),
+            "Drogerie" to listOf("toothpaste", "toothbrush", "shampoo", "shower gel", "soap", "deodorant", "lotion", "razor", "tissues", "toilet paper", "toilet roll", "cotton", "plaster", "tampon", "pad", "nappies", "diaper", "sunscreen", "conditioner"),
+            "Haushalt" to listOf("washing-up liquid", "dish soap", "detergent", "laundry", "bin bag", "trash bag", "kitchen roll", "paper towel", "sponge", "cleaner", "foil", "cling film", "baking paper", "battery", "batteries", "light bulb", "dishwasher", "tablets", "fabric softener", "candle", "napkins"),
+            "Tierbedarf" to listOf("cat food", "dog food", "pet food", "cat litter", "treats")),
+        "fr" to mapOf(
+            "Obst & Gemüse" to listOf("pomme", "banane", "poire", "orange", "citron", "raisin", "fraise", "framboise", "myrtille", "cerise", "pêche", "nectarine", "mangue", "ananas", "kiwi", "melon", "prune", "tomate", "concombre", "salade", "laitue", "poivron", "oignon", "ail", "carotte", "courgette", "aubergine", "brocoli", "chou", "épinard", "poireau", "céleri", "champignon", "avocat", "gingembre", "persil", "ciboulette", "basilic", "radis", "roquette", "maïs", "potiron", "citrouille", "fruit", "légume", "herbes", "fenouil", "asperge", "betterave", "pomme de terre"),
+            "Brot & Backwaren" to listOf("pain", "baguette", "croissant", "brioche", "gâteau", "biscotte", "tortilla", "viennoiserie", "pain de mie"),
+            "Milchprodukte & Eier" to listOf("lait", "beurre", "fromage", "yaourt", "crème", "crème fraîche", "mozzarella", "parmesan", "feta", "œuf", "oeuf", "œufs", "oeufs", "margarine", "kéfir", "comté", "emmental", "camembert"),
+            "Fleisch & Fisch" to listOf("viande", "poulet", "dinde", "bœuf", "boeuf", "porc", "haché", "saucisse", "jambon", "saucisson", "lardons", "bacon", "poisson", "saumon", "thon", "crevette", "steak", "agneau", "charcuterie"),
+            "Tiefkühl" to listOf("surgelé", "glace", "pizza", "frites", "bâtonnets de poisson", "congelé"),
+            "Vorrat" to listOf("pâtes", "spaghetti", "riz", "farine", "sucre", "sel", "huile", "vinaigre", "lentilles", "haricots", "pois chiches", "conserve", "boîte", "céréales", "muesli", "flocons d'avoine", "miel", "confiture", "levure", "bouillon", "concentré de tomate", "coulis", "semoule", "couscous", "quinoa", "huile d'olive"),
+            "Gewürze & Soßen" to listOf("poivre", "épice", "paprika", "curry", "ketchup", "moutarde", "mayonnaise", "sauce", "sauce soja", "cannelle", "origan", "piment", "vanille"),
+            "Getränke" to listOf("eau", "jus", "cola", "limonade", "bière", "vin", "champagne", "café", "thé", "eau gazeuse", "cacao", "sirop", "thé glacé"),
+            "Süßes & Snacks" to listOf("chocolat", "chips", "biscuit", "gâteaux secs", "bonbon", "noix", "noisettes", "cacahuètes", "crackers", "barre", "pop-corn", "bretzels"),
+            "Drogerie" to listOf("dentifrice", "brosse à dents", "shampooing", "gel douche", "savon", "déodorant", "crème", "rasoir", "mouchoirs", "papier toilette", "coton", "pansement", "tampon", "serviettes hygiéniques", "couches", "crème solaire", "après-shampooing"),
+            "Haushalt" to listOf("liquide vaisselle", "lessive", "sacs poubelle", "essuie-tout", "éponge", "nettoyant", "papier alu", "film alimentaire", "papier cuisson", "pile", "piles", "ampoule", "lave-vaisselle", "tablettes", "adoucissant", "bougie", "serviettes"),
+            "Tierbedarf" to listOf("croquettes", "pâtée", "litière", "friandises")))
+
     const val OTHER = "Sonstiges"
     val categoryOrder = groceries.map { it.first } + OTHER
 
     fun groceryCategory(text: String): String {
         val lowered = " ${text.lowercase()} "
         var best: Pair<String, Int>? = null
-        for ((name, words) in groceries) {
-            for (word in words) {
+        val wordsFor = groceryWords[I18n.language()]
+        for ((name, german) in groceries) {
+            for (word in wordsFor?.get(name) ?: if (wordsFor != null) emptyList() else german) {
                 val found = if (word.length <= 3) {
                     Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(word) + "(?![\\p{L}\\p{N}])").containsMatchIn(lowered)
                 } else {
