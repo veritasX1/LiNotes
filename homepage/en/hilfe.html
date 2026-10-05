@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LiNotes – Help</title>
+<meta name="description" content="Every LiNotes feature explained step by step – for Android and Ubuntu, with pictures.">
+<link rel="icon" href="../linotes.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../site.css">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoft.goip.de/linotes/hilfe.html"><link rel="alternate" hreflang="en" href="https://lisoft.goip.de/linotes/en/hilfe.html"><link rel="alternate" hreflang="fr" href="https://lisoft.goip.de/linotes/fr/hilfe.html">
+<style>
+.apps .wrap { position: relative; }
+.lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
+.lang-switch a[aria-current], .lang-foot a[aria-current] { color: #fff; opacity: 1; font-weight: 600; }
+.lang-foot { display: flex; gap: 14px; justify-content: center; padding-top: 18px; font-size: 13px; }
+.lang-foot a[aria-current] { color: inherit; }
+@media (max-width: 900px) { .lang-switch { display: none; } }
+</style><!--/lang-->
+</head>
+<body>
+
+<div class="apps">
+  <div class="wrap">
+    <a href="https://lisoft.goip.de/linotes/en/" aria-current="page">LiNotes</a>
+    <a href="https://lisoft.goip.de/prevux/en/">Prevux</a>
+    <a href="https://lisoft.goip.de/liboard/en/">LiBoard</a>
+    <a href="https://lisoft.goip.de/licida/en/">LiCida</a>
+    <a href="https://lisoft.goip.de/lical/en/">LiCal</a>
+    <a href="https://lisoft.goip.de/lidio/en/">LiDio</a>
+  <!--lang--><span class="lang-switch"><a href="../hilfe.html" hreflang="de" lang="de">DE</a><a href="hilfe.html" hreflang="en" lang="en" aria-current="true">EN</a><a href="../fr/hilfe.html" hreflang="fr" lang="fr">FR</a></span><!--/lang-->
+  </div>
+</div>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="../linotes.svg" alt="">LiNotes</a>
+    <nav class="links">
+      <a href="index.html#notizen">Notes</a>
+      <a href="index.html#plaene">Plans</a>
+      <a href="index.html#aufgaben">Tasks</a>
+      <a href="hilfe.html" class="active">Help</a>
+      <a href="server.html">Your own server</a>
+    </nav>
+    <a class="btn small cta" href="index.html#laden">Download</a>
+  </div>
+</header>
+
+<main>
+<div class="wrap docs">
+  <nav class="toc">
+    <input class="search" type="search" placeholder="Search help" aria-label="Search help">
+    <h4>Getting started</h4>
+    <a href="#start">With or without a server</a>
+    <a href="#konto">Account and key file</a>
+    <a href="#geraete">Another device</a>
+    <h4>Notes</h4>
+    <a href="#neu">New note</a>
+    <a href="#formatieren">Formatting</a>
+    <a href="#checklisten">Checklists</a>
+    <a href="#markieren">Highlighting and text colour</a>
+    <a href="#tabellen">Tables</a>
+    <a href="#rechnen">Calculating</a>
+    <a href="#medien">Photos, files, PDFs</a>
+    <a href="#audio">Recording audio</a>
+    <a href="#abschnitte">Collapsing sections</a>
+    <a href="#verlinken">Linking notes</a>
+    <a href="#vorlagen">Templates</a>
+    <a href="#linkvorschau">Link preview</a>
+    <a href="#profi">Pro features</a>
+    <a href="#erwaehnen">@-mentions</a>
+    <a href="#aktivitaet">Changes by others</a>
+    <a href="#ordnen">Folders, sorting, gallery</a>
+    <a href="#suchen">Search and tags</a>
+    <a href="#sperren">Locked notes</a>
+    <a href="#pdf">PDF and printing</a>
+    <a href="#papierkorb">Recently deleted</a>
+    <h4>Lists, tasks, plans</h4>
+    <a href="#listen">Lists</a>
+    <a href="#boards">Task boards</a>
+    <a href="#entwicklung">Development projects</a>
+    <a href="#plaene">Plans</a>
+    <a href="#rotation">Rotation</a>
+    <a href="#zeitstrahl">Timeline</a>
+    <a href="#agil">Agile working</a>
+    <h4>Sharing and security</h4>
+    <a href="#verifizieren">Verifying people</a>
+    <a href="#teilen">Sharing</a>
+    <a href="#platz">Space on the phone</a>
+    <a href="#datenschutz">What the server knows</a>
+    <h4>Display and handling</h4>
+    <a href="#darstellung">Text size, justified text</a>
+    <a href="#fenster">Own window</a>
+    <a href="#kuerzel">Keyboard shortcuts</a>
+  </nav>
+
+  <article>
+    <h1>Help</h1>
+    <p class="lead">Every feature, step by step. <span class="tag">Ubuntu</span> and <span class="tag">Android</span> show where things differ.</p>
+
+    <!-- ERSTE SCHRITTE -->
+    <section id="start">
+      <h2>With or without a server</h2>
+      <div class="shots">
+        <div>
+          <p>On first launch LiNotes asks for the <b>address of your server</b>. You get it from the person who runs the server – or you <a href="server.html">set one up yourself</a>.</p>
+          <p>No server? Tap <b>“Use without server”</b>. LiNotes is then a notes app where everything is stored encrypted on this device only. Later you can add a server under <b>Settings → “Connect to server …”</b> <span class="tag">Ubuntu</span> account menu – your notes are then uploaded.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="../img/android-m-start.webp" alt="Start screen with field for the server address and “Use without server”" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="konto">
+      <h2>Account and key file</h2>
+      <ol class="steps-list">
+        <li><b>Create an account</b>Enter the server address, choose “Create new account”, then the invitation code, a user name (lower case, no spaces) and your name. There is no password – your account is protected by a key that lives only on your devices.</li>
+        <li><b>Back up the key file</b>Settings → “Back up key file …” <span class="tag">Ubuntu</span> account menu. Choose a passphrase and keep the file, e.g. on a USB stick. If you lose all your devices, this is the only way back to your notes – nobody else can restore them. LiNotes reminds you after a few days.</li>
+      </ol>
+    </section>
+
+    <section id="geraete">
+      <h2>Connect another device</h2>
+      <ol class="steps-list">
+        <li><b>On the new device</b>Enter the server address and choose “Connect with another device”, then your user name.</li>
+        <li><b>Confirm the code</b>The new device shows a 6-digit code and a QR code. On a device where you are already signed in, “Connect new device?” appears – type in or scan the code there. If it was not you: “Decline”.</li>
+      </ol>
+    </section>
+
+    <!-- NOTIZEN -->
+    <section id="neu">
+      <h2>New note</h2>
+      <p><span class="tag">Android</span> Pencil icon at the top right or at the bottom of the note. <span class="tag">Ubuntu</span> Pencil icon in the toolbar or <kbd>Ctrl</kbd>+<kbd>N</kbd>.</p>
+      <p><b>Quick note from anywhere:</b> <span class="tag">Android</span> Add the “New note” tile in Quick Settings (swipe down from the top). <span class="tag">Ubuntu</span> <code class="inline">linotes --neue-notiz</code> opens a new note right away – e.g. as a custom keyboard shortcut in the Ubuntu settings.</p>
+      <p>The first line automatically becomes the title. A new note you write nothing in disappears by itself when you leave it – just like on Apple devices.</p>
+    </section>
+
+    <section id="formatieren">
+      <h2>Formatting</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-02-rezept.webp" data-light="img/ubuntu-02-rezept.webp" data-dark="img/ubuntu-dark-02-rezept.webp" alt="Recipe with subheadings, bulleted list, numbered list and quote" loading="lazy"></div></div>
+      <p>Via <b>“Aa”</b> you choose <b>Title, Heading, Subheading, Body, Monospaced, Bulleted list, Dashed list, Numbered list</b> and <b>Quote</b>. Bold, italic, underline and strikethrough are in the same menu.</p>
+      <p>Indent: <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span class="tag">Ubuntu</span> or via “Aa” <span class="tag">Android</span>. A <b>divider</b> appears when you type <code class="inline">---</code> on an empty line and press Enter.</p>
+    </section>
+
+    <section id="checklisten">
+      <h2>Checklists</h2>
+      <p>Checklist icon in the toolbar, then simply write items. Tap the circle to tick an item off. An empty line ends the list. Via “More”, ticked items can be sorted to the bottom automatically.</p>
+    </section>
+
+    <section id="markieren">
+      <h2>Highlighting, text colour, font, alignment</h2>
+      <p>Select text and <b>highlight</b> it via “Aa” – in yellow, orange, pink, purple, mint or blue. In the same menu: <b>text colour</b>, <b>font</b> and <b>alignment</b> (left, centred, right). <span class="tag">Ubuntu</span> Yellow highlighting also works with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>.</p>
+    </section>
+
+    <section id="tabellen">
+      <h2>Tables</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-01-notiz.webp" data-light="img/ubuntu-01-notiz.webp" data-dark="img/ubuntu-dark-01-notiz.webp" alt="Note with a budget table" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-c-notiz.webp" data-light="img/android-c-notiz.webp" data-dark="img/android-dark-c-notiz.webp" alt="The same table on the phone" loading="lazy"></div>
+      </div>
+      <p><b>Insert:</b> table icon in the toolbar – you get a table with 3 × 3 cells.</p>
+      <p><span class="tag">Ubuntu</span> Write directly in the cells. <kbd>Tab</kbd> jumps to the next cell; in the last cell a new row appears. <kbd>Enter</kbd> and the arrow keys change the row. <b>Right-click</b> a cell: insert a row above/below or a column left/right, delete a row or column, delete the table.</p>
+      <p><span class="tag">Android</span> The table opens in the table editor. “Next” on the keyboard jumps to the next cell. At the bottom you insert or delete rows and columns next to the selected cell. Tap the table in the note to edit it again.</p>
+    </section>
+
+    <section id="rechnen">
+      <h2>Calculating</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-03-rechnen.webp" data-light="img/ubuntu-03-rechnen.webp" data-dark="img/ubuntu-dark-03-rechnen.webp" alt="Household budget with calculations" loading="lazy"></div></div>
+      <p>Write a calculation with an <code class="inline">=</code> at the end of the line – LiNotes adds the result. Multiplication comes before addition, brackets work, decimals use a comma (German style for now). A label in front does no harm: <code class="inline">Fixkosten: 850 + 74 + 35 =</code> gives <b>959</b>.</p>
+    </section>
+
+    <section id="medien">
+      <h2>Photos, files, PDFs</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-04-audio-pdf.webp" data-light="img/ubuntu-04-audio-pdf.webp" data-dark="img/ubuntu-dark-04-audio-pdf.webp" alt="Note with audio recording and PDF attachment" loading="lazy"></div></div>
+      <p><span class="tag">Android</span> Photo icon → “Take photo”, “Choose from photos” or “Attach file …”. <span class="tag">Ubuntu</span> Photo icon or paper clip – or simply drag files into the note.</p>
+      <p>Attachments are encrypted like everything else. PDFs show a preview of the first page; tapping opens the file with the matching app.</p>
+    </section>
+
+    <section id="audio">
+      <h2>Recording audio</h2>
+      <div class="shots">
+        <div>
+          <p>Tap the microphone icon in the toolbar – recording starts immediately, the time runs along. <b>“Done”</b> puts it in the note, <b>“Cancel”</b> discards it. The first time, Android asks for microphone permission.</p>
+          <p>The recording appears as a voice message like in Apple’s Messages: a coloured bubble with play button, waveform and duration. Tapping plays it right in the note, tapping again pauses. A tap on the waveform jumps to that spot; the time counts down. Recordings from the phone can be played on the computer and vice versa.</p>
+          <p>Tapping or clicking an <b>image</b> in the note opens it large in Quick Look.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="../img/android-e-audio.webp" data-light="img/android-e-audio.webp" data-dark="img/android-dark-e-audio.webp" alt="Audio recording in a note on the phone" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="abschnitte">
+      <h2>Collapsing sections</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-05-abschnitte.webp" data-light="img/ubuntu-05-abschnitte.webp" data-dark="img/ubuntu-dark-05-abschnitte.webp" alt="Note with a collapsed section" loading="lazy"></div></div>
+      <p>Headings and subheadings with content below them have an arrow on the left. Tapping it collapses everything up to the next heading of the same level. The state is saved with the note and applies on all devices. The PDF always shows everything.</p>
+    </section>
+
+    <section id="verlinken">
+      <h2>Linking notes</h2>
+      <p>Type <code class="inline">&gt;&gt;</code> – a selection of your notes appears; keep typing to filter. <span class="tag">Ubuntu</span> Also with <kbd>Ctrl</kbd>+<kbd>K</kbd>. The link always shows the current title – even if you rename the linked note. Tapping opens it.</p>
+      <p>Web addresses in notes are tappable automatically.</p>
+    </section>
+
+    <section id="vorlagen">
+      <h2>Templates</h2>
+      <p><span class="tag">Ubuntu</span> “+” above the sidebar → “New note from template …”. <span class="tag">Android</span> In a folder “…” → “New note from template …”. Included are meeting, minutes, travel checklist and diary.</p>
+      <p><b>Your own template:</b> create a note and <span class="tag">Ubuntu</span> right-click or <span class="tag">Android</span> long-press → “Use as template”. Placeholders are replaced on creation: <code>{{Datum}}</code> (date), <code>{{Uhrzeit}}</code> (time), <code>{{Wochentag}}</code> (weekday) – “Meeting {{Datum}}” becomes e.g. “Meeting 04.10.2026”.</p>
+    </section>
+
+    <section id="linkvorschau">
+      <h2>Link preview</h2>
+      <p>If a web address stands alone on a line, after Enter it becomes a <b>preview with title, image and domain</b> – just like on Apple devices. By default this is <b>off</b>: <span class="tag">Ubuntu</span> view menu (⋯) → “Link preview (fetch web page)”, <span class="tag">Android</span> Settings → “Link preview”.</p>
+      <p><b>Privacy as with Signal:</b> only the device on which you paste the link fetches the page – the site operator sees your connection’s address, nothing else. The preview including the image is stored encrypted in the note; other devices fetch nothing. Locked notes get no preview.</p>
+      <p>Clicking the preview opens the page. <span class="tag">Ubuntu</span> Right-click → “Show as address only”. <span class="tag">Android</span> tap → “Open in browser” or “Show as address only”.</p>
+    </section>
+
+    <section id="profi">
+      <h2>Pro features</h2>
+      <p>By default LiNotes only shows what you need in everyday life. If you want more, switch on the <b>Pro features</b>: <span class="tag">Ubuntu</span> view menu (⋯) → “Pro features”, <span class="tag">Android</span> Settings → “Pro features”. The switch applies to your account on all devices.</p>
+      <p><b>Code with syntax colours:</b> in the format menu choose “Code” and the language (Python, Kotlin, Shell, JSON) – keywords, strings, comments and numbers are coloured, in the PDF too. An empty code paragraph plus Enter ends the block. Notes with code are always shown in colour, even when the pro features are off.</p>
+      <p><b>Footnotes and sources:</b> in the format menu “Footnote / source …” – a superscript number appears at the cursor, the text goes into the “Footnotes and sources” list at the bottom (that is how a bibliography comes about) and at the end of the PDF. The numbers count themselves. Click or tap a number to change the text or remove the footnote.</p>
+      <p><b>Formulas (LaTeX):</b> in the format menu “Formula (LaTeX) …” – formulas in LaTeX notation, e.g. <code>\frac{a}{b}</code>, <code>x^2</code>, <code>\sqrt{x}</code>, <code>\alpha</code>, <code>\sum_{i=1}^{n}</code>, <code>\int_0^1</code>, matrices (<code>\begin{pmatrix} … \end{pmatrix}</code>) and case distinctions (<code>cases</code>). LiNotes typesets them itself – without internet, in the note and in the PDF. Click or tap a formula to change it; anything LiNotes does not know is marked in red. Older LiNotes versions show the LaTeX text.</p>
+    </section>
+
+    <section id="erwaehnen">
+      <h2>@-mentions</h2>
+      <p>In <b>shared</b> notes, type <code class="inline">@</code> at the start of a word – the people the note is shared with appear. The person mentioned gets a notification “… mentioned you”; tapping it opens the note.</p>
+    </section>
+
+    <section id="aktivitaet">
+      <h2>Seeing changes by others</h2>
+      <p>If someone has changed a shared note since you last looked at it, a <b>dot</b> appears in front of the title in the list. In the note, a line shows who changed it and when, and the <b>changed lines are highlighted in colour</b>. If someone changes the note while you have it open, the marking appears immediately.</p>
+    </section>
+
+    <section id="ordnen">
+      <h2>Folders, sorting, gallery, pinning</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-06-galerie.webp" data-light="img/ubuntu-06-galerie.webp" data-dark="img/ubuntu-dark-06-galerie.webp" alt="Gallery view" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-a-ordner.webp" data-light="img/android-a-ordner.webp" data-dark="img/android-dark-a-ordner.webp" alt="Folder overview on the phone" loading="lazy"></div>
+      </div>
+      <ul>
+        <li><b>Folders and subfolders:</b> <span class="tag">Android</span> folder icon at the top right. <span class="tag">Ubuntu</span> “+” above the sidebar. Folders can be nested as deeply as you like.</li>
+        <li><b>Moving:</b> drag notes, lists, boards and plans onto a folder – <span class="tag">Android</span> press, hold and drag, <span class="tag">Ubuntu</span> with the mouse. Or long-press / right-click → “Move to …”.</li>
+        <li><b>Sorting:</b> menu “…” → date edited, date created or title. Applies on all devices.</li>
+        <li><b>Gallery:</b> menu “…” → “Show as gallery” <span class="tag">Ubuntu</span> or <kbd>Ctrl</kbd>+<kbd>2</kbd>.</li>
+        <li><b>Pinning:</b> long-press / right-click a note → “Pin”. Pinned notes stay at the top.</li>
+      </ul>
+    </section>
+
+    <section id="suchen">
+      <h2>Search and tags</h2>
+      <p>The search field above the list searches all notes. Write <code class="inline">#word</code> in a note – the tag appears in the overview for filtering.</p>
+    </section>
+
+    <section id="sperren">
+      <h2>Locked notes</h2>
+      <p>In the note, “More” → <b>“Lock note”</b> <span class="tag">Ubuntu</span> lock icon. The first time you set a notes password. The title stays visible, the content is encrypted additionally. On the phone you can switch on unlocking with fingerprint, PIN or pattern (Settings → Locked notes).</p>
+      <p>Unlocked notes lock again after a few minutes without use and when you leave the app. Immediately: lock icon in the note or “Lock unlocked notes now”. Shared notes cannot be locked.</p>
+    </section>
+
+    <section id="pdf">
+      <h2>PDF and printing</h2>
+      <p><span class="tag">Android</span> In the note, “More” → “Send as PDF …” or “Print …”. <span class="tag">Ubuntu</span> Right-click the note → “Export as PDF …” (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>) or “Print …” (<kbd>Ctrl</kbd>+<kbd>P</kbd>). The PDF looks like the note – with headings, lists, tables and photos.</p>
+    </section>
+
+    <section id="papierkorb">
+      <h2>Recently deleted</h2>
+      <p>Deleted notes stay in “Recently deleted” for 30 days and can be restored there.</p>
+    </section>
+
+    <!-- LISTEN, AUFGABEN, PLÄNE -->
+    <section id="listen">
+      <h2>Lists</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-07-liste.webp" data-light="img/ubuntu-07-liste.webp" data-dark="img/ubuntu-dark-07-liste.webp" alt="Shopping list on Ubuntu" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-f-liste.webp" data-light="img/android-f-liste.webp" data-dark="img/android-dark-f-liste.webp" alt="Shopping list on the phone" loading="lazy"></div>
+      </div>
+      <p>Type entries at the bottom – they land in the matching product group automatically. Pasting several lines creates several entries. Tick items off with the circle; “Delete completed” tidies up. A counter on the “Lists” tab shows what others have added.</p>
+    </section>
+
+    <section id="boards">
+      <h2>Task boards</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-08-board.webp" data-light="img/ubuntu-08-board.webp" data-dark="img/ubuntu-dark-08-board.webp" alt="Task board on Ubuntu" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-g-board.webp" data-light="img/android-g-board.webp" data-dark="img/android-dark-g-board.webp" alt="Task board on the phone" loading="lazy"></div>
+      </div>
+      <p>Create a new card with “Add card …” under a column. Tap a card for due date, assignee, priority, colour and notes. <span class="tag">Ubuntu</span> Drag cards with the mouse to another column. <span class="tag">Android</span> Long-press a card → choose a column. Columns can be renamed, added and deleted.</p>
+      <p><b>Report:</b> <span class="tag">Android</span> long-press the board → “Share report (PDF)”. <span class="tag">Ubuntu</span> Export icon (box with arrow) at the top of the board or right-click → “Export report …” (PDF or CSV). Inviting people: the people icon next to it.</p>
+    </section>
+
+    <section id="entwicklung">
+      <h2>Development projects</h2>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-13-entwicklung.webp" alt="Development project with columns from CR to Released" loading="lazy"></div></div>
+      <p>Long-press / right-click the board → <b>“Run as development project”</b>. The cards then show their short ID for quoting in commits and reports, and the card dialog additionally has:</p>
+      <ul>
+        <li><b>Impact analysis</b> – what is affected, which risks, what must be checked as well.</li>
+        <li><b>Verification</b> – tests and checks, plus <b>evidence</b> as files: test reports, screenshots, measurement data. It is stored encrypted on the card, with time, person and checksum (SHA-256) – so you can later prove it was exactly this report.</li>
+        <li><b>Implemented in version</b> and the <b>linked commits</b> (automatically if the card ID is in the commit message).</li>
+        <li><b>History</b> – who moved the card into which column, and when.</li>
+      </ul>
+      <div class="shots single"><div class="window"><img class="zoomable" src="../img/ubuntu-14-karte.webp" alt="Card dialog of a change request" loading="lazy"></div></div>
+      <p>The <b>report</b> then contains a traceability matrix (card ↔ commits ↔ verification ↔ version ↔ acceptance) and a detail page for every card – with all evidence including checksums, images embedded directly.</p>
+      <div class="shots single"><div class="window" style="background: #fff"><img class="zoomable" src="../img/ubuntu-15-bericht-seite-1.webp" alt="Traceability matrix in the PDF report" loading="lazy"></div></div>
+      <p class="note">The pictures show a fictitious example: the automotive project “Spurhalteassistent LKA – Steuergerät” (lane keeping assist control unit) with the columns CR, Analysis, Implementation, Verification and Released.</p>
+      <p class="note">Detailed examples: <a href="beispiel-automotive.html">ASIL D project according to ISO 26262 and Automotive SPICE</a> · <a href="beispiel-ki.html">Developing software with AI</a>.</p>
+    </section>
+
+    <section id="plaene">
+      <h2>Plans</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-12-dienstplan.webp" data-light="img/ubuntu-12-dienstplan.webp" data-dark="img/ubuntu-dark-12-dienstplan.webp" alt="Duty rota with coloured shifts" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-k-dienstplan.webp" data-light="img/android-k-dienstplan.webp" data-dark="img/android-dark-k-dienstplan.webp" alt="Duty rota on the phone" loading="lazy"></div>
+      </div>
+      <p><b>New plan:</b> <span class="tag">Android</span> “Plans” tab → “+”. <span class="tag">Ubuntu</span> “+” above the sidebar → “New plan …”. Choose a template: empty plan, timetable, shift plan, cleaning rota, OR/room plan or project plan.</p>
+      <p><b>Editing the grid:</b> <span class="tag">Ubuntu</span> Write directly in the cells, right-click for colour, rows and columns. <span class="tag">Android</span> Tap a cell for text and colour; tap row and column headers to rename, insert and delete.</p>
+      <p><b>Column type</b> (menu “…” or the selection at the top): free columns, weekdays, single days from a date or calendar weeks from this week. Today’s column is highlighted.</p>
+      <p><b>PDF:</b> “PDF …” <span class="tag">Ubuntu</span> or “…” → “Share as PDF …” <span class="tag">Android</span> – in landscape for putting up on the wall.</p>
+    </section>
+
+    <section id="rotation">
+      <h2>Rotation</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-09-putzplan.webp" data-light="img/ubuntu-09-putzplan.webp" data-dark="img/ubuntu-dark-09-putzplan.webp" alt="Cleaning rota with rotation" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-i-putzplan.webp" data-light="img/android-i-putzplan.webp" data-dark="img/android-dark-i-putzplan.webp" alt="Cleaning rota on the phone" loading="lazy"></div>
+      </div>
+      <p>For cleaning and duty rotas with “Weeks” columns: choose “Rotation …” and enter the names separated by commas. Every week each name moves on one row. Names from the rotation are shown in <i>italics</i>. An entry of your own in a cell (e.g. “Ben (holiday)”) only applies there.</p>
+    </section>
+
+    <section id="zeitstrahl">
+      <h2>Timeline (project plan)</h2>
+      <div class="shots">
+        <div class="window"><img class="zoomable" src="../img/ubuntu-11-projektplan.webp" data-light="img/ubuntu-11-projektplan.webp" data-dark="img/ubuntu-dark-11-projektplan.webp" alt="Project plan as a timeline" loading="lazy"></div>
+        <div class="phone"><img class="zoomable" src="../img/android-j-projektplan.webp" data-light="img/android-j-projektplan.webp" data-dark="img/android-dark-j-projektplan.webp" alt="Timeline on the phone" loading="lazy"></div>
+      </div>
+      <p>Tasks appear as bars, milestones as diamonds, the red line is today. <span class="tag">Ubuntu</span> “+ Task” and “+ Milestone” at the top; change name, from, to and colour in the list below. <span class="tag">Android</span> “+” at the top right or “Add task” below the list; tap a task to edit or delete it. Dates in the format DD.MM.YYYY.</p>
+    </section>
+
+    <section id="agil">
+      <h2>Agile working</h2>
+      <p>Boards in LiNotes are well suited to agile working. The basis is the Manifesto for Agile Software Development (2001) – here in full:</p>
+      <blockquote class="manifest">
+        <p><b>Manifesto for Agile Software Development</b></p>
+        <p>We are uncovering better ways of developing software by doing it and helping others do it. Through this work we have come to value:</p>
+        <p><b>Individuals and interactions</b> over processes and tools<br><b>Working software</b> over comprehensive documentation<br><b>Customer collaboration</b> over contract negotiation<br><b>Responding to change</b> over following a plan</p>
+        <p>That is, while there is value in the items on the right, we value the items on the left more.</p>
+        <p class="note">Kent Beck, Mike Beedle, Arie van Bennekum, Alistair Cockburn, Ward Cunningham, Martin Fowler, James Grenning, Jim Highsmith, Andrew Hunt, Ron Jeffries, Jon Kern, Brian Marick, Robert C. Martin, Steve Mellor, Ken Schwaber, Jeff Sutherland, Dave Thomas</p>
+        <p class="note">© 2001, the above authors<br>this declaration may be freely copied in any form,<br>but only in its entirety through this notice.</p>
+      </blockquote>
+      <p class="note">Source: <a href="https://agilemanifesto.org/">agilemanifesto.org</a></p>
+      <h3>The twelve principles – in brief</h3>
+      <ol>
+        <li>Deliver something useful early and regularly – that satisfies customers best.</li>
+        <li>Changing requirements are welcome, even late.</li>
+        <li>Deliver working results at short intervals, weeks rather than months.</li>
+        <li>Business people and developers work together daily.</li>
+        <li>Build projects around motivated people, give them the environment, support and trust.</li>
+        <li>Face-to-face conversation is the best way to inform.</li>
+        <li>Progress is measured by what works.</li>
+        <li>Keep a pace everyone can sustain indefinitely.</li>
+        <li>Technical excellence and good design make you agile.</li>
+        <li>Simplicity: maximising the amount of work not done.</li>
+        <li>Good solutions come from self-organising teams.</li>
+        <li>Pause regularly, improve together and adjust the approach.</li>
+      </ol>
+      <p class="note">Summarised in our own words; original wording: <a href="https://agilemanifesto.org/principles.html">agilemanifesto.org/principles.html</a></p>
+      <h3>Working agile with LiNotes</h3>
+      <p>A board shows the flow of work at a glance: columns like “Open – In progress – Done”, each card a small, self-contained piece of work. This is how the four values fit in:</p>
+      <ul>
+        <li><b>Individuals and interactions:</b> share boards, assign cards and bring people into the conversation with @-mentions – LiNotes supports the conversation but does not replace it.</li>
+        <li><b>Working software:</b> cut cards small and only move them to “Done” when it really works; in development projects, evidence proves it.</li>
+        <li><b>Customer collaboration:</b> invite the client to the board: they write wishes as cards and accept them themselves – e.g. agreed so that only they move cards to “Done”.</li>
+        <li><b>Responding to change:</b> change priorities and reorder cards at any time; plans show moved milestones openly instead of hiding them.</li>
+      </ul>
+      <p>Reflect regularly: create the report as a PDF and go through it together – what went well, what do we change? Documentation only as much as needed: impact analysis, verification and evidence are meant for projects that need them (e.g. under ISO 26262 or Automotive SPICE) – simple boards stay lean.</p>
+    </section>
+
+    <!-- TEILEN UND SICHERHEIT -->
+    <section id="verifizieren">
+      <h2>Verifying people</h2>
+      <p>Before you share anything, you verify each other once: Settings → “People” → tap the person <span class="tag">Ubuntu</span> account menu → People → “Verify”. Your device shows a code; a request appears on the other person’s device – type in the code there or scan the QR code. That way nobody, not even the server, can slip you a false key.</p>
+    </section>
+
+    <section id="teilen">
+      <h2>Sharing</h2>
+      <p>Long-press / right-click a note, folder, list, board or plan → <b>“Share …”</b> and choose people. A shared folder shares everything in it. If you remove someone, everything is re-encrypted automatically. You recognise shared items by the people icon.</p>
+    </section>
+
+    <section id="platz">
+      <h2>Space on the phone</h2>
+      <p>Settings → <b>“Keep notes”</b> sets how long the content of a note stays on the phone after it was last used (always, 90, 30, 7 days or only on the server). Per note: “More” → “Keep on device”. After that, the note is loaded encrypted when opened. Pinned notes, lists and boards always stay on the device.</p>
+    </section>
+
+    <section id="datenschutz">
+      <h2>What the server knows</h2>
+      <p>Everything – notes, lists, boards, plans, folder names, images and recordings – is encrypted on your device before it reaches the server. The server only sees that there are entries, how big they are and when they were changed – not what is in them. The apps contain no ads and no trackers.</p>
+    </section>
+
+    <!-- DARSTELLUNG -->
+    <section id="darstellung">
+      <h2>Text size, justified text, hyphenation</h2>
+      <div class="shots">
+        <div>
+          <p><span class="tag">Android</span> Settings → Appearance: <b>text size</b>, <b>justified text</b> and <b>hyphenation</b> (following the phone’s language). Titles and headings stay ragged right.</p>
+          <p><span class="tag">Ubuntu</span> Menu “…” next to list/gallery: <b>text size</b> (or <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd>) and <b>justified text</b>. There is no hyphenation on Ubuntu.</p>
+          <p>Everything applies per device – large and justified on the phone, compact on the laptop.</p>
+        </div>
+        <div class="phone"><img class="zoomable" src="../img/android-l-einstellungen.webp" data-light="img/android-l-einstellungen.webp" data-dark="img/android-dark-l-einstellungen.webp" alt="Settings on the phone" loading="lazy"></div>
+      </div>
+    </section>
+
+    <section id="fenster">
+      <h2>Note in its own window <span class="tag">Ubuntu</span></h2>
+      <p>Double-click a note in the list, right-click → “Open in its own window” or <kbd>Ctrl</kbd>+<kbd>O</kbd>. Changes sync in both directions immediately. <kbd>Ctrl</kbd>+<kbd>W</kbd> closes the note window.</p>
+    </section>
+
+    <section id="kuerzel">
+      <h2>Keyboard shortcuts <span class="tag">Ubuntu</span></h2>
+      <p>All shortcuts with a search field: <kbd>Ctrl</kbd>+<kbd>?</kbd> or <kbd>F1</kbd>. The most important ones:</p>
+      <ul>
+        <li><kbd>Ctrl</kbd>+<kbd>N</kbd> new note · <kbd>Ctrl</kbd>+<kbd>F</kbd> search · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate</li>
+        <li><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> bold, italic, underline · <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> highlight</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>H</kbd> / <kbd>J</kbd> title, heading, subheading</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> checklist · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> tick off</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> move line · <kbd>Ctrl</kbd>+<kbd>K</kbd> link to a note</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> divider · <kbd>Ctrl</kbd>+<kbd>P</kbd> print · <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd> lock locked notes</li>
+      </ul>
+      <p style="margin-top: 30px">Any questions left? <a href="index.html">To the home page</a> · <a href="server.html">Your own server</a></p>
+    </section>
+  </article>
+</div>
+</main>
+
+<footer>
+  <div class="wrap made">
+    <img src="../linotes.svg" alt="" width="34" height="34">
+    <p><b>Made in Schleswig-Holstein.</b><br>By Olaf Winkler – between the North Sea and the Baltic.</p>
+  </div>
+  <div class="wrap cols">
+    <div><h4>LiNotes</h4><p><a href="index.html">Home</a> · <a href="server.html">Your own server</a> · <a href="index.html#laden">Download</a></p></div>
+    <div><h4>Open source</h4><p>Every line of LiNotes is open to inspect: <a href="https://github.com/veritasX1/LiNotes">github.com/veritasX1/LiNotes</a> – with all versions to download. Free software under the <a href="https://github.com/veritasX1/LiNotes/blob/main/LICENSE">GPL-3.0</a>.</p>
+      <h4 style="margin-top: 14px">Privacy on this site</h4><p>No cookies, no content from third-party servers, no access logs.</p></div>
+    <div><h4>Note</h4><p>LiNotes is an independent project and has no connection to Apple Inc.</p></div>
+  </div>
+<!--lang--><div class="wrap lang-foot"><a href="../hilfe.html" hreflang="de" lang="de">DE</a><a href="hilfe.html" hreflang="en" lang="en" aria-current="true">EN</a><a href="../fr/hilfe.html" hreflang="fr" lang="fr">FR</a></div><!--/lang-->
+</footer>
+<script src="../site.js"></script>
+</body>
+</html>

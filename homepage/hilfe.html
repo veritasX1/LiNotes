@@ -7,6 +7,25 @@
 <meta name="description" content="Jede Funktion von LiNotes Schritt für Schritt erklärt – für Android und Ubuntu, mit Bildern.">
 <link rel="icon" href="linotes.svg" type="image/svg+xml">
 <link rel="stylesheet" href="site.css">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoft.goip.de/linotes/hilfe.html"><link rel="alternate" hreflang="en" href="https://lisoft.goip.de/linotes/en/hilfe.html"><link rel="alternate" hreflang="fr" href="https://lisoft.goip.de/linotes/fr/hilfe.html">
+<style>
+.apps .wrap { position: relative; }
+.lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
+.lang-switch a[aria-current], .lang-foot a[aria-current] { color: #fff; opacity: 1; font-weight: 600; }
+.lang-foot { display: flex; gap: 14px; justify-content: center; padding-top: 18px; font-size: 13px; }
+.lang-foot a[aria-current] { color: inherit; }
+@media (max-width: 900px) { .lang-switch { display: none; } }
+</style>
+<script>
+(function () {
+  try {
+    if (document.referrer.indexOf(location.origin) === 0) return;
+    var l = ((navigator.languages && navigator.languages[0]) || navigator.language || "").slice(0, 2).toLowerCase();
+    if (l === "de") return;
+    location.replace((l === "fr" ? "fr/" : "en/") + location.pathname.split("/").pop() + location.hash);
+  } catch (e) {}
+})();
+</script><!--/lang-->
 </head>
 <body>
 
@@ -18,6 +37,7 @@
     <a href="https://lisoft.goip.de/licida/">LiCida</a>
     <a href="https://lisoft.goip.de/lical/">LiCal</a>
     <a href="https://lisoft.goip.de/lidio/">LiDio</a>
+  <!--lang--><span class="lang-switch"><a href="hilfe.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/hilfe.html" hreflang="en" lang="en">EN</a><a href="fr/hilfe.html" hreflang="fr" lang="fr">FR</a></span><!--/lang-->
   </div>
 </div>
 
@@ -428,6 +448,7 @@
       <h4 style="margin-top: 14px">Datenschutz dieser Seite</h4><p>Keine Cookies, keine Inhalte von fremden Servern, keine Zugriffsprotokolle.</p></div>
     <div><h4>Hinweis</h4><p>LiNotes ist ein unabhängiges Projekt und steht in keiner Verbindung zu Apple Inc.</p></div>
   </div>
+<!--lang--><div class="wrap lang-foot"><a href="hilfe.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/hilfe.html" hreflang="en" lang="en">EN</a><a href="fr/hilfe.html" hreflang="fr" lang="fr">FR</a></div><!--/lang-->
 </footer>
 <script src="site.js"></script>
 </body>
