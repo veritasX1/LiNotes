@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -312,23 +314,23 @@ fun fileDetails(block: JSONObject): String {
     val amount = when {
         size >= 1024 * 1024 -> String.format(java.util.Locale.GERMANY, "%.1f MB", size / 1024.0 / 1024.0)
         size >= 1024 -> "${Math.round(size / 1024.0)} KB"
-        else -> "$size Bytes"
+        else -> tr("{size} Bytes", "size" to size)
     }
     val mime = block.optString("m")
     val name = block.optString("n")
     if (mime.startsWith("audio/") && block.has("d")) return "${AudioNotes.durationText(block.optDouble("d"))} · $amount"
     val kind = when {
-        mime == "application/pdf" -> "PDF-Dokument"
-        mime.startsWith("image/") -> "Bild"
-        mime.startsWith("audio/") -> "Audio"
-        mime.startsWith("video/") -> "Video"
-        mime.startsWith("text/") -> "Textdokument"
-        "wordprocessing" in mime || "msword" in mime || "opendocument.text" in mime -> "Textdokument"
-        "spreadsheet" in mime || "ms-excel" in mime -> "Tabelle"
-        "presentation" in mime || "powerpoint" in mime -> "Präsentation"
-        "zip" in mime -> "ZIP-Archiv"
-        '.' in name -> name.substringAfterLast('.').uppercase() + "-Datei"
-        else -> "Datei"
+        mime == "application/pdf" -> tr("PDF-Dokument")
+        mime.startsWith("image/") -> tr("Bild")
+        mime.startsWith("audio/") -> tr("Audio")
+        mime.startsWith("video/") -> tr("Video")
+        mime.startsWith("text/") -> tr("Textdokument")
+        "wordprocessing" in mime || "msword" in mime || "opendocument.text" in mime -> tr("Textdokument")
+        "spreadsheet" in mime || "ms-excel" in mime -> tr("Tabelle")
+        "presentation" in mime || "powerpoint" in mime -> tr("Präsentation")
+        "zip" in mime -> tr("ZIP-Archiv")
+        '.' in name -> tr("{ext}-Datei", "ext" to name.substringAfterLast('.').uppercase())
+        else -> tr("Datei")
     }
     return "$kind · $amount"
 }
@@ -1582,7 +1584,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
         if (rows.size > shown.size) {
             val more = TextPaint(cell).apply { color = colors.secondary }
-            canvas.drawText("… ${rows.size - shown.size} weitere Zeilen", 6 * density, height - rowHeight / 2f + cell.textSize / 3f, more)
+            canvas.drawText(tr("… {count} weitere Zeilen", "count" to (rows.size - shown.size)), 6 * density, height - rowHeight / 2f + cell.textSize / 3f, more)
         }
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
@@ -1672,8 +1674,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
         val label = when {
             link -> block.optString("n").ifEmpty { block.optString("dm") }
-            AudioNotes.isAudio(block) -> "Audioaufnahme"
-            else -> block.optString("n", "Datei")
+            AudioNotes.isAudio(block) -> tr("Audioaufnahme")
+            else -> block.optString("n", tr("Datei"))
         }
         val name = android.text.TextUtils.ellipsize(label, title, maxText,
             if (link) android.text.TextUtils.TruncateAt.END else android.text.TextUtils.TruncateAt.MIDDLE).toString()

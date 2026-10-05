@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -38,7 +40,7 @@ fun LiNotesApp(state: AppState) {
             if (signedOut && state.signedIn) {
                 state.sync.signOut()
                 state.signedIn = false
-                state.showToast("Bitte melde dich erneut an.")
+                state.showToast(tr("Bitte melde dich erneut an."))
             }
         }
         // Unlocked notes lock again after a few minutes without use (like Apple).
@@ -96,10 +98,10 @@ fun LiNotesApp(state: AppState) {
                         if (state.tab == 1) LaunchedEffect(revision) { state.sync.listsSeen = io.github.veritasx1.linotes.data.Model.now() + 1 }
                         val openItems = if (state.tab == 1) 0 else state.sync.newListItems()
                         TabBar(listOf(
-                            TabItem(Glyph.Notes, "Notizen"),
-                            TabItem(Glyph.Cart, "Listen", openItems),
-                            TabItem(Glyph.Board, "Aufgaben"),
-                            TabItem(Glyph.Table, "Pläne"),
+                            TabItem(Glyph.Notes, tr("Notizen")),
+                            TabItem(Glyph.Cart, tr("Listen"), openItems),
+                            TabItem(Glyph.Board, tr("Aufgaben")),
+                            TabItem(Glyph.Table, tr("Pläne")),
                         ), state.tab) { state.openTab(it) }
                     }
                 }

@@ -25,6 +25,7 @@ from __future__ import annotations
 import collections, itertools, re
 from collections.abc import Sequence
 from typing import Optional, Union
+from .i18n import _
 
 
 # ---- QR Code symbol class ----
@@ -93,7 +94,7 @@ class QrCode:
 			if version >= maxversion:  # All versions in the range could not fit the given data
 				msg: str = "Segment too long"
 				if datausedbits is not None:
-					msg = f"Data length = {datausedbits} bits, Max capacity = {datacapacitybits} bits"
+					msg = _("Data length = {datausedbits} bits, Max capacity = {datacapacitybits} bits", datausedbits=datausedbits, datacapacitybits=datacapacitybits)
 				raise DataTooLongError(msg)
 		assert datausedbits is not None
 		

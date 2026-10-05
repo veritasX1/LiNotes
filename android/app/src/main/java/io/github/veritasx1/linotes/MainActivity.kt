@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Intent
 import android.os.Bundle
 import android.Manifest
@@ -42,7 +44,7 @@ class MainActivity : FragmentActivity() {
         val mime = contentResolver.getType(uri) ?: "image/jpeg"
         // Read in the background: photos from a cloud gallery can take a while.
         readInBackground({ contentResolver.openInputStream(uri)?.use { it.readBytes() } }) { bytes ->
-            if (bytes != null) callback(bytes, mime) else state.toastLater("Das Foto ließ sich nicht lesen.")
+            if (bytes != null) callback(bytes, mime) else state.toastLater(tr("Das Foto ließ sich nicht lesen."))
         }
     }
 
@@ -59,7 +61,7 @@ class MainActivity : FragmentActivity() {
         val callback = pendingFile ?: return@registerForActivityResult
         pendingFile = null
         if (uri == null) return@registerForActivityResult
-        var name = "Datei"
+        var name = tr("Datei")
         var size = -1L
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -68,13 +70,13 @@ class MainActivity : FragmentActivity() {
             }
         }
         if (size > MAX_ATTACHMENT) {
-            state.toastLater("„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
+            state.toastLater(tr("„{name}“ ist zu groß (höchstens {value} MB).", "name" to name, "value" to (MAX_ATTACHMENT / 1024 / 1024)))
             return@registerForActivityResult
         }
         val mime = contentResolver.getType(uri) ?: "application/octet-stream"
         readInBackground({ contentResolver.openInputStream(uri)?.use { it.readBytes() } }) { bytes ->
             if (bytes == null || bytes.size > MAX_ATTACHMENT) {
-                state.toastLater(if (bytes == null) "„$name“ ließ sich nicht lesen." else "„$name“ ist zu groß (höchstens ${MAX_ATTACHMENT / 1024 / 1024} MB).")
+                state.toastLater(if (bytes == null) tr("„{name}“ ließ sich nicht lesen.", "name" to name) else tr("„{name}“ ist zu groß (höchstens {value} MB).", "name" to name, "value" to (MAX_ATTACHMENT / 1024 / 1024)))
             } else callback(name, mime, bytes)
         }
     }
@@ -127,7 +129,7 @@ class MainActivity : FragmentActivity() {
             BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         else BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         if (BiometricManager.from(this).canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
-            state.toastLater("Auf diesem Handy ist keine Displaysperre eingerichtet.")
+            state.toastLater(tr("Auf diesem Handy ist keine Displaysperre eingerichtet."))
             return done(false)
         }
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
@@ -135,7 +137,7 @@ class MainActivity : FragmentActivity() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = done(false)
         })
         prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle(title)
-            .setSubtitle("Fingerabdruck, Gesicht, PIN oder Muster").setAllowedAuthenticators(allowed).build())
+            .setSubtitle(tr("Fingerabdruck, Gesicht, PIN oder Muster")).setAllowedAuthenticators(allowed).build())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,7 +152,7 @@ class MainActivity : FragmentActivity() {
         state.takePhoto = { callback ->
             // The app declares the camera permission (QR codes), so the camera app needs it granted too.
             state.requestCamera { granted ->
-                if (!granted) state.toastLater("Ohne Kamera-Erlaubnis kein Foto.")
+                if (!granted) state.toastLater(tr("Ohne Kamera-Erlaubnis kein Foto."))
                 else {
                     val file = java.io.File(java.io.File(cacheDir, "photos").apply { mkdirs() }, "foto-${System.currentTimeMillis()}.jpg")
                     pendingPhoto = file to callback
@@ -169,7 +171,7 @@ class MainActivity : FragmentActivity() {
             try {
                 startActivity(android.content.Intent.createChooser(intent, file.name))
             } catch (error: android.content.ActivityNotFoundException) {
-                state.toastLater("Keine App zum Öffnen von „${file.name}“.")
+                state.toastLater(tr("Keine App zum Öffnen von „{name}“.", "name" to file.name))
             }
         }
         state.authenticate = { title, done -> authenticate(title, done) }

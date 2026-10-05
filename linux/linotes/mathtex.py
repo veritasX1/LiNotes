@@ -1,3 +1,4 @@
+from .i18n import _
 """Formulas in LaTeX notation, set the way TeX does it – a small, offline part of TeX: fractions, roots,
 indices, Greek letters, sums and integrals with limits, growing brackets, matrices, cases, aligned
 equations, accents and the usual symbols. No library: the layout here gives drawing steps (text,

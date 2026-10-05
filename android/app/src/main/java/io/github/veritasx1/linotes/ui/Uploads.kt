@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,7 +30,7 @@ fun UploadRow(upload: AppState.Upload, modifier: Modifier = Modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GlyphIcon(Glyph.Export, colors.accentText, 18.dp)
             Spacer(Modifier.width(8.dp))
-            Text("„${upload.name}“ wird hochgeladen", style = Type.subheadline, color = colors.label,
+            Text(tr("„{name}“ wird hochgeladen", "name" to upload.name), style = Type.subheadline, color = colors.label,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
             Text("${(upload.progress * 100).toInt()} %", style = Type.subheadline, color = colors.secondary)

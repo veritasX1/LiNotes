@@ -3,6 +3,7 @@
 import datetime
 import re
 import time
+from .i18n import _
 
 
 # --- notes ------------------------------------------------------
@@ -27,13 +28,13 @@ def blocks_title(blocks):
     return ""
 
 
-def note_title(note, locked_label="Gesperrte Notiz"):
+def note_title(note, locked_label=_("Gesperrte Notiz")):
     """Locked notes keep their title visible, like in Apple's Notes (only the
     content is behind the notes password)."""
     data = note["data"]
     if data.get("enc"):
         return data.get("title") or locked_label
-    return blocks_title(note_blocks(note)) or data.get("title") or "Neue Notiz"
+    return blocks_title(note_blocks(note)) or data.get("title") or _("Neue Notiz")
 
 
 def note_preview(note):
@@ -74,7 +75,7 @@ def link_target(span_name):
 
 # --- templates (Vorlagen) ---------------------------------------------------
 
-WEEKDAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+WEEKDAY_NAMES = [_("Montag"), _("Dienstag"), _("Mittwoch"), _("Donnerstag"), _("Freitag"), _("Samstag"), _("Sonntag")]
 PLACEHOLDER = re.compile(r"\{\{(Datum|Uhrzeit|Wochentag)\}\}")
 
 
@@ -84,19 +85,19 @@ def _t(kind, text=""):
 
 # Shipped templates (the same in Android's Model.BUILTIN_TEMPLATES): key, name, blocks.
 BUILTIN_TEMPLATES = [
-    ("besprechung", "Besprechung", [
-        _t("title", "Besprechung {{Datum}}"), _t("body", "{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr"),
-        _t("heading", "Teilnehmer"), _t("bullet"), _t("heading", "Themen"), _t("number"),
-        _t("heading", "Beschlüsse"), _t("body"), _t("heading", "Aufgaben"), _t("check")]),
-    ("protokoll", "Protokoll", [
-        _t("title", "Protokoll {{Datum}}"), _t("body", "Ort: "), _t("body", "Anwesend: "),
-        _t("heading", "Verlauf"), _t("body"), _t("heading", "Ergebnisse"), _t("bullet")]),
-    ("reise", "Reisecheckliste", [
-        _t("title", "Packliste"), _t("heading", "Dokumente"), _t("check", "Ausweis oder Reisepass"), _t("check", "Tickets"),
-        _t("check", "Versicherungskarte"), _t("heading", "Kleidung"), _t("check"), _t("heading", "Technik"),
-        _t("check", "Ladegerät"), _t("check", "Kopfhörer"), _t("heading", "Vor der Abreise"), _t("check", "Pflanzen gießen"),
-        _t("check", "Fenster schließen")]),
-    ("tagebuch", "Tagebuch", [_t("title", "{{Wochentag}}, {{Datum}}"), _t("body")]),
+    ("besprechung", _("Besprechung"), [
+        _t("title", _("Besprechung {{Datum}}")), _t("body", _("{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr")),
+        _t("heading", _("Teilnehmer")), _t("bullet"), _t("heading", _("Themen")), _t("number"),
+        _t("heading", _("Beschlüsse")), _t("body"), _t("heading", "Aufgaben"), _t("check")]),
+    ("protokoll", _("Protokoll"), [
+        _t("title", _("Protokoll {{Datum}}")), _t("body", _("Ort: ")), _t("body", _("Anwesend: ")),
+        _t("heading", _("Verlauf")), _t("body"), _t("heading", _("Ergebnisse")), _t("bullet")]),
+    ("reise", _("Reisecheckliste"), [
+        _t("title", _("Packliste")), _t("heading", _("Dokumente")), _t("check", _("Ausweis oder Reisepass")), _t("check", _("Tickets")),
+        _t("check", _("Versicherungskarte")), _t("heading", _("Kleidung")), _t("check"), _t("heading", _("Technik")),
+        _t("check", _("Ladegerät")), _t("check", _("Kopfhörer")), _t("heading", _("Vor der Abreise")), _t("check", _("Pflanzen gießen")),
+        _t("check", _("Fenster schließen"))]),
+    ("tagebuch", _("Tagebuch"), [_t("title", _("{{Wochentag}}, {{Datum}}")), _t("body")]),
 ]
 
 
@@ -252,7 +253,7 @@ def created(obj):
     return obj["data"].get("created") or modified(obj)
 
 
-NOTE_SORTS = (("modified", "Bearbeitungsdatum"), ("created", "Erstellungsdatum"), ("title", "Titel"))
+NOTE_SORTS = (("modified", _("Bearbeitungsdatum")), ("created", _("Erstellungsdatum")), ("title", _("Titel")))
 
 
 def sort_notes(notes, order="modified"):
@@ -267,8 +268,8 @@ def sort_notes(notes, order="modified"):
             part.sort(key=lambda note: note_title(note).casefold())
         else:
             part.sort(key=stamp, reverse=True)
-    return [(note, "Angeheftet", stamp(note)) for note in pinned] + \
-        [(note, ("Notizen" if pinned else "") if order == "title" else date_group(stamp(note)), stamp(note))
+    return [(note, _("Angeheftet"), stamp(note)) for note in pinned] + \
+        [(note, (_("Notizen") if pinned else "") if order == "title" else date_group(stamp(note)), stamp(note))
          for note in others]
 
 
@@ -278,24 +279,24 @@ def date_group(timestamp, today=None):
     day = datetime.date.fromtimestamp(timestamp)
     delta = (today - day).days
     if delta <= 0:
-        return "Heute"
+        return _("Heute")
     if delta == 1:
-        return "Gestern"
+        return _("Gestern")
     if delta < 7:
-        return "Vorherige 7 Tage"
+        return _("Vorherige 7 Tage")
     if delta < 30:
-        return "Vorherige 30 Tage"
+        return _("Vorherige 30 Tage")
     if day.year == today.year:
         return MONTHS[day.month - 1]
     return f"{MONTHS[day.month - 1]} {day.year}"
 
 
 MONTHS = [
-    "Januar", "Februar", "März", "April", "Mai", "Juni",
-    "Juli", "August", "September", "Oktober", "November", "Dezember",
+    _("Januar"), _("Februar"), _("März"), _("April"), _("Mai"), _("Juni"),
+    _("Juli"), _("August"), _("September"), _("Oktober"), _("November"), _("Dezember"),
 ]
 
-WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+WEEKDAYS = [_("Montag"), _("Dienstag"), _("Mittwoch"), _("Donnerstag"), _("Freitag"), _("Samstag"), _("Sonntag")]
 
 
 def short_date(timestamp):
@@ -306,7 +307,7 @@ def short_date(timestamp):
     if delta <= 0:
         return moment.strftime("%H:%M")
     if delta == 1:
-        return "Gestern"
+        return _("Gestern")
     if delta < 7:
         return WEEKDAYS[moment.weekday()]
     return moment.strftime("%d.%m.%y")
@@ -314,7 +315,7 @@ def short_date(timestamp):
 
 def long_date(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
-    return f"{moment.day}. {MONTHS[moment.month - 1]} {moment.year} um {moment:%H:%M}"
+    return _("{day}. {value} {year} um {moment:%H:%M}", day=moment.day, value=MONTHS[moment.month - 1], year=moment.year, moment=moment)
 
 
 def now():
@@ -415,7 +416,7 @@ def folder_path(sync, folder):
 # --- board cards ------------------------------------------------
 
 # Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title.
-PRIORITIES = [(None, "Keine"), ("niedrig", "Niedrig"), ("mittel", "Mittel"), ("hoch", "Hoch")]
+PRIORITIES = [(None, _("Keine")), ("niedrig", _("Niedrig")), ("mittel", _("Mittel")), ("hoch", _("Hoch"))]
 PRIORITY_MARKS = {"niedrig": "!", "mittel": "!!", "hoch": "!!!"}
 
 
@@ -520,9 +521,9 @@ def moment_label(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
     delta = (datetime.date.today() - moment.date()).days
     if delta == 0:
-        return f"heute, {moment:%H:%M}"
+        return _("heute, {time}", time=f"{moment:%H:%M}")
     if delta == 1:
-        return f"gestern, {moment:%H:%M}"
+        return _("gestern, {time}", time=f"{moment:%H:%M}")
     return moment.strftime("%d.%m.%Y")
 
 
@@ -532,11 +533,11 @@ def card_dates(card, dev=False):
     data = card["data"]
     parts = []
     if data.get("created"):
-        parts.append("Erstellt " + moment_label(data["created"]))
+        parts.append(_("Erstellt ") + moment_label(data["created"]))
     if dev and card.get("updated") and (not data.get("created") or card["updated"] - data["created"] > 60):
-        parts.append("Bearbeitet " + moment_label(card["updated"]))
+        parts.append(_("Bearbeitet ") + moment_label(card["updated"]))
     if data.get("done_at"):
-        parts.append("Erledigt " + moment_label(data["done_at"]))
+        parts.append(_("Erledigt ") + moment_label(data["done_at"]))
     return " · ".join(parts)
 
 
@@ -554,7 +555,7 @@ def default_board(user_id):
     return f"board-{user_id}"
 
 
-DEFAULT_COLUMNS = [("offen", "Offen"), ("arbeit", "In Arbeit"), ("fertig", "Erledigt")]
+DEFAULT_COLUMNS = [("offen", _("Offen")), ("arbeit", _("In Arbeit")), ("fertig", _("Erledigt"))]
 
 
 def ensure_defaults(sync):

@@ -15,6 +15,7 @@ from . import model
 from . import smoothscroll
 from .editor import NoteEditor
 from .icons import icon_menu_button
+from .i18n import _
 
 
 class NoteWindow(Adw.ApplicationWindow):
@@ -41,7 +42,7 @@ class NoteWindow(Adw.ApplicationWindow):
         header = Adw.HeaderBar()
         self.title = Adw.WindowTitle()
         header.set_title_widget(self.title)
-        header.pack_end(icon_menu_button("format", "Format", main.build_format_popover(self.editor)))
+        header.pack_end(icon_menu_button("format", _("Format"), main.build_format_popover(self.editor)))
 
         self.date = Gtk.Label()
         self.date.add_css_class("note-date")

@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -124,7 +126,7 @@ fun NavBar(
                 Box {
                     if (onBack != null) {
                         Row(
-                            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack, onClickLabel = "Zurück", role = Role.Button)
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack, onClickLabel = tr("Zurück"), role = Role.Button)
                                 .padding(start = 6.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -287,7 +289,7 @@ fun GroupRow(
 // ================================================================
 
 @Composable
-fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = "Suchen", modifier: Modifier = Modifier,
+fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = tr("Suchen"), modifier: Modifier = Modifier,
                 focus: androidx.compose.ui.focus.FocusRequester? = null) {
     val colors = palette
     Row(
@@ -438,7 +440,7 @@ fun AlertDialog(
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(
@@ -507,7 +509,7 @@ fun ActionSheet(title: String?, actions: List<SheetAction>, onDismiss: () -> Uni
                     Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(14.dp)).background(sheet).clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Abbrechen", style = Type.headline.copy(fontSize = Type.body.fontSize * 1.1f), color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.headline.copy(fontSize = Type.body.fontSize * 1.1f), color = colors.accentText)
                 }
             }
         }
@@ -556,7 +558,7 @@ fun InlineCalendar(selected: java.time.LocalDate?, onPick: (java.time.LocalDate)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("$monthName ${month.year}", style = Type.headline, color = colors.label, modifier = Modifier.weight(1f).padding(start = 4.dp))
             for ((glyph, step) in listOf(Glyph.Back to -1L, Glyph.Chevron to 1L)) {
-                Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClickLabel = if (step < 0) "Vormonat" else "Nächster Monat") {
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClickLabel = if (step < 0) tr("Vormonat") else tr("Nächster Monat")) {
                     month = month.plusMonths(step)
                 }, contentAlignment = Alignment.Center) {
                     GlyphIcon(glyph, colors.accentText, 20.dp)
@@ -564,7 +566,7 @@ fun InlineCalendar(selected: java.time.LocalDate?, onPick: (java.time.LocalDate)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-            for (name in listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")) {
+            for (name in listOf(tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa"), tr("So"))) {
                 Text(name, style = Type.caption, color = colors.secondary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }

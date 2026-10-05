@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,7 +62,7 @@ fun MathEditorContent(block: JSONObject, onDone: (JSONObject?) -> Unit, onCancel
     run {
         Column(Modifier.width(330.dp).clip(RoundedCornerShape(14.dp)).background(if (colors.dark) Color(0xFF2C2C2E) else Color(0xFFF2F2F2))) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-                Text("Formel (LaTeX)", style = Type.headline, color = colors.label)
+                Text(tr("Formel (LaTeX)"), style = Type.headline, color = colors.label)
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(colors.surface).padding(8.dp)) {
                     if (source.isEmpty()) Text("z. B. \\frac{a}{b}", style = Type.subheadline, color = colors.tertiary, fontFamily = FontFamily.Monospace)
@@ -95,22 +97,22 @@ fun MathEditorContent(block: JSONObject, onDone: (JSONObject?) -> Unit, onCancel
                 }
                 if (formula?.error == true) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Rot markierte Teile kennt LiNotes nicht.", style = Type.caption, color = colors.red)
+                    Text(tr("Rot markierte Teile kennt LiNotes nicht."), style = Type.caption, color = colors.red)
                 }
             }
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp), horizontalArrangement = Arrangement.Center) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable { onDone(null) }, contentAlignment = Alignment.Center) {
-                    Text("Löschen", style = Type.body, color = colors.red)
+                    Text(tr("Löschen"), style = Type.body, color = colors.red)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable(onClick = onCancel), contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable { onDone(JSONObject(block.toString()).put("x", source)) },
                     contentAlignment = Alignment.Center) {
-                    Text("Fertig", style = Type.headline, color = colors.accentText)
+                    Text(tr("Fertig"), style = Type.headline, color = colors.accentText)
                 }
             }
         }

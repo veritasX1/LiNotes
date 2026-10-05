@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -79,13 +81,13 @@ fun FoldersScreen(state: AppState, revision: Long) {
     fun count(predicate: (SyncObject) -> Boolean) = live.count(predicate)
 
     LargeTitleScreen(
-        title = "Ordner",
+        title = tr("Ordner"),
         actions = {
             // Like Apple's "Lock Now": shown while locked notes are open.
-            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Entsperrte Notizen jetzt sperren") { state.lockAll() }
-            BarButton(Glyph.Gear, "Einstellungen") { state.push(Route.Settings) }
-            BarButton(Glyph.FolderPlus, "Neuer Ordner") { newFolder = true }
-            BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, null) }
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, tr("Entsperrte Notizen jetzt sperren")) { state.lockAll() }
+            BarButton(Glyph.Gear, tr("Einstellungen")) { state.push(Route.Settings) }
+            BarButton(Glyph.FolderPlus, tr("Neuer Ordner")) { newFolder = true }
+            BarButton(Glyph.Compose, tr("Neue Notiz")) { newNote(state, null) }
         },
     ) {
         item(key = "search") {
@@ -94,19 +96,19 @@ fun FoldersScreen(state: AppState, revision: Long) {
         if (keyfileHint) item(key = "keyfile-hint") {
             // A friendly reminder after a few days of use – not at the first start (Tante Erna).
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(16.dp)) {
-                Text("Sichere dein Konto", style = Type.headline, color = colors.label)
-                Text("Mit einer Schlüsseldatei kommst du an deine Notizen, auch wenn dein Handy einmal verloren geht.",
+                Text(tr("Sichere dein Konto"), style = Type.headline, color = colors.label)
+                Text(tr("Mit einer Schlüsseldatei kommst du an deine Notizen, auch wenn dein Handy einmal verloren geht."),
                     style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
                 Row {
-                    TextButton("Jetzt sichern", bold = true) { keyfile = true }
-                    TextButton("Später", color = colors.secondary) { sync.snoozeKeyfileHint(); keyfileHint = false }
+                    TextButton(tr("Jetzt sichern"), bold = true) { keyfile = true }
+                    TextButton(tr("Später"), color = colors.secondary) { sync.snoozeKeyfileHint(); keyfileHint = false }
                 }
             }
         }
         if (query.isNotBlank()) {
             // The search also finds what is in the archive (marked "im Archiv").
             val hits = kept.filter { Model.text(it).contains(query, true) || Model.title(it).contains(query, true) }
-            section("hits", header = "${hits.size} Treffer") {
+            section("hits", header = tr("{size} Treffer", "size" to hits.size)) {
                 hits.sortedByDescending { Model.modified(it) }.forEachIndexed { index, note ->
                     NoteRow(state, note, index < hits.lastIndex) { state.push(Route.Editor(note.id)) }
                 }
@@ -114,29 +116,29 @@ fun FoldersScreen(state: AppState, revision: Long) {
             return@LargeTitleScreen
         }
         // Drag a folder onto the heading to take it to the top level.
-        section("mine", header = "Meine Notizen", headerDrop = Pair({ it.startsWith("folder:") }, { dropOnFolder(state, it, null) })) {
-            GroupRow("Alle Notizen", Glyph.Notes, detail = "${live.size}") { state.push(Route.NoteList("all")) }
+        section("mine", header = tr("Meine Notizen"), headerDrop = Pair({ it.startsWith("folder:") }, { dropOnFolder(state, it, null) })) {
+            GroupRow(tr("Alle Notizen"), Glyph.Notes, detail = "${live.size}") { state.push(Route.NoteList("all")) }
             folderTree(sync, folders.filter { it.share == null }).forEach { (folder, depth) ->
-                GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder, detail = "${count { it.data.optString("folder") == folder.id }}",
+                GroupRow(folder.data.optString("name", tr("Ordner")), Glyph.Folder, detail = "${count { it.data.optString("folder") == folder.id }}",
                     indent = (20 * depth).dp, dragPayload = "folder:${folder.id}",
                     modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
                     onLongClick = { folderMenu = folder }) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
-            GroupRow("Gesperrt", Glyph.Lock, detail = "${count { it.data.has("enc") }}") { state.push(Route.NoteList("locked")) }
-            if (archivedNotes.isNotEmpty()) GroupRow("Archiv", Glyph.Archive, detail = "${archivedNotes.size}") { state.push(Route.NoteList("archive")) }
-            GroupRow("Zuletzt gelöscht", Glyph.Trash, detail = "${notes.count { it.data.has("trashed") }}", divider = false) {
+            GroupRow(tr("Gesperrt"), Glyph.Lock, detail = "${count { it.data.has("enc") }}") { state.push(Route.NoteList("locked")) }
+            if (archivedNotes.isNotEmpty()) GroupRow(tr("Archiv"), Glyph.Archive, detail = "${archivedNotes.size}") { state.push(Route.NoteList("archive")) }
+            GroupRow(tr("Zuletzt gelöscht"), Glyph.Trash, detail = "${notes.count { it.data.has("trashed") }}", divider = false) {
                 state.push(Route.NoteList("trash"))
             }
         }
         val shared = folders.filter { it.share != null }
         val loose = live.filter { it.share != null && sync.get(it.data.optString("folder")) == null }
-        if (shared.isNotEmpty() || loose.isNotEmpty()) section("shared", header = "Geteilt", footer = "Geteilte Ordner und Notizen – Ende-zu-Ende verschlüsselt.") {
-            if (loose.isNotEmpty()) GroupRow("Mit mir geteilt", Glyph.Person, detail = "${loose.size}", divider = shared.isNotEmpty()) {
+        if (shared.isNotEmpty() || loose.isNotEmpty()) section("shared", header = tr("Geteilt"), footer = tr("Geteilte Ordner und Notizen – Ende-zu-Ende verschlüsselt.")) {
+            if (loose.isNotEmpty()) GroupRow(tr("Mit mir geteilt"), Glyph.Person, detail = "${loose.size}", divider = shared.isNotEmpty()) {
                 state.push(Route.NoteList("shared-notes"))
             }
             val sharedTree = folderTree(sync, shared)
             sharedTree.forEachIndexed { index, (folder, depth) ->
-                GroupRow(folder.data.optString("name", "Ordner"), if (depth == 0) Glyph.FolderShared else Glyph.Folder,
+                GroupRow(folder.data.optString("name", tr("Ordner")), if (depth == 0) Glyph.FolderShared else Glyph.Folder,
                     detail = "${count { it.data.optString("folder") == folder.id }}", indent = (20 * depth).dp,
                     dragPayload = "folder:${folder.id}",
                     modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
@@ -148,7 +150,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
         if (tags.isNotEmpty()) {
             item(key = "tags") {
                 Column(Modifier.padding(horizontal = 16.dp).padding(top = 18.dp)) {
-                    Text("Tags", style = Type.title3.copy(fontWeight = FontWeight.Bold), color = colors.label, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+                    Text(tr("Tags"), style = Type.title3.copy(fontWeight = FontWeight.Bold), color = colors.label, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         tags.forEach { (tag, _) ->
                             Text("#$tag", style = Type.subheadline, color = colors.label,
@@ -174,13 +176,13 @@ fun FoldersScreen(state: AppState, revision: Long) {
     folderMenu?.let { folder ->
         val protected = folder.id == Model.privateFolder(sync.userId)
         ActionSheet(folder.data.optString("name"), buildList {
-            add(SheetAction("Umbenennen") { rename = folder })
-            add(SheetAction("Teilen …") { state.push(Route.Share(folder.id)) })
-            add(SheetAction("Neuer Unterordner …") { newSubfolder = folder })
-            add(SheetAction("Neue Liste hier …") { newHere = folder to "list" })
-            add(SheetAction("Neues Board hier …") { newHere = folder to "board" })
-            add(SheetAction("Verschieben nach …") { movingFolder = folder })
-            if (!protected) add(SheetAction("Ordner löschen", destructive = true) {
+            add(SheetAction(tr("Umbenennen")) { rename = folder })
+            add(SheetAction(tr("Teilen …")) { state.push(Route.Share(folder.id)) })
+            add(SheetAction(tr("Neuer Unterordner …")) { newSubfolder = folder })
+            add(SheetAction(tr("Neue Liste hier …")) { newHere = folder to "list" })
+            add(SheetAction(tr("Neues Board hier …")) { newHere = folder to "board" })
+            add(SheetAction(tr("Verschieben nach …")) { movingFolder = folder })
+            if (!protected) add(SheetAction(tr("Ordner löschen"), destructive = true) {
                 // The folder, its subfolders and all their notes (notes go to "Zuletzt gelöscht").
                 val doomed = folderDescendants(sync, folder.id) + folder.id
                 for (note in sync.all("note")) if (note.data.optString("folder") in doomed) sync.update(note.id) { it.put("trashed", Model.now()) }
@@ -192,7 +194,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
         }) { folderMenu = null }
     }
     rename?.let { folder ->
-        AlertDialog("Ordner umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", folder.data.optString("name"))),
+        AlertDialog(tr("Ordner umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), folder.data.optString("name"))),
             onDismiss = { rename = null }) { values ->
             if (values[0].isNotBlank()) sync.update(folder.id) { it.put("name", values[0].trim()) }
             rename = null
@@ -202,8 +204,8 @@ fun FoldersScreen(state: AppState, revision: Long) {
 
 @Composable
 fun FolderDialog(onDismiss: () -> Unit, onCreate: (String, Boolean) -> Unit) {
-    AlertDialog("Neuer Ordner", "Neue Ordner sind privat. Über „Teilen“ kannst du sie freigeben.", "Sichern",
-        fields = listOf(AlertField("Name")), onDismiss = onDismiss) { values ->
+    AlertDialog(tr("Neuer Ordner"), tr("Neue Ordner sind privat. Über „Teilen“ kannst du sie freigeben."), tr("Sichern"),
+        fields = listOf(AlertField(tr("Name"))), onDismiss = onDismiss) { values ->
         if (values[0].isNotBlank()) onCreate(values[0].trim(), false) else onDismiss()
     }
 }
@@ -242,8 +244,8 @@ fun TemplateSheet(state: AppState, folderKey: String?, onDone: () -> Unit) {
     val sync = state.sync
     val own = sync.all("note").filter { it.data.optBoolean("template") && !it.data.has("trashed") && !it.data.has("enc") }
         .sortedBy { Model.title(it).lowercase() }
-    ActionSheet("Neue Notiz aus Vorlage", own.map { note ->
-        SheetAction(Model.title(note).ifEmpty { "Vorlage" }) { newNoteFromTemplate(state, folderKey, Model.blocks(note).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }, note) }
+    ActionSheet(tr("Neue Notiz aus Vorlage"), own.map { note ->
+        SheetAction(Model.title(note).ifEmpty { tr("Vorlage") }) { newNoteFromTemplate(state, folderKey, Model.blocks(note).let { a -> (0 until a.length()).map { a.getJSONObject(it) } }, note) }
     } + Model.BUILTIN_TEMPLATES.map { (_, name, blocks) ->
         SheetAction(name) { newNoteFromTemplate(state, folderKey, blocks, null) }
     }, onDone)
@@ -251,9 +253,9 @@ fun TemplateSheet(state: AppState, folderKey: String?, onDone: () -> Unit) {
 
 fun templateAction(state: AppState, note: SyncObject): SheetAction {
     val template = note.data.optBoolean("template")
-    return SheetAction(if (template) "Nicht mehr als Vorlage" else "Als Vorlage verwenden") {
+    return SheetAction(if (template) tr("Nicht mehr als Vorlage") else tr("Als Vorlage verwenden")) {
         state.sync.update(note.id) { if (template) it.remove("template") else it.put("template", true) }
-        state.toastLater(if (template) "Keine Vorlage mehr" else "Als Vorlage gemerkt – „…“ → „Neue Notiz aus Vorlage“")
+        state.toastLater(if (template) tr("Keine Vorlage mehr") else tr("Als Vorlage gemerkt – „…“ → „Neue Notiz aus Vorlage“"))
     }
 }
 
@@ -263,22 +265,22 @@ fun templateAction(state: AppState, note: SyncObject): SheetAction {
 
 fun notesFor(sync: SyncEngine, key: String): Pair<List<SyncObject>, String> {
     val notes = sync.all("note")
-    if (key == "trash") return notes.filter { it.data.has("trashed") } to "Zuletzt gelöscht"
+    if (key == "trash") return notes.filter { it.data.has("trashed") } to tr("Zuletzt gelöscht")
     val kept = notes.filter { !it.data.has("trashed") }
-    if (key == "archive") return kept.filter { Model.archived(it) } to "Archiv"
+    if (key == "archive") return kept.filter { Model.archived(it) } to tr("Archiv")
     val live = kept.filter { !Model.archived(it) }
     return when {
-        key == "locked" -> live.filter { it.data.has("enc") } to "Gesperrt"
-        key == "shared-notes" -> live.filter { it.share != null && sync.get(it.data.optString("folder")) == null } to "Mit mir geteilt"
+        key == "locked" -> live.filter { it.data.has("enc") } to tr("Gesperrt")
+        key == "shared-notes" -> live.filter { it.share != null && sync.get(it.data.optString("folder")) == null } to tr("Mit mir geteilt")
         key.startsWith("folder:") -> {
             val id = key.removePrefix("folder:")
-            live.filter { it.data.optString("folder") == id } to (sync.get(id)?.data?.optString("name") ?: "Ordner")
+            live.filter { it.data.optString("folder") == id } to (sync.get(id)?.data?.optString("name") ?: tr("Ordner"))
         }
         key.startsWith("tag:") -> {
             val tag = key.removePrefix("tag:")
             live.filter { tag in Model.tags(it) } to "#$tag"
         }
-        else -> live to "Alle Notizen"
+        else -> live to tr("Alle Notizen")
     }
 }
 
@@ -313,43 +315,43 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
 
     LargeTitleScreen(
         title = title,
-        backLabel = "Ordner",
+        backLabel = tr("Ordner"),
         onBack = { state.pop() },
-        subtitle = if (notes.size == 1) "1 Notiz" else "${notes.size} Notizen",
+        subtitle = if (notes.size == 1) tr("1 Notiz") else tr("{size} Notizen", "size" to notes.size),
         actions = {
-            if (state.vaultKey != null) BarButton(Glyph.LockOpen, "Entsperrte Notizen jetzt sperren") { state.lockAll() }
+            if (state.vaultKey != null) BarButton(Glyph.LockOpen, tr("Entsperrte Notizen jetzt sperren")) { state.lockAll() }
             // Inside a folder: create a subfolder, list or board here – the folder as a project's filing place.
-            if (folderId != null) BarButton(Glyph.FolderPlus, "Neu in diesem Ordner") { createMenu = true }
-            BarButton(Glyph.More, "Ansicht und Sortierung") { sortMenu = true }
-            if (key != "trash") BarButton(Glyph.Compose, "Neue Notiz") { newNote(state, key.takeIf { it.startsWith("folder:") }) }
+            if (folderId != null) BarButton(Glyph.FolderPlus, tr("Neu in diesem Ordner")) { createMenu = true }
+            BarButton(Glyph.More, tr("Ansicht und Sortierung")) { sortMenu = true }
+            if (key != "trash") BarButton(Glyph.Compose, tr("Neue Notiz")) { newNote(state, key.takeIf { it.startsWith("folder:") }) }
         },
     ) {
         item(key = "search") { SearchField(query, { query = it }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-        if (subfolders.isNotEmpty() && query.isBlank()) section("subfolders", header = "Ordner") {
+        if (subfolders.isNotEmpty() && query.isBlank()) section("subfolders", header = tr("Ordner")) {
             subfolders.forEachIndexed { index, folder ->
-                GroupRow(folder.data.optString("name", "Ordner"), Glyph.Folder,
+                GroupRow(folder.data.optString("name", tr("Ordner")), Glyph.Folder,
                     detail = "${sync.all("note").count { it.data.optString("folder") == folder.id && !it.data.has("trashed") }}",
                     dragPayload = "folder:${folder.id}",
                     modifier = Modifier.dropZone({ acceptsOnFolder(it, folder.id) }) { dropOnFolder(state, it, folder.id) },
                     divider = index < subfolders.lastIndex) { state.push(Route.NoteList("folder:${folder.id}")) }
             }
         }
-        if (folderLists.isNotEmpty() && query.isBlank()) section("folder-lists", header = "Listen") {
+        if (folderLists.isNotEmpty() && query.isBlank()) section("folder-lists", header = tr("Listen")) {
             folderLists.forEachIndexed { index, list ->
-                GroupRow(list.data.optString("name", "Liste"), Glyph.Cart, tint = listColor(list),
+                GroupRow(list.data.optString("name", tr("Liste")), Glyph.Cart, tint = listColor(list),
                     detail = "${sync.all("item").count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }}",
                     dragPayload = "list:${list.id}", divider = index < folderLists.lastIndex) { state.push(Route.ListDetail(list.id)) }
             }
         }
-        if (folderBoards.isNotEmpty() && query.isBlank()) section("folder-boards", header = "Boards") {
+        if (folderBoards.isNotEmpty() && query.isBlank()) section("folder-boards", header = tr("Boards")) {
             folderBoards.forEachIndexed { index, board ->
-                GroupRow(board.data.optString("name", "Board"), Glyph.Board,
+                GroupRow(board.data.optString("name", tr("Board")), Glyph.Board,
                     detail = "${sync.all("card").count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
                     dragPayload = "board:${board.id}", divider = index < folderBoards.lastIndex) { state.push(Route.Board(board.id)) }
             }
         }
         val folderHasMore = subfolders.isNotEmpty() || folderLists.isNotEmpty() || folderBoards.isNotEmpty()
-        if (shown.isEmpty() && (!folderHasMore || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) "Keine Notizen" else "Keine Treffer") }
+        if (shown.isEmpty() && (!folderHasMore || query.isNotBlank())) item(key = "empty") { EmptyState(if (query.isBlank()) tr("Keine Notizen") else tr("Keine Treffer")) }
         if (gallery) groups.forEach { (group, items) ->
             item(key = "gallery-$group") {
                 GalleryGroup(state, group.ifEmpty { null }, items) { menu = it }
@@ -367,31 +369,31 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
         val trashed = note.data.has("trashed")
         val locked = note.data.has("enc")
         ActionSheet(Model.title(note), if (trashed) listOf(
-            SheetAction("Wiederherstellen") { restoreNote(state, note) },
-            SheetAction("Endgültig löschen", destructive = true) { sync.delete(note.id) },
+            SheetAction(tr("Wiederherstellen")) { restoreNote(state, note) },
+            SheetAction(tr("Endgültig löschen"), destructive = true) { sync.delete(note.id) },
         ) else listOf(
-            SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } },
-            SheetAction("Verschieben …") { moving = note },
+            SheetAction(if (note.data.optBoolean("pinned")) tr("Lösen") else tr("Anheften")) { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } },
+            SheetAction(tr("Verschieben …")) { moving = note },
             archiveAction(state, note),
             templateAction(state, note),
-            SheetAction("Teilen …") { if (locked) state.toastLater("Gesperrte Notizen können nicht geteilt werden.") else state.push(Route.Share(note.id)) },
-            SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = note to !locked },
-            SheetAction("Löschen", destructive = true) { trashNote(state, note) },
+            SheetAction(tr("Teilen …")) { if (locked) state.toastLater(tr("Gesperrte Notizen können nicht geteilt werden.")) else state.push(Route.Share(note.id)) },
+            SheetAction(if (locked) tr("Sperre entfernen") else tr("Notiz sperren")) { locking = note to !locked },
+            SheetAction(tr("Löschen"), destructive = true) { trashNote(state, note) },
         )) { menu = null }
     }
     moving?.let { note -> MoveSheet(state, note) { moving = null } }
     // Like Apple: "View as Gallery / List" and the sort order in one menu.
     if (templates) TemplateSheet(state, key.takeIf { it.startsWith("folder:") }) { templates = false }
     if (sortMenu) ActionSheet(null, listOf(
-        SheetAction("Neue Notiz aus Vorlage …") { templates = true },
-        SheetAction(if (gallery) "Als Liste anzeigen" else "Als Galerie anzeigen") { gallery = !gallery; sync.noteGallery = gallery },
+        SheetAction(tr("Neue Notiz aus Vorlage …")) { templates = true },
+        SheetAction(if (gallery) tr("Als Liste anzeigen") else tr("Als Galerie anzeigen")) { gallery = !gallery; sync.noteGallery = gallery },
     ) + Model.NOTE_SORTS.map { (order, label) ->
-        SheetAction("Sortieren nach $label" + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
+        SheetAction(tr("Sortieren nach {label}", "label" to label) + if (order == sync.noteSort()) " ✓" else "") { sync.setNoteSort(order) }
     }) { sortMenu = false }
-    if (createMenu) ActionSheet("Neu in diesem Ordner", listOf(
-        SheetAction("Neuer Unterordner") { creating = "folder" },
-        SheetAction("Neue Liste") { creating = "list" },
-        SheetAction("Neues Board") { creating = "board" },
+    if (createMenu) ActionSheet(tr("Neu in diesem Ordner"), listOf(
+        SheetAction(tr("Neuer Unterordner")) { creating = "folder" },
+        SheetAction(tr("Neue Liste")) { creating = "list" },
+        SheetAction(tr("Neues Board")) { creating = "board" },
     )) { createMenu = false }
     creating?.let { kind -> sync.get(folderId ?: "")?.let { folder -> CreateInFolder(state, folder, kind) { creating = null } } }
     locking?.let { (note, lock) -> LockFlow(state, note, lock) { locking = null } }
@@ -399,7 +401,7 @@ fun NoteListScreen(state: AppState, key: String, revision: Long) {
 
 fun trashNote(state: AppState, note: SyncObject) {
     state.sync.update(note.id) { it.put("trashed", Model.now()) }
-    state.toastLater("In „Zuletzt gelöscht“ verschoben")
+    state.toastLater(tr("In „Zuletzt gelöscht“ verschoben"))
 }
 
 fun restoreNote(state: AppState, note: SyncObject) {
@@ -409,7 +411,7 @@ fun restoreNote(state: AppState, note: SyncObject) {
         if (sync.get(data.optString("folder")) == null)
             data.put("folder", Model.privateFolder(sync.userId))
     }
-    state.toastLater("Notiz wiederhergestellt")
+    state.toastLater(tr("Notiz wiederhergestellt"))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -476,15 +478,15 @@ fun NoteRow(state: AppState, note: SyncObject, divider: Boolean, stamp: Double? 
                 }
                 Row {
                     // Found by a search although archived: say so.
-                    Text((if (note.data.optBoolean("template")) "Vorlage · " else "") + (if (Model.archived(note)) "im Archiv · " else "") +
+                    Text((if (note.data.optBoolean("template")) tr("Vorlage · ") else "") + (if (Model.archived(note)) tr("im Archiv · ") else "") +
                         Model.shortDate(stamp ?: Model.modified(note)),
                         style = Type.subheadline, color = colors.label)
                     Spacer(Modifier.width(8.dp))
-                    Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) "Gesperrt" else "Kein weiterer Text" },
+                    Text(Model.preview(note).ifEmpty { if (Model.isLocked(note)) tr("Gesperrt") else tr("Kein weiterer Text") },
                         style = Type.subheadline, color = colors.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (note.share != null && note.updatedBy != 0 && note.updatedBy != sync.userId) {
-                    Text("Zuletzt bearbeitet von ${sync.userName(note.updatedBy)}", style = Type.footnote, color = colors.secondary)
+                    Text(tr("Zuletzt bearbeitet von {person}", "person" to (sync.userName(note.updatedBy))), style = Type.footnote, color = colors.secondary)
                 }
             }
             if (image != null) {
@@ -539,9 +541,9 @@ fun Thumbnail(sync: SyncEngine, fileId: String, share: String?, size: Int, modif
             try {
                 val bytes = sync.fetchFile(fileId, share).readBytes()
                 RichEditor.decodeImage(bytes, maxSize = 480)?.asImageBitmap()
-                    .also { if (it == null) android.util.Log.w("LiNotes", "Vorschaubild nicht lesbar: $fileId (${bytes.size} Bytes)") }
+                    .also { if (it == null) android.util.Log.w("LiNotes", tr("Vorschaubild nicht lesbar: {fileId} ({size} Bytes)", "fileId" to fileId, "size" to bytes.size)) }
             } catch (error: Exception) {
-                android.util.Log.w("LiNotes", "Vorschaubild nicht geladen: $fileId", error)
+                android.util.Log.w("LiNotes", tr("Vorschaubild nicht geladen: {fileId}", "fileId" to fileId), error)
                 null
             }
         }
@@ -556,7 +558,7 @@ fun MoveSheet(state: AppState, note: SyncObject, onDone: () -> Unit) {
     val sync = state.sync
     val folders = sync.all("folder").filter { it.id != note.data.optString("folder") }
         .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
-    ActionSheet("Verschieben nach", folders.map { folder ->
+    ActionSheet(tr("Verschieben nach"), folders.map { folder ->
         val label = folderPath(sync, folder) + if (folder.share != null) " (geteilt)" else ""
         SheetAction(label) { moveNoteTo(state, note.id, folder.id) }
     }, onDone)

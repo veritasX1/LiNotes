@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -194,13 +196,13 @@ object NotePdf {
             pdf.need(30f)
             pdf.canvas.drawRect(pdf.margin, pdf.y, pdf.margin + 120f, pdf.y + 0.8f, android.graphics.Paint().apply { color = pdf.line })
             pdf.y += 8f
-            pdf.text("Fußnoten und Quellen", 10.5f, true, space = 4f)
+            pdf.text(tr("Fußnoten und Quellen"), 10.5f, true, space = 4f)
             notes.forEachIndexed { index, note -> pdf.text("${index + 1}  $note", 9.5f, space = 3f) }
         }
         pdf.finish(file)
     }
 
-    fun fileName(title: String) = title.replace(Regex("[/\\\\:*?\"<>|]"), "_").take(80).ifBlank { "Notiz" } + ".pdf"
+    fun fileName(title: String) = title.replace(Regex("[/\\\\:*?\"<>|]"), "_").take(80).ifBlank { tr("Notiz") } + ".pdf"
 
     /** The system print dialog for an already written PDF. */
     fun print(context: Context, file: File, title: String) {

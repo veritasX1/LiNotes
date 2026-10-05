@@ -22,6 +22,7 @@ from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk
 
 from . import audio, calc, linkpreview, mathtex, model, syntax, textsize
 from .table import NoteTable
+from .i18n import _
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
@@ -72,7 +73,7 @@ class FootnoteList(Gtk.Box):
             self.remove(child)
         if texts:
             self.append(Gtk.Separator(margin_bottom=6))
-            self.append(Gtk.Label(label="Fußnoten und Quellen", xalign=0, css_classes=["heading"]))
+            self.append(Gtk.Label(label=_("Fußnoten und Quellen"), xalign=0, css_classes=["heading"]))
             for number, text in enumerate(texts, 1):
                 row = Gtk.Box(spacing=8)
                 row.append(Gtk.Label(label=f"{number}", xalign=1, width_chars=2, valign=Gtk.Align.START,
@@ -870,12 +871,12 @@ class NoteEditor(Gtk.TextView):
 
     def edit_footnote(self, name):
         """A click on a footnote number: change its text or remove it."""
-        dialog = Adw.AlertDialog(heading="Fußnote", body="Erscheint unten in der Liste „Fußnoten und Quellen“ und im PDF.")
+        dialog = Adw.AlertDialog(heading=_("Fußnote"), body=_("Erscheint unten in der Liste „Fußnoten und Quellen“ und im PDF."))
         entry = Gtk.Entry(text=model.footnote_text(name) or "", activates_default=True)
         dialog.set_extra_child(entry)
-        dialog.add_response("delete", "Entfernen")
-        dialog.add_response("cancel", "Abbrechen")
-        dialog.add_response("save", "Sichern")
+        dialog.add_response("delete", _("Entfernen"))
+        dialog.add_response("cancel", _("Abbrechen"))
+        dialog.add_response("save", _("Sichern"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("save")
@@ -1435,7 +1436,7 @@ class NoteEditor(Gtk.TextView):
                                                            self.emit("open-file", {"t": "image", "f": file_id, "n": "Bild", "m": "image/*"})))
         picture.add_controller(click)
         picture.set_cursor_from_name("zoom-in")
-        picture.set_tooltip_text("Ansehen")
+        picture.set_tooltip_text(_("Ansehen"))
         if self.image_loader and file_id:
             def load():
                 try:
@@ -1569,7 +1570,7 @@ class NoteEditor(Gtk.TextView):
         def pressed(gesture, _n, x, y):
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
             popover = Gtk.Popover()
-            plain = Gtk.Button(label="Nur als Adresse zeigen", css_classes=["flat"])
+            plain = Gtk.Button(label=_("Nur als Adresse zeigen"), css_classes=["flat"])
             plain.connect("clicked", lambda _b: (popover.popdown(), GLib.idle_add(lambda: self.unlink_preview(anchor) and False)))
             popover.set_child(plain)
             popover.set_parent(card)
@@ -1607,7 +1608,7 @@ class NoteEditor(Gtk.TextView):
         holder.append(preview)
         card.append(holder)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
-        text.append(Gtk.Label(label=block.get("n") or "Datei", xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=40,
+        text.append(Gtk.Label(label=block.get("n") or _("Datei"), xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=40,
                               css_classes=["heading"]))
         text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
         card.append(text)
@@ -1615,7 +1616,7 @@ class NoteEditor(Gtk.TextView):
         click.connect("released", lambda *_args: self.emit("open-file", dict(block)))
         card.add_controller(click)
         card.set_cursor_from_name("pointer")
-        card.set_tooltip_text("Öffnen")
+        card.set_tooltip_text(_("Öffnen"))
         self.anchors[anchor] = {"attachment": dict(block), "picture": card}
         self.add_child_at_anchor(card, anchor)
         if (block.get("m") == "application/pdf") and self.image_loader and block.get("f"):
@@ -1637,7 +1638,7 @@ class NoteEditor(Gtk.TextView):
         bubble = Gtk.Box(spacing=10, css_classes=["audio-bubble"], halign=Gtk.Align.START,
                          tooltip_text=" · ".join(part for part in (title, subtitle) if part))
         button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "audio-bubble-play"],
-                            valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
+                            valign=Gtk.Align.CENTER, tooltip_text=_("Abspielen"))
         bubble.append(button)
         wave = Gtk.DrawingArea(content_width=audio.BARS * 5, content_height=28, valign=Gtk.Align.CENTER)
         wave.set_cursor_from_name("pointer")
@@ -1677,7 +1678,7 @@ class NoteEditor(Gtk.TextView):
             loaded = playing in ("playing", "paused")
             running = playing == "playing"
             button.set_icon_name("media-playback-pause-symbolic" if running else "media-playback-start-symbolic")
-            button.set_tooltip_text("Pause" if running else "Abspielen")
+            button.set_tooltip_text(_("Pause") if running else _("Abspielen"))
             if running and state["pending"] is not None:
                 # A click on the waveform before playing: jump there once the recording runs.
                 target, state["pending"] = state["pending"], None
@@ -1785,7 +1786,7 @@ class NoteEditor(Gtk.TextView):
         """A formula on a line of its own, centered; a click opens its source for editing."""
         area = Gtk.DrawingArea(css_classes=["math-block"])
         area.set_cursor_from_name("pointer")
-        area.set_tooltip_text("Formel bearbeiten")
+        area.set_tooltip_text(_("Formel bearbeiten"))
         entry = {"math": source, "picture": area}
         self.anchors[anchor] = entry
         self.show_math(entry)
@@ -1802,7 +1803,7 @@ class NoteEditor(Gtk.TextView):
         if source.strip():
             formula = mathtex.layout(source, self.math_size(), mathtex.measure)
         else:
-            formula = mathtex.layout("\\text{Formel}", self.math_size(), mathtex.measure)
+            formula = mathtex.layout(_("\\text{Formel}"), self.math_size(), mathtex.measure)
         empty = not source.strip()
         pad = 6
         area.set_content_width(max(1, int(formula.width + 2 * pad + 1)))
@@ -1844,23 +1845,23 @@ class NoteEditor(Gtk.TextView):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         for side in ("start", "end", "top", "bottom"):
             getattr(box, f"set_margin_{side}")(6)
-        box.append(Gtk.Label(label="Formel (LaTeX)", xalign=0, css_classes=["heading"]))
+        box.append(Gtk.Label(label=_("Formel (LaTeX)"), xalign=0, css_classes=["heading"]))
         source = Gtk.TextView(monospace=True, wrap_mode=Gtk.WrapMode.CHAR, top_margin=6, bottom_margin=6,
                               left_margin=6, right_margin=6, accepts_tab=False, css_classes=["card"])
         source.get_buffer().set_text(entry["math"])
         scroller = Gtk.ScrolledWindow(child=source, min_content_height=70, max_content_height=200, propagate_natural_height=True)
         scroller.set_size_request(440, -1)
         box.append(scroller)
-        hint = Gtk.Label(label="z. B.  \\frac{a}{b}   x^2   \\sqrt{x}   \\alpha   \\sum_{i=1}^{n}",
+        hint = Gtk.Label(label=_("z. B.  \\frac{a}{b}   x^2   \\sqrt{x}   \\alpha   \\sum_{i=1}^{n}"),
                          xalign=0, css_classes=["dim-label", "caption"])
         box.append(hint)
-        problem = Gtk.Label(label="Rot markierte Teile kennt LiNotes nicht.", xalign=0, css_classes=["error", "caption"], visible=False)
+        problem = Gtk.Label(label=_("Rot markierte Teile kennt LiNotes nicht."), xalign=0, css_classes=["error", "caption"], visible=False)
         box.append(problem)
         buttons = Gtk.Box(spacing=8)
-        remove = Gtk.Button(label="Löschen", css_classes=["destructive-action"])
+        remove = Gtk.Button(label=_("Löschen"), css_classes=["destructive-action"])
         buttons.append(remove)
         buttons.append(Gtk.Box(hexpand=True))
-        done = Gtk.Button(label="Fertig", css_classes=["suggested-action"])
+        done = Gtk.Button(label=_("Fertig"), css_classes=["suggested-action"])
         buttons.append(done)
         box.append(buttons)
         popover.set_child(box)
@@ -1940,7 +1941,7 @@ def file_details(block):
     elif size >= 1024:
         amount = f"{round(size / 1024)} KB"
     else:
-        amount = f"{size} Bytes"
+        amount = _("{size} Bytes", size=size)
     if audio.is_audio(block) and block.get("d"):
         return f"{audio.duration_text(block['d'])} · {amount}"
     kind = Gio.content_type_get_description(Gio.content_type_from_mime_type(block.get("m") or "") or "application/octet-stream")

@@ -55,6 +55,8 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            // Tests check the German texts (the source language) – regardless of the computer's locale.
+            it.systemProperty("linotes.language", (project.findProperty("lang") as String?) ?: "de")
             // Homepage/help pictures: ./gradlew testDebugUnitTest --tests '*MarketingShots*' -Pshots=/folder
             (project.findProperty("shots") as String?)?.let { folder -> it.systemProperty("linotes.shots", folder) }
         }
@@ -64,6 +66,14 @@ android {
         resources.excludes.add("/META-INF/{AL2.0,LGPL2.1}")
     }
 }
+
+// The translations: one catalogue for both apps, kept with the Ubuntu app.
+val copyLocale by tasks.registering(Sync::class) {
+    from(rootProject.file("../linux/linotes/locale")) { include("*.json") }
+    into(layout.buildDirectory.dir("generated/locale/locale"))
+}
+android.sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/locale"))
+tasks.named("preBuild") { dependsOn(copyLocale) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.09.03")

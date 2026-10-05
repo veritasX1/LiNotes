@@ -10,6 +10,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from .sync import SyncEngine
 from .window import LiNotesWindow
+from .i18n import _
 
 APP_ID = "io.github.veritasx1.LiNotes"
 
@@ -21,7 +22,7 @@ class LiNotesApplication(Adw.Application):
         self.sync = None
         self.start_with_new_note = False
         # Quick note from anywhere: "linotes --neue-notiz" (dock menu, own keyboard shortcut).
-        self.add_main_option("neue-notiz", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Neue Notiz anlegen", None)
+        self.add_main_option("neue-notiz", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, _("Neue Notiz anlegen"), None)
 
     def do_handle_local_options(self, options):
         if options.contains("neue-notiz"):
@@ -107,7 +108,7 @@ class LiNotesApplication(Adw.Application):
         dialog = Adw.AboutDialog(
             application_name="LiNotes", application_icon=APP_ID, version="2.2.0",
             developer_name="Olaf Winkler",
-            comments="Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein.",
+            comments=_("Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein."),
             copyright="© 2026 Olaf Winkler", license_type=Gtk.License.GPL_3_0,
             website="https://lisoft.goip.de/linotes/", issue_url="https://github.com/veritasX1/LiNotes/issues",
         )

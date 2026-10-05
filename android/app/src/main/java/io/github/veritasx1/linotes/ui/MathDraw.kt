@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Paint
@@ -80,7 +82,7 @@ object MathDraw {
      *  An empty formula shows a faint "Formel" to tap on. */
     class FormulaDrawable(source: String, size: Float, private val color: Int, private val pad: Float, lineWidth: Int) : Drawable() {
         private val empty = source.isBlank()
-        private val formula = layout(if (empty) "\\text{Formel}" else source, size)
+        private val formula = layout(if (empty) tr("\\text{Formel}") else source, size)
 
         init {
             // As wide as the line, the formula centered in it (wider ones stick out to the right like a table).

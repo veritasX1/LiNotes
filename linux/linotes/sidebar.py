@@ -12,6 +12,7 @@ from . import model
 from . import smoothscroll
 from . import uiprefs
 from .icons import Icon, drag_autoscroll, drag_source, drop_target
+from .i18n import _
 
 
 class SidebarRow(Gtk.ListBoxRow):
@@ -46,7 +47,7 @@ class SidebarRow(Gtk.ListBoxRow):
             arrow = Gtk.Button(icon_name="pan-down-symbolic" if expanded else "pan-start-symbolic", valign=Gtk.Align.CENTER)
             arrow.add_css_class("flat")
             arrow.add_css_class("sidebar-expander")
-            arrow.set_tooltip_text("Unterordner zuklappen" if expanded else "Unterordner aufklappen")
+            arrow.set_tooltip_text(_("Unterordner zuklappen") if expanded else _("Unterordner aufklappen"))
             arrow.connect("clicked", lambda _button: on_toggle())
             box.append(arrow)
         if owner_hint:
@@ -99,7 +100,7 @@ class Sidebar(Gtk.Box):
         self.active_box.set_margin_bottom(6)
         heading = Gtk.Box(spacing=6)
         heading.add_css_class("tags-heading")
-        self.tags_heading_label = Gtk.Label(label="Tags", xalign=0)
+        self.tags_heading_label = Gtk.Label(label=_("Tags"), xalign=0)
         self.tags_heading_label.add_css_class("sidebar-heading-text")
         self.tags_count = Gtk.Label(xalign=0)
         self.tags_count.add_css_class("tags-count")
@@ -141,26 +142,26 @@ class Sidebar(Gtk.Box):
         self.account_label = Gtk.Label(xalign=0, hexpand=True, ellipsize=3)
         account.append(self.account_label)
         menu = Gio.Menu()
-        menu.append("Neuen Ordner", "win.new-folder")
-        menu.append("Neue Liste", "win.new-list")
-        menu.append("Neues Board", "win.new-board")
-        menu.append("Neuer Plan", "win.new-plan")
+        menu.append(_("Neuen Ordner"), "win.new-folder")
+        menu.append(_("Neue Liste"), "win.new-list")
+        menu.append(_("Neues Board"), "win.new-board")
+        menu.append(_("Neuer Plan"), "win.new-plan")
         section = Gio.Menu()
-        section.append("Mit Server verbinden …", "win.connect")
-        section.append("Personen und Verifizierung …", "win.people")
-        section.append("Einladungscode erzeugen …", "win.invite")
-        section.append("Schlüsseldatei sichern …", "win.keyfile")
-        section.append("Notizen-Passwort ändern …", "win.change-vault")
-        section.append("Entsperrte Notizen jetzt sperren", "win.lock-all")
+        section.append(_("Mit Server verbinden …"), "win.connect")
+        section.append(_("Personen und Verifizierung …"), "win.people")
+        section.append(_("Einladungscode erzeugen …"), "win.invite")
+        section.append(_("Schlüsseldatei sichern …"), "win.keyfile")
+        section.append(_("Notizen-Passwort ändern …"), "win.change-vault")
+        section.append(_("Entsperrte Notizen jetzt sperren"), "win.lock-all")
         menu.append_section(None, section)
         section = Gio.Menu()
-        section.append("Tastenkürzel", "win.shortcuts")
-        section.append("Hilfe", "win.help")
-        section.append("Abmelden / Daten löschen …", "win.sign-out")
+        section.append(_("Tastenkürzel"), "win.shortcuts")
+        section.append(_("Hilfe"), "win.help")
+        section.append(_("Abmelden / Daten löschen …"), "win.sign-out")
         menu.append_section(None, section)
         button = Gtk.MenuButton(menu_model=menu, icon_name="open-menu-symbolic")
         button.add_css_class("flat")
-        button.set_tooltip_text("Konto und Neues")
+        button.set_tooltip_text(_("Konto und Neues"))
         account.append(button)
         self.append(Gtk.Separator())
         self.append(account)
@@ -181,20 +182,20 @@ class Sidebar(Gtk.Box):
         def count(predicate):
             return sum(1 for note in live if predicate(note))
 
-        self.add(SidebarRow("all", "notes", "Alle Notizen", len(live)), "Notizen")
+        self.add(SidebarRow("all", "notes", _("Alle Notizen"), len(live)), _("Notizen"))
 
         folders = sync.objects("folder")
-        self.add_folder_tree([f for f in folders if not f.get("share")], "Notizen", count)
+        self.add_folder_tree([f for f in folders if not f.get("share")], _("Notizen"), count)
         locked = count(lambda note: bool(note["data"].get("enc")))
-        self.add(SidebarRow("locked", "lock", "Gesperrt", locked), "Notizen")
+        self.add(SidebarRow("locked", "lock", _("Gesperrt"), locked), _("Notizen"))
         trashed = sum(1 for note in notes if note["data"].get("trashed"))
-        self.add(SidebarRow("trash", "trash", "Zuletzt gelöscht", trashed), "Notizen")
+        self.add(SidebarRow("trash", "trash", _("Zuletzt gelöscht"), trashed), _("Notizen"))
 
-        self.add_folder_tree([f for f in folders if f.get("share")], "Geteilt", count)
+        self.add_folder_tree([f for f in folders if f.get("share")], _("Geteilt"), count)
         # Single notes shared with me (outside a shared folder of mine).
         loose = [note for note in live if note.get("share") and not self.sync.get(note["data"].get("folder") or "")]
         if loose:
-            self.add(SidebarRow("shared-notes", "person", "Mit mir geteilt", len(loose)), "Geteilt")
+            self.add(SidebarRow("shared-notes", "person", _("Mit mir geteilt"), len(loose)), _("Geteilt"))
 
         items = sync.objects("item")
         for shopping in sorted((l for l in sync.objects("list") if not model.archived(l)),
@@ -212,7 +213,7 @@ class Sidebar(Gtk.Box):
 
         for plan in sorted((p for p in sync.objects("plan") if not model.archived(p)),
                            key=lambda p: (p["data"].get("order", 0), p["data"].get("name", ""))):
-            self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or "Plan", None,
+            self.add(SidebarRow("plan:" + plan["id"], "table", plan["data"].get("name") or _("Plan"), None,
                                 badges=self.place_badges(plan)), "Pläne")
 
         self.add_archive(archived_notes)
@@ -233,7 +234,7 @@ class Sidebar(Gtk.Box):
             shared = bool(folder.get("share"))
             owner_hint = None
             if shared and depth == 0 and folder["owner"] != self.sync.user_id:
-                owner_hint = f"Von {self.sync.user_name(folder['owner'])} geteilt"
+                owner_hint = _("Von {person} geteilt", person=self.sync.user_name(folder['owner']))
             self.add(SidebarRow(
                 "folder:" + folder["id"], "folder-shared" if shared and depth == 0 else "folder",
                 folder["data"].get("name", "Ordner"),
@@ -255,18 +256,18 @@ class Sidebar(Gtk.Box):
         def toggle():
             uiprefs.put("archive_open", not bool(uiprefs.get("archive_open", False)))
             self.refresh()
-        self.add(SidebarRow("archive", "archive", "Archiv", total, expander=(open_, toggle) if containers else None), "Archiv")
+        self.add(SidebarRow("archive", "archive", _("Archiv"), total, expander=(open_, toggle) if containers else None), _("Archiv"))
         if open_:
             for kind, icon, obj in sorted(containers, key=lambda entry: (entry[0], (entry[2]["data"].get("name") or "").lower())):
-                self.add(SidebarRow(f"{kind}:{obj['id']}", icon, obj["data"].get("name") or "Ohne Namen", None, depth=1,
-                                    badges=self.place_badges(obj)), "Archiv")
+                self.add(SidebarRow(f"{kind}:{obj['id']}", icon, obj["data"].get("name") or _("Ohne Namen"), None, depth=1,
+                                    badges=self.place_badges(obj)), _("Archiv"))
 
     def place_badges(self, obj):
         """Symbols for "in a folder" and "shared"; the folder path and the people are in the tooltip."""
         badges = []
         folder = self.sync.get(obj["data"].get("folder") or "")
         if folder:
-            badges.append(("folder", "Im Ordner „" + model.folder_path(self.sync, folder) + "“"))
+            badges.append(("folder", _("Im Ordner „") + model.folder_path(self.sync, folder) + "“"))
         if obj.get("share"):
             badges.append(("person", lists.share_label(self.sync, obj).capitalize()))
         return badges
@@ -288,7 +289,7 @@ class Sidebar(Gtk.Box):
 
     def header_func(self, row, before):
         if before is None or before.section != row.section:
-            label = Gtk.Label(label=row.section, xalign=0)
+            label = Gtk.Label(label=_(row.section), xalign=0)
             label.add_css_class("sidebar-heading")
             # Dropping onto the heading takes a folder to the top / a list or board out of its folder.
             wanted = {"Notizen": "folder", "Listen": "list", "Aufgaben": "board", "Pläne": "plan"}.get(row.section)
@@ -320,8 +321,8 @@ class Sidebar(Gtk.Box):
     def update_tags_heading(self):
         open_ = self.tags_revealer.get_reveal_child()
         self.tags_chevron.set_from_icon_name("pan-down-symbolic" if open_ else "pan-end-symbolic")
-        self.tags_heading.set_tooltip_text("Tags ausblenden" if open_ and self.tags_pinned else
-                                           "Tags immer zeigen" if open_ else "Tags zeigen")
+        self.tags_heading.set_tooltip_text(_("Tags ausblenden") if open_ and self.tags_pinned else
+                                           _("Tags immer zeigen") if open_ else _("Tags zeigen"))
         # Collapsed, the tags you filter by stay visible.
         self.active_box.set_visible(not open_ and bool(self.active_tags))
 
@@ -374,7 +375,7 @@ class Sidebar(Gtk.Box):
         while (child := self.active_box.get_first_child()) is not None:
             self.active_box.remove(child)
         for tag in sorted(self.active_tags):
-            button = Gtk.ToggleButton(label="#" + tag, active=True, tooltip_text="Filter aufheben")
+            button = Gtk.ToggleButton(label="#" + tag, active=True, tooltip_text=_("Filter aufheben"))
             button.add_css_class("tag-chip")
             button.connect("toggled", self.on_active_chip, tag)
             self.active_box.append(button)
@@ -426,7 +427,7 @@ class Sidebar(Gtk.Box):
         user = self.sync.user
         name = user["name"] if user else ""
         if self.sync.is_local:
-            self.account_label.set_label(f"{name} · nur lokal")
+            self.account_label.set_label(_("{name} · nur lokal", name=name))
             self.status_icon.name = "cloud-off"
             self.status_icon.queue_draw()
             self.account_label.remove_css_class("status-offline")

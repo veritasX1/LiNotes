@@ -17,6 +17,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import smoothscroll
 from .icons import Icon
+from .i18n import _
 
 TEXT_TYPES = {"application/json", "application/xml", "application/x-yaml", "application/javascript",
               "application/x-sh", "application/sql", "application/csv"}
@@ -26,7 +27,7 @@ ZOOM_STEPS = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0)
 
 
 def size_text(size):
-    for unit in ("Bytes", "KB", "MB", "GB"):
+    for unit in (_("Bytes"), "KB", "MB", "GB"):
         if size < 1024 or unit == "GB":
             return f"{size:.0f} {unit}" if unit == "Bytes" else f"{size:.1f} {unit}".replace(".", ",")
         size /= 1024
@@ -89,11 +90,11 @@ class QuickLook(Adw.Dialog):
             actions.add_action(action)
         self.insert_action_group("look", actions)
         menu = Gio.Menu()
-        menu.append("Mit anderer App öffnen …", "look.open-with")
-        menu.append("Kopie speichern unter …", "look.save-as")
-        menu.append("Kopieren", "look.copy")
-        menu.append("Im Dateimanager zeigen", "look.show-in-files")
-        share = Gtk.MenuButton(child=Icon("export", 16), menu_model=menu, tooltip_text="Teilen")
+        menu.append(_("Mit anderer App öffnen …"), "look.open-with")
+        menu.append(_("Kopie speichern unter …"), "look.save-as")
+        menu.append(_("Kopieren"), "look.copy")
+        menu.append(_("Im Dateimanager zeigen"), "look.show-in-files")
+        share = Gtk.MenuButton(child=Icon("export", 16), menu_model=menu, tooltip_text=_("Teilen"))
         header.pack_end(share)
 
         kind = kind_of(path, mime)
@@ -130,9 +131,9 @@ class QuickLook(Adw.Dialog):
         smoothscroll.enable(self.scroller)
 
         zoom_box = Gtk.Box(css_classes=["linked"])
-        for icon, tooltip, step in (("zoom-out-symbolic", "Verkleinern", -1),
-                                    ("zoom-fit-best-symbolic", "Einpassen", 0),
-                                    ("zoom-in-symbolic", "Vergrößern", 1)):
+        for icon, tooltip, step in (("zoom-out-symbolic", _("Verkleinern"), -1),
+                                    ("zoom-fit-best-symbolic", _("Einpassen"), 0),
+                                    ("zoom-in-symbolic", _("Vergrößern"), 1)):
             button = Gtk.Button(icon_name=icon, tooltip_text=tooltip)
             button.connect("clicked", lambda _b, s=step: self.step_zoom(s))
             zoom_box.append(button)
@@ -189,7 +190,7 @@ class QuickLook(Adw.Dialog):
         """Pages rendered one by one with poppler-utils (part of Ubuntu), the first shows at once."""
         self.pages = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12,
                              margin_start=12, margin_end=12)
-        self.pdf_status = Gtk.Label(label="PDF wird geladen …", css_classes=["dim-label"], margin_top=24)
+        self.pdf_status = Gtk.Label(label=_("PDF wird geladen …"), css_classes=["dim-label"], margin_top=24)
         self.pages.append(self.pdf_status)
         scroller = Gtk.ScrolledWindow(child=self.pages, hexpand=True, vexpand=True)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -240,9 +241,9 @@ class QuickLook(Adw.Dialog):
         if self.closed:
             return False
         if shown == 0:
-            self.pdf_status.set_label("Das PDF lässt sich hier nicht anzeigen – über „Teilen“ in einer anderen App öffnen.")
+            self.pdf_status.set_label(_("Das PDF lässt sich hier nicht anzeigen – über „Teilen“ in einer anderen App öffnen."))
         elif shown < count:
-            more = Gtk.Label(label=f"Die ersten {shown} von {count} Seiten – alle über „Teilen“ in einer anderen App.",
+            more = Gtk.Label(label=_("Die ersten {shown} von {count} Seiten – alle über „Teilen“ in einer anderen App.", shown=shown, count=count),
                              css_classes=["dim-label"], wrap=True)
             self.pages.append(more)
         return False
@@ -261,11 +262,11 @@ class QuickLook(Adw.Dialog):
 
     def other_view(self, mime):
         content_type = Gio.content_type_from_mime_type(mime or "") or "application/octet-stream"
-        page = Adw.StatusPage(title=self.name, description="Für diese Datei gibt es keine Vorschau.",
+        page = Adw.StatusPage(title=self.name, description=_("Für diese Datei gibt es keine Vorschau."),
                               vexpand=True)
         page.set_paintable(None)
         page.set_icon_name(Gio.content_type_get_generic_icon_name(content_type) or "text-x-generic")
-        button = Gtk.Button(label="Mit anderer App öffnen …", halign=Gtk.Align.CENTER, css_classes=["pill", "suggested-action"])
+        button = Gtk.Button(label=_("Mit anderer App öffnen …"), halign=Gtk.Align.CENTER, css_classes=["pill", "suggested-action"])
         button.connect("clicked", lambda _b: self.open_with())
         page.set_child(button)
         return page
@@ -281,7 +282,7 @@ class QuickLook(Adw.Dialog):
         Gtk.FileLauncher(file=Gio.File.new_for_path(str(self.path))).open_containing_folder(self.window, None, None)
 
     def save_as(self):
-        dialog = Gtk.FileDialog(title="Kopie speichern", initial_name=self.name)
+        dialog = Gtk.FileDialog(title=_("Kopie speichern"), initial_name=self.name)
 
         def chosen(dialog, result):
             try:
@@ -291,9 +292,9 @@ class QuickLook(Adw.Dialog):
             try:
                 shutil.copyfile(self.path, target.get_path())
             except OSError as error:
-                self.window.toast(f"Speichern nicht möglich: {error.strerror}")
+                self.window.toast(_("Speichern nicht möglich: {strerror}", strerror=error.strerror))
                 return
-            self.window.toast("Kopie gespeichert")
+            self.window.toast(_("Kopie gespeichert"))
         dialog.save(self.window, None, chosen)
 
     def copy(self):
@@ -304,7 +305,7 @@ class QuickLook(Adw.Dialog):
         if texture is not None:
             providers.insert(0, Gdk.ContentProvider.new_for_value(texture))
         self.get_clipboard().set_content(Gdk.ContentProvider.new_union(providers))
-        self.window.toast("Kopiert")
+        self.window.toast(_("Kopiert"))
 
     def on_closed(self, _dialog):
         self.closed = True

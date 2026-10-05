@@ -3,6 +3,7 @@ library – keywords, strings, comments and numbers for a few languages. Only fo
 stored. The same rules are in Android's Syntax.kt (SyntaxTest has the same cases)."""
 
 import re
+from .i18n import _
 
 LANGUAGES = {
     "python": "Python", "kotlin": "Kotlin", "shell": "Shell", "json": "JSON",
