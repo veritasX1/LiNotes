@@ -7,7 +7,7 @@
 <meta name="description" content="Comment installer votre propre serveur LiNotes – sur un Raspberry Pi ou tout ordinateur Debian/Ubuntu, avec une seule commande.">
 <link rel="icon" href="../linotes.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../site.css">
-<!--lang--><link rel="alternate" hreflang="de" href="https://lisoft.goip.de/linotes/server.html"><link rel="alternate" hreflang="en" href="https://lisoft.goip.de/linotes/en/server.html"><link rel="alternate" hreflang="fr" href="https://lisoft.goip.de/linotes/fr/server.html">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoftware.de/linotes/server.html"><link rel="alternate" hreflang="en" href="https://lisoftware.de/linotes/en/server.html"><link rel="alternate" hreflang="fr" href="https://lisoftware.de/linotes/fr/server.html">
 <style>
 .apps .wrap { position: relative; }
 .lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
@@ -21,12 +21,12 @@
 
 <div class="apps">
   <div class="wrap">
-    <a href="https://lisoft.goip.de/linotes/fr/" aria-current="page">LiNotes</a>
-    <a href="https://lisoft.goip.de/prevux/fr/">Prevux</a>
-    <a href="https://lisoft.goip.de/liboard/fr/">LiBoard</a>
-    <a href="https://lisoft.goip.de/licida/fr/">LiCida</a>
-    <a href="https://lisoft.goip.de/lical/fr/">LiCal</a>
-    <a href="https://lisoft.goip.de/lidio/fr/">LiDio</a>
+    <a href="https://lisoftware.de/linotes/" aria-current="page">LiNotes</a>
+    <a href="https://lisoftware.de/prevux/">Prevux</a>
+    <a href="https://lisoftware.de/liboard/">LiBoard</a>
+    <a href="https://lisoftware.de/licida/">LiCida</a>
+    <a href="https://lisoftware.de/lical/">LiCal</a>
+    <a href="https://lisoftware.de/lidio/">LiDio</a>
   <!--lang--><span class="lang-switch"><a href="../server.html" hreflang="de" lang="de">DE</a><a href="../en/server.html" hreflang="en" lang="en">EN</a><a href="server.html" hreflang="fr" lang="fr" aria-current="true">FR</a></span><!--/lang-->
   </div>
 </div>
@@ -124,9 +124,9 @@
     <section id="installieren">
       <h2>3 · Installer – une seule commande</h2>
       <p>Connectez-vous au Raspberry Pi (directement ou par SSH) et saisissez cette commande. Remplacez le domaine par le vôtre :</p>
-      <div class="terminal" data-copy="curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
+      <div class="terminal" data-copy="curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi: ~</span></div>
-        <pre><span class="p">$</span> curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s <span class="b">familie-notizen.goip.de</span></pre>
+        <pre><span class="p">$</span> curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s <span class="b">familie-notizen.goip.de</span></pre>
       </div>
       <p>Données sur un disque dur USB ? Ajoutez le chemin : <code class="inline">… | sudo bash -s familie-notizen.goip.de /media/usb/linotes</code></p>
       <p>Le script télécharge le serveur, vérifie la somme de contrôle et installe tout. Au bout de quelques minutes, vous voyez :</p>
@@ -190,9 +190,9 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
     <section id="update">
       <h2>Mise à jour</h2>
       <p>Exécutez simplement la même commande une nouvelle fois. Le script peut tourner plusieurs fois : il installe la nouvelle version, conserve vos données et redémarre le service. Les apps ne remarquent qu’une courte pause.</p>
-      <div class="terminal" data-copy="curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
+      <div class="terminal" data-copy="curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
-        <pre><span class="p">$</span> curl -fsSL https://lisoft.goip.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de</pre>
+        <pre><span class="p">$</span> curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de</pre>
       </div>
     </section>
 
@@ -215,13 +215,13 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
     <section id="manuell">
       <h2>Sans la commande unique</h2>
       <p>Vous préférez faire chaque étape vous-même ? Téléchargez le paquet, vérifiez-le et lancez l’installateur à la main :</p>
-      <div class="terminal" data-copy="wget https://lisoft.goip.de/linotes/download/linotes-server-2.1.0.tar.gz https://lisoft.goip.de/linotes/download/SHA256SUMS
+      <div class="terminal" data-copy="wget https://lisoftware.de/linotes/download/linotes-server-2.1.0.tar.gz https://lisoftware.de/linotes/download/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
 tar xzf linotes-server-2.1.0.tar.gz
 sudo linotes-server/install.sh familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
-        <pre><span class="p">$</span> wget https://lisoft.goip.de/linotes/download/linotes-server-2.1.0.tar.gz \
-       https://lisoft.goip.de/linotes/download/SHA256SUMS
+        <pre><span class="p">$</span> wget https://lisoftware.de/linotes/download/linotes-server-2.1.0.tar.gz \
+       https://lisoftware.de/linotes/download/SHA256SUMS
 <span class="p">$</span> sha256sum --ignore-missing -c SHA256SUMS
 <span class="p">$</span> tar xzf linotes-server-2.1.0.tar.gz
 <span class="p">$</span> sudo linotes-server/install.sh familie-notizen.goip.de</pre>
