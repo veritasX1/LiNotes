@@ -12,8 +12,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Pango", "1.0")
+gi.require_version("Graphene", "1.0")
 
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk, Pango
 
 from . import model, vault
 from . import smoothscroll
@@ -1565,6 +1566,17 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.popup_menu(menu, widget, x, y)
 
     def popup_menu(self, menu, widget, x, y):
+        # Never hang the menu on a list itself: its entries ("Löschen", "Als Entwicklungsprojekt führen")
+        # rebuild that list, and remove_all() would try to remove the menu forever – LiNotes froze
+        # (05.10.2026). The menu sits on the list's surroundings instead, at the same spot.
+        anchor = widget
+        while isinstance(anchor, (Gtk.ListBox, Gtk.FlowBox)) and anchor.get_parent() is not None:
+            anchor = anchor.get_parent()
+        if anchor is not widget:
+            found, point = widget.compute_point(anchor, Graphene.Point().init(x, y))
+            if found:
+                x, y = point.x, point.y
+        widget = anchor
         popover = Gtk.PopoverMenu.new_from_model(menu)
         popover.set_parent(widget)
         popover.set_has_arrow(False)
