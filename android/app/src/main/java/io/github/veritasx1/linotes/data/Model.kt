@@ -96,6 +96,37 @@ object Model {
         if (userName != null && data.has("assignee") && !data.isNull("assignee")) parts.add(userName(data.optInt("assignee")))
         return parts.joinToString(" ").lowercase()
     }
+    /**
+     * Card comments ("[Name dd.mm. HH:MM] text", as linotes-cli and the team write them): each person's head in the
+     * colour the board gives them (Olaf 07.10., way C, card 8f29c4b8). Only shown – the notes stay plain text.
+     * Keys as the text colours of notes, plus a dark yellow; without any the board looks as before. Twin of Ubuntu's.
+     */
+    val COMMENT_COLORS = linkedMapOf("purple" to 0xFF9B51E0, "pink" to 0xFFE0457F, "orange" to 0xFFE07A00,
+        "mint" to 0xFF12A594, "blue" to 0xFF1C8CE0, "yellow" to 0xFFB88A00)
+    private val COMMENT_HEAD = Regex("""\[([^\[\]\n]+?) \d{2}\.\d{2}\. \d{2}:\d{2}\]""")
+
+    data class CommentHead(val start: Int, val end: Int, val name: String)
+
+    /** The comment heads in [text] – at a line's start only, unless the lines were joined (the card's preview). */
+    fun commentHeads(text: String?, lineStart: Boolean = true): List<CommentHead> =
+        COMMENT_HEAD.findAll(text ?: "").filter { !lineStart || it.range.first == 0 || text!![it.range.first - 1] == '\n' }
+            .map { CommentHead(it.range.first, it.range.last + 1, it.groupValues[1]) }.toList()
+
+    /** {name: ARGB} the board gives the people who comment; empty = nothing coloured. */
+    fun commentColors(sync: SyncEngine, boardId: String?): Map<String, Long> {
+        val chosen = boardId?.let { sync.get(it) }?.data?.optJSONObject("colors") ?: return emptyMap()
+        return chosen.keys().asSequence().mapNotNull { name -> COMMENT_COLORS[chosen.optString(name)]?.let { name to it } }.toMap()
+    }
+
+    /** Who can get a colour: the board's people and everyone who commented on one of its cards. */
+    fun commentNames(sync: SyncEngine, boardId: String): List<String> {
+        val board = sync.get(boardId) ?: return emptyList()
+        val names = (sync.shareMembers(board.share) + sync.userId).map(sync::userName).toMutableSet()
+        for (card in sync.all("card")) if (card.data.optString("board") == boardId) names += commentHeads(card.data.optString("notes")).map { it.name }
+        names -= "?"
+        return names.sortedBy { it.lowercase() }
+    }
+
 
     /** Every word of the query is somewhere in the card. */
     fun cardMatches(card: SyncObject, query: String, userName: ((Int) -> String)? = null): Boolean {

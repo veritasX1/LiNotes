@@ -158,6 +158,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
     var moving by remember { mutableStateOf<SyncObject?>(null) }
+    var coloring by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
         title = tr("Aufgaben"),
@@ -204,6 +205,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
                 sync.update(board.id) { it.put("dev", dev) }
                 state.toastLater(if (dev) tr("„{name}“ ist jetzt ein Entwicklungsprojekt.", "name" to (board.data.optString("name"))) else tr("„{name}“ ist wieder ein einfaches Board.", "name" to (board.data.optString("name"))))
             },
+        ) + (if (isDevBoard(board)) listOf(SheetAction(tr("Farben der Personen …")) { coloring = board }) else emptyList()) + listOf(
             SheetAction(tr("Board löschen"), destructive = true) {
                 for (child in sync.all("card") + sync.all("column")) if (child.data.optString("board") == board.id) sync.delete(child.id)
                 sync.delete(board.id)
@@ -211,6 +213,7 @@ fun BoardsScreen(state: AppState, revision: Long) {
         )) { menu = null }
     }
     moving?.let { board -> MoveToFolderSheet(state, board) { moving = null } }
+    coloring?.let { board -> CommentColorsSheet(sync, board.id) { coloring = null } }
     renaming?.let { board ->
         AlertDialog(tr("Board umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), board.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->
@@ -368,7 +371,8 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
         if (data.optString("notes").isNotEmpty()) {
             // At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the notes
             // become spaces so no line is wasted. The whole text is in the card sheet.
-            Text(data.optString("notes").split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ").take(400),
+            val preview = data.optString("notes").split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ").take(400)
+            Text(commentText(preview, Model.commentColors(state.sync, data.optString("board")), lineStart = false),
                 style = Type.footnote, color = colors.secondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
@@ -539,8 +543,12 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                     HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
                     Box(Modifier.fillMaxWidth().heightIn(min = 110.dp).padding(16.dp)) {
                         if (notes.isEmpty()) Text(tr("Notizen"), style = Type.body, color = colors.tertiary)
+                        val heads = remember(card.data.optString("board")) { Model.commentColors(sync, card.data.optString("board")) }
                         BasicTextField(notes, { notes = it }, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
-                            modifier = Modifier.fillMaxWidth())
+                            modifier = Modifier.fillMaxWidth(),
+                            // Comment heads in their person's colour (card 8f29c4b8) – only shown, the text stays as typed.
+                            visualTransformation = if (heads.isEmpty()) androidx.compose.ui.text.input.VisualTransformation.None
+                                else androidx.compose.ui.text.input.VisualTransformation { androidx.compose.ui.text.input.TransformedText(commentText(it.text, heads), androidx.compose.ui.text.input.OffsetMapping.Identity) })
                     }
                     val links = remember(notes) { LINK.findAll(notes).map { it.value.trimEnd('.', ',', ')', ';') }.distinct().toList() }
                     links.forEach { link ->
@@ -729,6 +737,44 @@ private fun MultiLineField(value: String, onChange: (String) -> Unit, placeholde
 }
 
 private val LINK = Regex("""https?://\S+""")
+
+/** [text] with each comment head of a person the board gives a colour in that colour (way C, card 8f29c4b8). */
+internal fun commentText(text: String, colors: Map<String, Long>, lineStart: Boolean = true) = androidx.compose.ui.text.buildAnnotatedString {
+    append(text)
+    if (colors.isNotEmpty()) for (head in Model.commentHeads(text, lineStart)) colors[head.name]?.let {
+        addStyle(androidx.compose.ui.text.SpanStyle(color = Color(it)), head.start, head.end)
+    }
+}
+
+/** „Farben der Personen“ (development projects): which colour each person's comment heads have on this board – kept
+ *  in the board, so everyone who sees it sees the same. Tap a name, then a colour. Twin of Ubuntu's dialog. */
+@Composable
+internal fun CommentColorsSheet(sync: SyncEngine, boardId: String, onDone: () -> Unit) {
+    var person by remember { mutableStateOf<String?>(null) }
+    val labels = listOf(null to tr("Keine"), "purple" to tr("Lila"), "pink" to tr("Pink"), "orange" to tr("Orange"),
+        "mint" to tr("Mint"), "blue" to tr("Blau"), "yellow" to tr("Gelb"))
+    val chosen = sync.get(boardId)?.data?.optJSONObject("colors")
+    val name = person
+    // The sheet dismisses itself before running the tapped action: decide after both, close only if no name was tapped.
+    var dismissed by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(dismissed) {
+        if (dismissed) { dismissed = false; if (person == null) onDone() }
+    }
+    if (name == null) ActionSheet(tr("Kommentare in den Karten zeigen den Namen in dieser Farbe."), Model.commentNames(sync, boardId).map { n ->
+        val current = labels.firstOrNull { it.first != null && it.first == chosen?.optString(n) }?.second
+        SheetAction(if (current != null) "$n – $current" else n) { person = n }
+    }) { dismissed = true }
+    // A colour chosen (or Abbrechen): back to the names.
+    else ActionSheet(name, labels.map { (key, label) ->
+        SheetAction(label) {
+            sync.update(boardId) { data ->
+                val colors = data.optJSONObject("colors") ?: org.json.JSONObject()
+                if (key == null) colors.remove(name) else colors.put(name, key)
+                if (colors.length() == 0) data.remove("colors") else data.put("colors", colors)
+            }
+        }
+    }) { person = null }
+}
 
 /** A row with the current value that opens a menu of choices (like a UIKit pull-down button). */
 @Composable
