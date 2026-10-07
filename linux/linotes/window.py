@@ -1900,6 +1900,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             menu.append(_("Bericht exportieren …"), "win.export-object")
             menu.append(_("Entwicklungsprojekt ausschalten") if obj["data"].get("dev") else _("Als Entwicklungsprojekt führen"),
                         "win.toggle-dev")
+            if obj["data"].get("dev"):
+                menu.append(_("Farben der Personen …"), "win.comment-colors")
         protected = object_id == model.default_private_folder(self.sync.user_id)
         if not protected:
             menu.append(_("Löschen …"), "win.delete-object")
@@ -1946,6 +1948,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.toast(_("„{name}“ ist jetzt ein Entwicklungsprojekt.", name=board['data'].get('name', 'Board')) if dev
                    else _("„{name}“ ist wieder ein einfaches Board.", name=board['data'].get('name', 'Board')))
         self.refresh_all()
+
+    def comment_colors(self):
+        """Team colours for the comment heads of a development project's cards (way C, Olaf 07.10.)."""
+        board = self.sync.get(getattr(self, "menu_target", ""))
+        if board is not None and board["kind"] == "board":
+            from .kanban import CommentColorsDialog
+            CommentColorsDialog(self.sync, board["id"]).present(self)
 
     def rename_object(self):
         obj = self.sync.get(getattr(self, "menu_target", ""))
@@ -2069,6 +2078,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "export-plan": lambda: self.export_plan(getattr(self, "menu_target", "")),
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
+            "comment-colors": self.comment_colors,
             "new-subfolder": lambda: self.new_folder(getattr(self, "menu_target", None)),
             "new-list-here": lambda: self.new_list(getattr(self, "menu_target", None)),
             "new-board-here": lambda: self.new_board(getattr(self, "menu_target", None)),

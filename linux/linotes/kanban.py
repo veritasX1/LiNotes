@@ -46,6 +46,39 @@ LABEL_COLORS = [
 ]
 
 
+def set_comment_text(label, text, colors):
+    """The preview with each comment head in its person's colour (way C, Olaf 07.10.) – plain without colours."""
+    heads = [h for h in model.comment_heads(text, line_start=False) if h[2] in colors] if colors else []
+    if not heads:
+        label.set_use_markup(False)
+        label.set_label(text)
+        return
+    parts, position = [], 0
+    for start, end, name in heads:
+        parts.append(GLib.markup_escape_text(text[position:start]))
+        parts.append(f"<span foreground='{colors[name]}'>{GLib.markup_escape_text(text[start:end])}</span>")
+        position = end
+    parts.append(GLib.markup_escape_text(text[position:]))
+    label.set_markup("".join(parts))
+
+
+def color_comment_heads(buffer, colors):
+    """Comment heads in the card's notes in their person's colour; again on every change, as typing moves them."""
+    start, end = buffer.get_bounds()
+    table = buffer.get_tag_table()
+    for color in model.COMMENT_COLORS.values():
+        tag = table.lookup("head" + color)
+        if tag is not None:
+            buffer.remove_tag(tag, start, end)
+    if not colors:
+        return
+    for head_start, head_end, name in model.comment_heads(buffer.get_text(start, end, False)):
+        color = colors.get(name)
+        if color:
+            tag = table.lookup("head" + color) or buffer.create_tag("head" + color, foreground=color)
+            buffer.apply_tag(tag, buffer.get_iter_at_offset(head_start), buffer.get_iter_at_offset(head_end))
+
+
 def parse_due(text):
     try:
         return datetime.date.fromisoformat(text)
@@ -124,7 +157,8 @@ class CardWidget(Gtk.Box):
         if data.get("notes"):
             # At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the
             # notes become spaces so no line is wasted. The whole text is in the card dialog.
-            notes = Gtk.Label(label=model.clip_text(data["notes"], NOTES_CHARS), xalign=0, wrap=True, wrap_mode=2)
+            notes = Gtk.Label(xalign=0, wrap=True, wrap_mode=2)
+            set_comment_text(notes, model.clip_text(data["notes"], NOTES_CHARS), board.comment_colors)
             notes.add_css_class("card-meta")
             self.append(notes)
 
@@ -275,6 +309,7 @@ class BoardView(Gtk.Box):
         self.window = window
         self.sync = window.sync
         self.board_id = None
+        self.comment_colors = {}
 
         header = Gtk.Box(spacing=8)
         header.set_margin_start(20)
@@ -416,6 +451,7 @@ class BoardView(Gtk.Box):
         if board is None:
             return
         self.title.set_label(board["data"].get("name", "Board"))
+        self.comment_colors = model.comment_colors(self.sync, self.board_id)
         # Neuaufbau (auch durch eigene Änderungen, die vom Server zurückkommen)
         # darf weder Scrollposition noch das gerade benutzte Eingabefeld verlieren.
         typing = None
@@ -651,6 +687,10 @@ class CardDialog(Adw.Dialog):
         notes_group = Adw.PreferencesGroup(title=_("Notizen"))
         self.notes = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.notes.get_buffer().set_text(data.get("notes") or "")
+        colors = board.comment_colors
+        if colors:
+            color_comment_heads(self.notes.get_buffer(), colors)
+            self.notes.get_buffer().connect("changed", lambda buffer: color_comment_heads(buffer, colors))
         self.notes.set_size_request(-1, 110)
         self.notes.add_css_class("card")
         self.notes.set_left_margin(10)
@@ -931,3 +971,47 @@ class CardDialog(Adw.Dialog):
         self.deleted = True
         self.sync.delete(self.card_id)
         self.close()
+
+
+class CommentColorsDialog(Adw.Dialog):
+    """„Farben der Personen“ (development projects, way C, Olaf 07.10.): which colour each person's comment heads
+    have on this board – kept in the board, so everyone who sees it sees the same."""
+
+    CHOICES = [(None, _("Keine")), ("purple", _("Lila")), ("pink", _("Pink")), ("orange", _("Orange")),
+               ("mint", _("Mint")), ("blue", _("Blau")), ("yellow", _("Gelb"))]
+
+    def __init__(self, sync, board_id):
+        super().__init__(title=_("Farben der Personen"))
+        self.sync, self.board_id = sync, board_id
+        self.set_content_width(420)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(description=_("Kommentare in den Karten zeigen den Namen in dieser Farbe."))
+        board = sync.get(board_id)
+        chosen = dict((board["data"].get("colors") if board else None) or {})
+        keys = [key for key, _label in self.CHOICES]
+        self.rows = {}
+        for name in model.comment_names(sync, board_id):
+            row = Adw.ComboRow(title=name, model=Gtk.StringList.new([label for _key, label in self.CHOICES]))
+            row.set_selected(keys.index(chosen.get(name)) if chosen.get(name) in keys else 0)
+            row.connect("notify::selected", lambda _row, _p: self.save())
+            group.add(row)
+            self.rows[name] = row
+        page.add(group)
+        view.set_content(page)
+        self.set_child(view)
+
+    def save(self):
+        board = self.sync.get(self.board_id)
+        if board is None:
+            return
+        colors = dict(board["data"].get("colors") or {})
+        for name, row in self.rows.items():
+            key = self.CHOICES[row.get_selected()][0]
+            if key:
+                colors[name] = key
+            else:
+                colors.pop(name, None)
+        self.sync.update(self.board_id, colors=colors or None)
+
