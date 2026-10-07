@@ -50,7 +50,8 @@ EXCLUSIVE = (tuple(HIGHLIGHTS), tuple(TEXT_COLORS), tuple(FONTS))
 INLINE = ("b", "i", "u", "s") + tuple(HIGHLIGHTS) + tuple(TEXT_COLORS) + tuple(FONTS)
 ALIGNMENTS = {"center": Gtk.Justification.CENTER, "right": Gtk.Justification.RIGHT}
 # Web addresses that become clickable links (trailing punctuation is not part of the address).
-LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
+# Web addresses, mail and phone links, and the way back into LiMail/LiCal (Zusammenspiel; Michelle 07.10., card 0cb30240).
+LINK = re.compile(r"(?:https?://|www\.|(?:mailto|tel):|(?:limail|lical|linotes)://)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
 MAX_INDENT = 4
 INDENT = 26
 LIST_MARGIN = 30
@@ -778,7 +779,7 @@ class NoteEditor(Gtk.TextView):
             start.backward_to_tag_toggle(tag)
         end.forward_to_tag_toggle(tag)
         url = self.get_buffer().get_text(start, end, False)
-        return url if url.startswith(("http://", "https://")) else "https://" + url
+        return "https://" + url if url.startswith("www.") else url   # limail://, mailto: … stay as they are
 
     # ========================================================
     # LINKS TO OTHER NOTES (">>")

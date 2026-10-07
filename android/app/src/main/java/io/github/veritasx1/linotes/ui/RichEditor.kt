@@ -50,7 +50,8 @@ val LIST_TYPES = setOf("bullet", "dash", "number", "check")
 const val PLACEHOLDER = '\u200B'
 
 /** Web addresses that become tappable links (trailing punctuation is not part of the address). */
-private val LINK = Regex("""(?:https?://|www\.)[^\s<>"']+[^\s<>"'.,;:!?)\]]""")
+// Web addresses, mail and phone links, and the way back into LiMail/LiCal (Zusammenspiel; Michelle 07.10., card 0cb30240).
+private val LINK = Regex("""(?:https?://|www\.|(?:mailto|tel):|(?:limail|lical|linotes)://)[^\s<>"']+[^\s<>"'.,;:!?)\]]""")
 
 /** How a web address looks: accent color, underlined. Not saved – found again on every change. */
 class LinkSpan(private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
@@ -1021,7 +1022,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val start = text.getSpanStart(link)
         val end = text.getSpanEnd(link)
         if (offset !in start until end) return false
-        val address = text.substring(start, end).let { if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it" }
+        val address = text.substring(start, end).let { if (it.startsWith("www.")) "https://$it" else it }
         return try {
             context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(address))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
