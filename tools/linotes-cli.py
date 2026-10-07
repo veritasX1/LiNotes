@@ -14,6 +14,7 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py card <karte>              # Details
     linotes-cli.py move <karte> <spalte>
     linotes-cli.py comment <karte> <text>    # hängt Text an die Notizen an
+    linotes-cli.py rename <karte> <titel>     # Titel einer Karte ändern
     linotes-cli.py priority <karte> <hoch|mittel|niedrig|keine>
     linotes-cli.py export <board> <datei.pdf|datei.csv>
     linotes-cli.py trace-commits <board> [repo]   # Commits mit [karten-id] an die Karten hängen
@@ -359,6 +360,14 @@ def cmd_comment(card_ref, text):
     eng.update(card["id"], notify=False, notes=notes)
     flush(eng)
     print("ok")
+
+
+def cmd_rename(card_ref, title):
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    eng.update(card["id"], notify=False, title=title)
+    flush(eng)
+    print(f"„{title}“")
 
 
 def cmd_add(board_ref, column_ref, title, notes=""):
