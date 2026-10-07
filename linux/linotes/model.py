@@ -461,6 +461,40 @@ def is_dev_board(sync, board_id):
     return bool(board and board["data"].get("dev"))
 
 
+
+# Card comments ("[Name dd.mm. HH:MM] text", as linotes-cli and the team write them): each person's head in the
+# colour the board gives them (Olaf 07.10., way C). Only shown – the notes stay plain text. Keys as the text
+# colours of notes, plus a dark yellow that still reads on white (the team has one); without any the board looks
+# as before.
+COMMENT_COLORS = {"purple": "#9B51E0", "pink": "#E0457F", "orange": "#E07A00", "mint": "#12A594", "blue": "#1C8CE0",
+                  "yellow": "#B88A00"}
+COMMENT_HEAD = re.compile(r"\[([^\[\]\n]+?) \d{2}\.\d{2}\. \d{2}:\d{2}\]")
+
+
+def comment_heads(text, line_start=True):
+    """(start, end, name) of the comment heads in [text] – at a line's start only, unless the lines were joined
+    (the card's preview)."""
+    return [(m.start(), m.end(), m.group(1)) for m in COMMENT_HEAD.finditer(text or "")
+            if not line_start or m.start() == 0 or text[m.start() - 1] == "\n"]
+
+
+def comment_colors(sync, board_id):
+    """{name: "#rrggbb"} the board gives the people who comment; empty = nothing coloured."""
+    board = sync.get(board_id)
+    chosen = (board["data"].get("colors") if board else None) or {}
+    return {name: COMMENT_COLORS[key] for name, key in chosen.items() if key in COMMENT_COLORS}
+
+
+def comment_names(sync, board_id):
+    """Who can get a colour: the board's people and everyone who commented on one of its cards."""
+    board = sync.get(board_id)
+    names = {sync.user_name(uid) for uid in set(sync.share_members(board.get("share"))) | {sync.user_id}} if board else set()
+    for card in sync.objects("card"):
+        if card["data"].get("board") == board_id:
+            names.update(name for _s, _e, name in comment_heads(card["data"].get("notes")))
+    names.discard("?")
+    return sorted(names, key=str.lower)
+
 def clip_text(text, limit):
     """At most `limit` characters, cut at a word end with "…" – a cheap stand-in for GTK's line limit
     with ellipsis, which made a board with many cards four times slower to lay out."""
