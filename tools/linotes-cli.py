@@ -355,7 +355,7 @@ def cmd_comment(card_ref, text):
     card = find(eng, "card", card_ref)
     notes = card["data"].get("notes", "")
     stamp = time.strftime("%d.%m. %H:%M")
-    notes = (notes.rstrip() + "\n\n" if notes.strip() else "") + f"[Claude {stamp}] {text}"
+    notes = (notes.rstrip() + "\n\n" if notes.strip() else "") + f"[{eng.user.get('name') or PROFILE} {stamp}] {text}"
     eng.update(card["id"], notify=False, notes=notes)
     flush(eng)
     print("ok")
