@@ -19,6 +19,9 @@ from linotes.application import LiNotesApplication
 assert "/scratchpad/demodata/" in str(_sync.DATA_DIR), _sync.DATA_DIR
 application.APP_ID = "io.github.veritasx1.LiNotesDemo"
 OUT = os.path.join(SCRATCH, "shots")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from demo_texts import translator  # noqa: E402  – LINOTES_LANGUAGE=en|fr: demo contents in that language
+L, TRANSLATE = translator(os.environ.get("LINOTES_LANGUAGE", "de"))
 
 
 class App(LiNotesApplication):
@@ -47,6 +50,9 @@ def span(text, part, name):
 
 
 def seed(sync):
+    put, update = sync.put, sync.update
+    sync.put = lambda kind, data, *args, **kwargs: put(kind, TRANSLATE(data), *args, **kwargs)
+    sync.update = lambda object_id, *args, **fields: update(object_id, *args, **TRANSLATE(fields))
     uid = sync.user_id
     model.ensure_defaults(sync)
     now = time.time()
@@ -83,7 +89,7 @@ def seed(sync):
         {"t": "check", "x": "Fahrradschloss und Helm"},
         {"t": "check", "x": "Ladekabel und Powerbank"},
         {"t": "heading", "x": "Budget"},
-        model.table_block([["Posten", "Betrag", "Wer"], ["Unterkunft", "240 €", "Anna"], ["Bahn", "78 €", "Olaf"], ["Essen", "120 €", "beide"]]),
+        model.table_block([["Posten", "Betrag", "Wer"], ["Unterkunft", "240 €", "Mia"], ["Bahn", "78 €", "Olaf"], ["Essen", "120 €", "beide"]]),
         {"t": "body", "x": calc_line, "s": [span(calc_line, "438", "b")]},
         {"t": "body", "x": link_line, "s": [span(link_line, "Radtour Kühlungsborn", "n:" + tour["id"])]},
     ], 3, pinned=True)
@@ -110,7 +116,7 @@ def seed(sync):
     pdf_id = sync.upload_file(open(os.path.join(SCRATCH, "tab.pdf"), "rb").read(), None)
     ogg = open(os.path.join(SCRATCH, "probe.ogg"), "rb").read()
     ogg_id = sync.upload_file(ogg, None)
-    meeting_text = "Kurz besprochen: Lieferung kommt Dienstag, Anna übernimmt die Abholung."
+    meeting_text = "Kurz besprochen: Lieferung kommt Dienstag, Mia übernimmt die Abholung."
     meeting = note(folder, [
         {"t": "title", "x": "Elternabend 2b"},
         {"t": "body", "x": meeting_text, "s": [span(meeting_text, "Dienstag", "b")]},
@@ -122,7 +128,7 @@ def seed(sync):
     ], 40)
     ideas = note(folder, [
         {"t": "title", "x": "Geschenkideen"},
-        {"t": "heading", "x": "Anna", "z": True},
+        {"t": "heading", "x": "Mia", "z": True},
         {"t": "bullet", "x": "Kochkurs Thai"},
         {"t": "bullet", "x": "Konzertkarten"},
         {"t": "heading", "x": "Ben"},
@@ -140,13 +146,15 @@ def seed(sync):
 
     # board
     board = model.default_board(uid)
-    columns = {c["data"]["name"]: c["id"] for c in model.board_columns(sync, board)}
+    # By position, not by name – the names follow the app's language.
+    names = ["Offen", "In Arbeit", "Erledigt"]
+    columns = {names[i]: c["id"] for i, c in enumerate(model.board_columns(sync, board)[:3])}
     cards = [("Offen", "Steuererklärung abgeben", "rot", "hoch", "Belege liegen im Ordner „Haushalt“."),
              ("Offen", "Fahrrad zur Inspektion", "blau", "mittel", ""),
              ("Offen", "Fenster putzen", None, None, ""),
              ("In Arbeit", "Gartenhaus planen", "grün", "mittel", "Projektplan steht, Material bestellen."),
              ("In Arbeit", "Fotobuch Sommerurlaub", "lila", None, ""),
-             ("Erledigt", "Geburtstagsgeschenk für Anna", "orange", None, "")]
+             ("Erledigt", "Geburtstagsgeschenk für Mia", "orange", None, "")]
     for order, (column, title, color, priority, notes) in enumerate(cards):
         data = {"board": board, "column": columns[column], "title": title, "order": order, **model.new_card_fields(sync, columns[column])}
         if color: data["color"] = color
@@ -157,7 +165,7 @@ def seed(sync):
     # plans
     today = datetime.date.today()
     putz = {**plans.template("putzplan"), "name": "Putzplan WG", "order": 1}
-    putz["rot"] = {"people": ["Olaf", "Anna", "Ben"], "start": plans.monday(today).isoformat()}
+    putz["rot"] = {"people": ["Olaf", "Mia", "Ben"], "start": plans.monday(today).isoformat()}
     putz["cols"]["count"] = 5
     putz = plans.set_cell(putz, 2, 1, "Ben (Urlaub)", "yellow")
     ids = {"putz": sync.put("plan", putz, None, notify=False)["id"]}
@@ -245,11 +253,11 @@ def add_evidence(sync, card_id):
     cr = cairo.Context(surface)
     cr.set_source_rgb(1, 1, 1); cr.paint()
     cr.set_source_rgb(0.13, 0.13, 0.15); cr.select_font_face("Sans", 0, 1); cr.set_font_size(26)
-    cr.move_to(28, 52); cr.show_text("SIL-Testlauf LKA – Abschaltgrenze")
+    cr.move_to(28, 52); cr.show_text(L("SIL-Testlauf LKA – Abschaltgrenze"))
     cr.select_font_face("Sans", 0, 0); cr.set_font_size(19)
     for i, case in enumerate(["TC-LKA-031", "TC-LKA-032", "TC-LKA-033", "TC-LKA-034", "TC-LKA-035", "TC-LKA-036"]):
         cr.set_source_rgb(0.13, 0.13, 0.15); cr.move_to(28, 100 + i * 31); cr.show_text(case)
-        cr.set_source_rgb(0.18, 0.66, 0.31); cr.move_to(240, 100 + i * 31); cr.show_text("bestanden")
+        cr.set_source_rgb(0.18, 0.66, 0.31); cr.move_to(240, 100 + i * 31); cr.show_text(L("bestanden"))
     surface.write_to_png(picture)
     card = sync.get(card_id)
     items = []

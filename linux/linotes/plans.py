@@ -12,21 +12,24 @@ Grid plan  {"name", "mode": "grid", "cols": {"type", "labels" | "count", "start"
     rot        Rotation (cleaning rota): with "weeks" columns, row r in week w gets
                people[(r + weeks since rot.start) % len(people)] unless the cell has its own text.
 
-Timeline plan  {"name", "mode": "timeline", "tasks": [{"x", "from", "to", "k", "m"}]}
+Timeline plan  {"name", "mode": "timeline", "tasks": [{"x", "from", "to", "k", "m", "moved"}]}
     from/to    "YYYY-MM-DD" (to inclusive); "m": milestone (one day, drawn as a diamond)
+    moved      milestones only: earlier days, oldest first, [{"was": "YYYY-MM-DD", "at": time, "by": user}] –
+               drawn faded and listed in the plan report (Terminverschiebungen)
 
 The same rules are in Android's Plans.kt (PlanTest has the same cases as tests/test_plans.py).
 """
 
 import datetime
+from .i18n import _
 
-WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+WEEKDAYS = [_("Mo"), _("Di"), _("Mi"), _("Do"), _("Fr"), _("Sa"), _("So")]
 COLORS = {  # name -> RGB (0..1), the same as the highlight colors in notes
     "yellow": (1.0, 0.85, 0.24), "orange": (1.0, 0.62, 0.04), "pink": (1.0, 0.44, 0.66),
     "purple": (0.75, 0.52, 0.95), "mint": (0.3, 0.85, 0.75), "blue": (0.35, 0.7, 1.0), "grey": (0.6, 0.6, 0.63),
 }
-COLOR_NAMES = {"yellow": "Gelb", "orange": "Orange", "pink": "Rosa", "purple": "Lila", "mint": "Mint", "blue": "Blau",
-               "grey": "Grau"}
+COLOR_NAMES = {"yellow": _("Gelb"), "orange": _("Orange"), "pink": _("Rosa"), "purple": _("Lila"), "mint": _("Mint"), "blue": _("Blau"),
+               "grey": _("Grau")}
 
 
 def day(text):
@@ -41,7 +44,18 @@ def monday(date):
 
 
 def short_date(date):
+    """05.10. · 10/5 · 05/10 – as each language writes a short date."""
+    from .i18n import language
+    if language() == "en":
+        return f"{date.month}/{date.day}"
+    if language() == "fr":
+        return date.strftime("%d/%m")
     return date.strftime("%d.%m.")
+
+
+def week_label(date):
+    """„KW 41 · 05.10.“ · „Wk 41 · 10/5“ · „Sem. 41 · 05/10“"""
+    return _("KW {week} · {date}", week=date.isocalendar()[1], date=short_date(date))
 
 
 # --- grid ---------------------------------------------------------------
@@ -65,7 +79,7 @@ def column_labels(plan, today=None):
         return [f"{WEEKDAYS[d.weekday()]} {short_date(d)}" for d in (start + datetime.timedelta(days=i) for i in range(count))]
     if kind == "weeks":
         first = monday(today)
-        return [f"KW {d.isocalendar()[1]} · {short_date(d)}" for d in (first + datetime.timedelta(weeks=i) for i in range(count))]
+        return [week_label(d) for d in (first + datetime.timedelta(weeks=i) for i in range(count))]
     labels = list(cols.get("labels") or [])
     return labels + [""] * (count - len(labels))
 
@@ -192,6 +206,7 @@ def timeline_range(plan, today=None):
     for task in plan.get("tasks") or []:
         start, end = day(task.get("from")), day(task.get("to")) or day(task.get("from"))
         days += [d for d in (start, end) if d]
+        days += [d for d in (day(entry.get("was")) for entry in task.get("moved") or []) if d]  # faded earlier days
     first = monday(min(days) if days else today)
     last = max(days) if days else today
     last = max(last, first + datetime.timedelta(days=13))
@@ -209,6 +224,65 @@ def task_span(task):
     return (start, max(start, end))
 
 
+# --- order and shifts ---------------------------------------------------
+
+def moved_list(items, at, to):
+    """`items` with the element at `at` moved to position `to` (clamped)."""
+    items = list(items)
+    if not 0 <= at < len(items):
+        return items
+    item = items.pop(at)
+    items.insert(max(0, min(to, len(items))), item)
+    return items
+
+
+def move_row(plan, at, to):
+    """A grid row with its cells to another place."""
+    rows = list(plan.get("rows") or [])
+    if not 0 <= at < len(rows):
+        return plan
+    return {**plan, "rows": moved_list(rows, at, to), "cells": moved_list(cells(plan), at, to)}
+
+
+def move_task(plan, at, to):
+    return {**plan, "tasks": moved_list(plan.get("tasks") or [], at, to)}
+
+
+def sort_tasks(plan):
+    """All tasks by start day (tasks without a day at the end); equal days keep their order."""
+    far = datetime.date.max
+    return {**plan, "tasks": sorted(plan.get("tasks") or [], key=lambda task: day(task.get("from")) or far)}
+
+
+def set_task_day(plan, index, key, value, by=None, at=None):
+    """Set "from" or "to" of a task (ISO day). A milestone keeps the day it had in "moved",
+    so the old date stays visible (faded) and the report lists the shift."""
+    tasks = [dict(task) for task in plan.get("tasks") or []]
+    if not 0 <= index < len(tasks):
+        return plan
+    task = tasks[index]
+    if task.get(key) == value:
+        return plan
+    if task.get("m"):
+        if task.get("from"):
+            task["moved"] = list(task.get("moved") or []) + [{"was": task["from"], "at": at, "by": by}]
+        task["from"] = task["to"] = value
+    else:
+        task[key] = value
+    return {**plan, "tasks": tasks}
+
+
+def shifts(plan):
+    """Every milestone shift, oldest first per milestone: (name, was, now, at, by)."""
+    result = []
+    for task in plan.get("tasks") or []:
+        moved = task.get("moved") or []
+        days = [entry.get("was") for entry in moved] + [task.get("from")]
+        for entry, new in zip(moved, days[1:]):
+            result.append((task.get("x") or _("Meilenstein"), entry.get("was"), new, entry.get("at"), entry.get("by")))
+    return result
+
+
 # --- templates ----------------------------------------------------------
 
 def template(key, today=None):
@@ -217,39 +291,39 @@ def template(key, today=None):
         return {"mode": "grid", "cols": {"type": "weekdays", "count": 5},
                 "rows": ["1. 8:00", "2. 8:50", "3. 9:55", "4. 10:45", "5. 11:50", "6. 12:40"]}
     if key == "schichtplan":
-        return {"mode": "grid", "cols": {"type": "weekdays", "count": 7}, "rows": ["Person 1", "Person 2", "Person 3"],
-                "cells": [[{"x": "Früh", "k": "yellow"}, {"x": "Früh", "k": "yellow"}, {"x": "Spät", "k": "blue"},
-                           {"x": "Spät", "k": "blue"}, {"x": "Nacht", "k": "purple"}, None, None]]}
+        return {"mode": "grid", "cols": {"type": "weekdays", "count": 7}, "rows": [_("Person 1"), _("Person 2"), _("Person 3")],
+                "cells": [[{"x": _("Früh"), "k": "yellow"}, {"x": _("Früh"), "k": "yellow"}, {"x": _("Spät"), "k": "blue"},
+                           {"x": _("Spät"), "k": "blue"}, {"x": _("Nacht"), "k": "purple"}, None, None]]}
     if key == "putzplan":
-        return {"mode": "grid", "cols": {"type": "weeks", "count": 4}, "rows": ["Bad", "Küche", "Staubsaugen", "Müll"],
-                "rot": {"people": ["Person 1", "Person 2"], "start": monday(today).isoformat()}}
+        return {"mode": "grid", "cols": {"type": "weeks", "count": 4}, "rows": [_("Bad"), _("Küche"), _("Staubsaugen"), _("Müll")],
+                "rot": {"people": [_("Person 1"), _("Person 2")], "start": monday(today).isoformat()}}
     if key == "raumplan":
-        return {"mode": "grid", "cols": {"type": "free", "labels": ["Saal 1", "Saal 2", "Saal 3"]},
+        return {"mode": "grid", "cols": {"type": "free", "labels": [_("Saal 1"), _("Saal 2"), _("Saal 3")]},
                 "rows": [f"{hour:02d}:00" for hour in range(7, 17)]}
     if key == "projektplan":
         start = monday(today)
         def at(days):
             return (start + datetime.timedelta(days=days)).isoformat()
         return {"mode": "timeline", "tasks": [
-            {"x": "Konzept", "from": at(0), "to": at(4), "k": "blue"},
-            {"x": "Umsetzung", "from": at(7), "to": at(18), "k": "orange"},
-            {"x": "Test", "from": at(14), "to": at(20), "k": "mint"},
-            {"x": "Abnahme", "from": at(21), "to": at(21), "k": "pink", "m": True}]}
+            {"x": _("Konzept"), "from": at(0), "to": at(4), "k": "blue"},
+            {"x": _("Umsetzung"), "from": at(7), "to": at(18), "k": "orange"},
+            {"x": _("Test"), "from": at(14), "to": at(20), "k": "mint"},
+            {"x": _("Abnahme"), "from": at(21), "to": at(21), "k": "pink", "m": True}]}
     return {"mode": "grid", "cols": {"type": "free", "labels": ["", "", ""]}, "rows": ["", "", ""]}
 
 
-TEMPLATES = [("leer", "Leerer Plan", "Raster mit freien Zeilen und Spalten"),
-             ("stundenplan", "Stundenplan", "Mo–Fr × Schulstunden"),
-             ("schichtplan", "Schichtplan", "Mo–So × Personen, Schichten farbig"),
-             ("putzplan", "Putzplan", "Aufgaben × Wochen, Namen rotieren wöchentlich"),
-             ("raumplan", "OP- / Raumplan", "Uhrzeit × Säle oder Räume"),
-             ("projektplan", "Projektplan", "Zeitstrahl mit Aufgaben und Meilensteinen")]
+TEMPLATES = [("leer", _("Leerer Plan"), _("Raster mit freien Zeilen und Spalten")),
+             ("stundenplan", _("Stundenplan"), _("Mo–Fr × Schulstunden")),
+             ("schichtplan", _("Schichtplan"), _("Mo–So × Personen, Schichten farbig")),
+             ("putzplan", _("Putzplan"), _("Aufgaben × Wochen, Namen rotieren wöchentlich")),
+             ("raumplan", _("OP- / Raumplan"), _("Uhrzeit × Säle oder Räume")),
+             ("projektplan", _("Projektplan"), _("Zeitstrahl mit Aufgaben und Meilensteinen"))]
 
 
 def text_rows(plan, today=None):
     """The plan as rows of text (PDF, search, plain text)."""
     if plan.get("mode") == "timeline":
-        lines = [["Aufgabe", "Von", "Bis"]]
+        lines = [[_("Aufgabe"), _("Von"), _("Bis")]]
         for task in plan.get("tasks") or []:
             span = task_span(task)
             if span:

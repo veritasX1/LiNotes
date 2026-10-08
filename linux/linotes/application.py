@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from .sync import SyncEngine
 from .window import LiNotesWindow
+from .i18n import _
 
 APP_ID = "io.github.veritasx1.LiNotes"
 
@@ -21,7 +23,7 @@ class LiNotesApplication(Adw.Application):
         self.sync = None
         self.start_with_new_note = False
         # Quick note from anywhere: "linotes --neue-notiz" (dock menu, own keyboard shortcut).
-        self.add_main_option("neue-notiz", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Neue Notiz anlegen", None)
+        self.add_main_option("neue-notiz", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, _("Neue Notiz anlegen"), None)
 
     def do_handle_local_options(self, options):
         if options.contains("neue-notiz"):
@@ -105,13 +107,31 @@ class LiNotesApplication(Adw.Application):
 
     def about(self):
         dialog = Adw.AboutDialog(
-            application_name="LiNotes", application_icon=APP_ID, version="2.2.1",
+            application_name="LiNotes", application_icon=APP_ID, version="2.3.0",
             developer_name="Olaf Winkler",
-            comments="Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein.",
+            comments=_("Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein."),
             copyright="© 2026 Olaf Winkler", license_type=Gtk.License.GPL_3_0,
-            website="https://linotes.goip.de", issue_url="https://github.com/veritasX1/LiNotes/issues",
+            website="https://lisoftware.de/linotes/", issue_url="https://github.com/veritasX1/LiNotes/issues",
         )
+        # Rechtliches (card 5f4aee29, wie LiMail): was LiNotes mitliefert und unter Ubuntu nutzt – aus shared/lizenzen
+        data = load_licenses()
+        if data:
+            texts = data["texts"]
+            for lib in data["ubuntu"]:
+                if lib["text"] and texts.get(lib["text"], "").strip():
+                    dialog.add_legal_section(lib["name"], " · ".join(part for part in (lib["version"], lib["license"]) if part), Gtk.License.CUSTOM, GLib.markup_escape_text(texts[lib["text"]]))
+                else:
+                    dialog.add_legal_section(lib["name"], " · ".join(part for part in (lib["version"], lib["license"]) if part), Gtk.License.UNKNOWN, None)
         dialog.present(self.get_active_window())
+
+
+def load_licenses():
+    """shared/lizenzen/lizenzen.json (tools/lizenzen.py), next to the code when installed."""
+    here = Path(__file__).resolve().parent
+    for path in (here.parents[1] / "shared" / "lizenzen" / "lizenzen.json", here / "lizenzen.json"):
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    return None
 
 
 def main():

@@ -3,6 +3,7 @@
 import datetime
 import re
 import time
+from .i18n import _
 
 
 # --- notes ------------------------------------------------------
@@ -27,13 +28,13 @@ def blocks_title(blocks):
     return ""
 
 
-def note_title(note, locked_label="Gesperrte Notiz"):
+def note_title(note, locked_label=_("Gesperrte Notiz")):
     """Locked notes keep their title visible, like in Apple's Notes (only the
     content is behind the notes password)."""
     data = note["data"]
     if data.get("enc"):
         return data.get("title") or locked_label
-    return blocks_title(note_blocks(note)) or data.get("title") or "Neue Notiz"
+    return blocks_title(note_blocks(note)) or data.get("title") or _("Neue Notiz")
 
 
 def note_preview(note):
@@ -70,6 +71,84 @@ MENTION = "m:"
 def link_target(span_name):
     """The note id of a note link span ("n:<id>"), otherwise None."""
     return span_name[len(NOTE_LINK):] if isinstance(span_name, str) and span_name.startswith(NOTE_LINK) else None
+
+
+# --- templates (Vorlagen) ---------------------------------------------------
+
+WEEKDAY_NAMES = [_("Montag"), _("Dienstag"), _("Mittwoch"), _("Donnerstag"), _("Freitag"), _("Samstag"), _("Sonntag")]
+PLACEHOLDER = re.compile(r"\{\{(Datum|Uhrzeit|Wochentag)\}\}")
+
+
+def _t(kind, text=""):
+    return {"t": kind, "x": text}
+
+
+# Shipped templates (the same in Android's Model.BUILTIN_TEMPLATES): key, name, blocks.
+BUILTIN_TEMPLATES = [
+    ("besprechung", _("Besprechung"), [
+        _t("title", _("Besprechung {{Datum}}")), _t("body", _("{{Wochentag}}, {{Datum}}, {{Uhrzeit}} Uhr")),
+        _t("heading", _("Teilnehmer")), _t("bullet"), _t("heading", _("Themen")), _t("number"),
+        _t("heading", _("Beschlüsse")), _t("body"), _t("heading", "Aufgaben"), _t("check")]),
+    ("protokoll", _("Protokoll"), [
+        _t("title", _("Protokoll {{Datum}}")), _t("body", _("Ort: ")), _t("body", _("Anwesend: ")),
+        _t("heading", _("Verlauf")), _t("body"), _t("heading", _("Ergebnisse")), _t("bullet")]),
+    ("reise", _("Reisecheckliste"), [
+        _t("title", _("Packliste")), _t("heading", _("Dokumente")), _t("check", _("Ausweis oder Reisepass")), _t("check", _("Tickets")),
+        _t("check", _("Versicherungskarte")), _t("heading", _("Kleidung")), _t("check"), _t("heading", _("Technik")),
+        _t("check", _("Ladegerät")), _t("check", _("Kopfhörer")), _t("heading", _("Vor der Abreise")), _t("check", _("Pflanzen gießen")),
+        _t("check", _("Fenster schließen"))]),
+    ("tagebuch", _("Tagebuch"), [_t("title", _("{{Wochentag}}, {{Datum}}")), _t("body")]),
+]
+
+
+def fill_template(blocks, now):
+    """A copy of the blocks with {{Datum}}, {{Uhrzeit}}, {{Wochentag}} filled in; formatting spans
+    move with the text (Android: Model.fillTemplate)."""
+    values = {"Datum": now.strftime("%d.%m.%Y"), "Uhrzeit": now.strftime("%H:%M"), "Wochentag": WEEKDAY_NAMES[now.weekday()]}
+    result = []
+    for block in blocks:
+        block = {**block}
+        text = block.get("x", "")
+        spans = [list(span) for span in block.get("s") or []]
+        shift_at = []
+        out, last = [], 0
+        for match in PLACEHOLDER.finditer(text):
+            out.append(text[last:match.start()])
+            value = values[match.group(1)]
+            out.append(value)
+            shift_at.append((match.start(), match.end(), len(value) - (match.end() - match.start())))
+            last = match.end()
+        if shift_at:
+            out.append(text[last:])
+            block["x"] = "".join(out)
+            for span in spans:
+                for position in (0, 1):
+                    delta = sum(change for start, end, change in shift_at if span[position] >= end)
+                    span[position] += delta
+            if spans:
+                block["s"] = spans
+        result.append(block)
+    return result
+
+
+FOOTNOTE = "fn:"
+
+
+def footnote_text(span_name):
+    """The text of a footnote span ("fn:<text>") – a Profi-Funktion – otherwise None."""
+    return span_name[len(FOOTNOTE):] if isinstance(span_name, str) and span_name.startswith(FOOTNOTE) else None
+
+
+def footnotes(blocks):
+    """The footnote texts of a note in reading order (numbered 1, 2, … in the text) – for the list
+    under the note and the PDF (Android: Model.footnotes)."""
+    result = []
+    for block in blocks:
+        for span in sorted(block.get("s") or [], key=lambda span: span[0] if span else 0):
+            text = footnote_text(span[2]) if len(span) == 3 else None
+            if text is not None:
+                result.append(text)
+    return result
 
 
 def mention_target(span_name):
@@ -174,7 +253,7 @@ def created(obj):
     return obj["data"].get("created") or modified(obj)
 
 
-NOTE_SORTS = (("modified", "Bearbeitungsdatum"), ("created", "Erstellungsdatum"), ("title", "Titel"))
+NOTE_SORTS = (("modified", _("Bearbeitungsdatum")), ("created", _("Erstellungsdatum")), ("title", _("Titel")))
 
 
 def sort_notes(notes, order="modified"):
@@ -189,8 +268,8 @@ def sort_notes(notes, order="modified"):
             part.sort(key=lambda note: note_title(note).casefold())
         else:
             part.sort(key=stamp, reverse=True)
-    return [(note, "Angeheftet", stamp(note)) for note in pinned] + \
-        [(note, ("Notizen" if pinned else "") if order == "title" else date_group(stamp(note)), stamp(note))
+    return [(note, _("Angeheftet"), stamp(note)) for note in pinned] + \
+        [(note, (_("Notizen") if pinned else "") if order == "title" else date_group(stamp(note)), stamp(note))
          for note in others]
 
 
@@ -200,24 +279,24 @@ def date_group(timestamp, today=None):
     day = datetime.date.fromtimestamp(timestamp)
     delta = (today - day).days
     if delta <= 0:
-        return "Heute"
+        return _("Heute")
     if delta == 1:
-        return "Gestern"
+        return _("Gestern")
     if delta < 7:
-        return "Vorherige 7 Tage"
+        return _("Vorherige 7 Tage")
     if delta < 30:
-        return "Vorherige 30 Tage"
+        return _("Vorherige 30 Tage")
     if day.year == today.year:
         return MONTHS[day.month - 1]
     return f"{MONTHS[day.month - 1]} {day.year}"
 
 
 MONTHS = [
-    "Januar", "Februar", "März", "April", "Mai", "Juni",
-    "Juli", "August", "September", "Oktober", "November", "Dezember",
+    _("Januar"), _("Februar"), _("März"), _("April"), _("Mai"), _("Juni"),
+    _("Juli"), _("August"), _("September"), _("Oktober"), _("November"), _("Dezember"),
 ]
 
-WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+WEEKDAYS = [_("Montag"), _("Dienstag"), _("Mittwoch"), _("Donnerstag"), _("Freitag"), _("Samstag"), _("Sonntag")]
 
 
 def short_date(timestamp):
@@ -228,7 +307,7 @@ def short_date(timestamp):
     if delta <= 0:
         return moment.strftime("%H:%M")
     if delta == 1:
-        return "Gestern"
+        return _("Gestern")
     if delta < 7:
         return WEEKDAYS[moment.weekday()]
     return moment.strftime("%d.%m.%y")
@@ -236,7 +315,7 @@ def short_date(timestamp):
 
 def long_date(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
-    return f"{moment.day}. {MONTHS[moment.month - 1]} {moment.year} um {moment:%H:%M}"
+    return _("{day}. {value} {year} um {moment:%H:%M}", day=moment.day, value=MONTHS[moment.month - 1], year=moment.year, moment=moment)
 
 
 def now():
@@ -337,7 +416,7 @@ def folder_path(sync, folder):
 # --- board cards ------------------------------------------------
 
 # Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title.
-PRIORITIES = [(None, "Keine"), ("niedrig", "Niedrig"), ("mittel", "Mittel"), ("hoch", "Hoch")]
+PRIORITIES = [(None, _("Keine")), ("niedrig", _("Niedrig")), ("mittel", _("Mittel")), ("hoch", _("Hoch"))]
 PRIORITY_MARKS = {"niedrig": "!", "mittel": "!!", "hoch": "!!!"}
 
 
@@ -382,17 +461,103 @@ def is_dev_board(sync, board_id):
     return bool(board and board["data"].get("dev"))
 
 
+
+# Card comments ("[Name dd.mm. HH:MM] text", as linotes-cli and the team write them): each person's head in the
+# colour the board gives them (Olaf 07.10., way C). Only shown – the notes stay plain text. Keys as the text
+# colours of notes, plus a dark yellow that still reads on white (the team has one); without any the board looks
+# as before.
+COMMENT_COLORS = {"purple": "#9B51E0", "pink": "#E0457F", "orange": "#E07A00", "mint": "#12A594", "blue": "#1C8CE0",
+                  "yellow": "#B88A00"}
+COMMENT_HEAD = re.compile(r"\[([^\[\]\n]+?) \d{2}\.\d{2}\. \d{2}:\d{2}\]")
+
+
+def comment_heads(text, line_start=True):
+    """(start, end, name) of the comment heads in [text] – at a line's start only, unless the lines were joined
+    (the card's preview)."""
+    return [(m.start(), m.end(), m.group(1)) for m in COMMENT_HEAD.finditer(text or "")
+            if not line_start or m.start() == 0 or text[m.start() - 1] == "\n"]
+
+
+def comment_colors(sync, board_id):
+    """{name: "#rrggbb"} the board gives the people who comment; empty = nothing coloured."""
+    board = sync.get(board_id)
+    chosen = (board["data"].get("colors") if board else None) or {}
+    return {name: COMMENT_COLORS[key] for name, key in chosen.items() if key in COMMENT_COLORS}
+
+
+def comment_names(sync, board_id):
+    """Who can get a colour: the board's people and everyone who commented on one of its cards."""
+    board = sync.get(board_id)
+    names = {sync.user_name(uid) for uid in set(sync.share_members(board.get("share"))) | {sync.user_id}} if board else set()
+    for card in sync.objects("card"):
+        if card["data"].get("board") == board_id:
+            names.update(name for _s, _e, name in comment_heads(card["data"].get("notes")))
+    names.discard("?")
+    return sorted(names, key=str.lower)
+
+def clip_text(text, limit):
+    """At most `limit` characters, cut at a word end with "…" – a cheap stand-in for GTK's line limit
+    with ellipsis, which made a board with many cards four times slower to lay out."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit - 1]
+    space = cut.rfind(" ")
+    if space > limit * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,.;:–-") + "…"
+
+
+def archived(obj):
+    """In the archive (notes, lists, boards, plans) – a mark on the object, so for everyone it is shared with."""
+    return bool(obj and obj["data"].get("archived"))
+
+
+def set_archived(sync, object_id, on):
+    obj = sync.get(object_id)
+    if obj is None:
+        return
+    data = dict(obj["data"])
+    if on:
+        data["archived"] = time.time()
+    else:
+        data.pop("archived", None)
+    sync.put(obj["kind"], data, obj.get("share"), object_id)
+
+
 def short_id(object_id):
     return object_id[:8]
+
+
+def card_search_text(card, user_name=None):
+    """Everything a card can be found by: id, title, notes, impact, verification, version,
+    commits, file and evidence names, the person in charge. Lower case (casefold)."""
+    data = card["data"]
+    parts = [card["id"], data.get("title"), data.get("notes"), data.get("impact"), data.get("verification"),
+             data.get("version")]
+    parts += [f"{c.get('h', '')} {c.get('m', '')}" for c in data.get("commits") or []]
+    parts += [item.get("n", "") for item in (data.get("files") or []) + (data.get("evidence") or [])]
+    if user_name is not None and data.get("assignee") is not None:
+        parts.append(user_name(data["assignee"]))
+    return " ".join(str(part) for part in parts if part).casefold()
+
+
+def card_matches(card, query, user_name=None):
+    """Every word of the query is somewhere in the card (the same in Android's Model.cardMatches)."""
+    words = query.casefold().split()
+    if not words:
+        return True
+    text = card_search_text(card, user_name)
+    return all(word in text for word in words)
 
 
 def moment_label(timestamp):
     moment = datetime.datetime.fromtimestamp(timestamp)
     delta = (datetime.date.today() - moment.date()).days
     if delta == 0:
-        return f"heute, {moment:%H:%M}"
+        return _("heute, {time}", time=f"{moment:%H:%M}")
     if delta == 1:
-        return f"gestern, {moment:%H:%M}"
+        return _("gestern, {time}", time=f"{moment:%H:%M}")
     return moment.strftime("%d.%m.%Y")
 
 
@@ -402,11 +567,11 @@ def card_dates(card, dev=False):
     data = card["data"]
     parts = []
     if data.get("created"):
-        parts.append("Erstellt " + moment_label(data["created"]))
+        parts.append(_("Erstellt ") + moment_label(data["created"]))
     if dev and card.get("updated") and (not data.get("created") or card["updated"] - data["created"] > 60):
-        parts.append("Bearbeitet " + moment_label(card["updated"]))
+        parts.append(_("Bearbeitet ") + moment_label(card["updated"]))
     if data.get("done_at"):
-        parts.append("Erledigt " + moment_label(data["done_at"]))
+        parts.append(_("Erledigt ") + moment_label(data["done_at"]))
     return " · ".join(parts)
 
 
@@ -424,7 +589,7 @@ def default_board(user_id):
     return f"board-{user_id}"
 
 
-DEFAULT_COLUMNS = [("offen", "Offen"), ("arbeit", "In Arbeit"), ("fertig", "Erledigt")]
+DEFAULT_COLUMNS = [("offen", _("Offen")), ("arbeit", _("In Arbeit")), ("fertig", _("Erledigt"))]
 
 
 def ensure_defaults(sync):
@@ -432,13 +597,13 @@ def ensure_defaults(sync):
     Everything starts private; sharing is a deliberate step."""
     user_id = sync.user_id
     if sync.get(default_private_folder(user_id)) is None and default_private_folder(user_id) not in sync.state["remote"]:
-        sync.put("folder", {"name": "Notizen", "order": 0}, None, default_private_folder(user_id), notify=False)
+        sync.put("folder", {"name": _("Notizen"), "order": 0}, None, default_private_folder(user_id), notify=False)
     if sync.get(default_list(user_id)) is None and default_list(user_id) not in sync.state["remote"]:
-        sync.put("list", {"name": "Einkaufsliste", "color": "gelb", "grocery": True, "order": 0},
+        sync.put("list", {"name": _("Einkaufsliste"), "color": "gelb", "grocery": True, "order": 0},
                  None, default_list(user_id), notify=False)
     board = default_board(user_id)
     if sync.get(board) is None and board not in sync.state["remote"]:
-        sync.put("board", {"name": "Aufgaben", "order": 0}, None, board, notify=False)
+        sync.put("board", {"name": _("Aufgaben"), "order": 0}, None, board, notify=False)
         for order, (key, name) in enumerate(DEFAULT_COLUMNS):
             sync.put("column", {"board": board, "name": name, "order": order}, None, f"{board}-{key}", notify=False)
 
@@ -507,13 +672,101 @@ GROCERY_CATEGORIES = [
 OTHER_CATEGORY = "Sonstiges"
 CATEGORY_ORDER = [name for name, _words in GROCERY_CATEGORIES] + [OTHER_CATEGORY]
 
+# The same aisles for lists written in English or French. The German names stay the keys (they are
+# stored with items); category_name() shows them in the app's language. Only the app language's words
+# count – "pommes" are apples in French but chips in German.
+GROCERY_WORDS = {
+    "en": {
+        "Obst & Gemüse": ["apple", "banana", "pear", "orange", "lemon", "lime", "grape", "berry", "berries", "strawberr",
+                          "raspberr", "blueberr", "cherr", "peach", "nectarine", "mango", "pineapple", "kiwi", "melon",
+                          "plum", "tomato", "cucumber", "lettuce", "salad", "pepper", "onion", "garlic", "potato", "carrot",
+                          "courgette", "zucchini", "aubergine", "eggplant", "broccoli", "cauliflower", "cabbage", "spinach",
+                          "leek", "celery", "mushroom", "avocado", "ginger", "parsley", "chives", "basil", "radish",
+                          "rocket", "arugula", "sweetcorn", "corn", "pumpkin", "fruit", "veg", "herbs", "fennel",
+                          "asparagus", "beetroot"],
+        "Brot & Backwaren": ["bread", "roll", "toast", "baguette", "croissant", "pretzel", "cake", "bagel", "muffin",
+                             "crispbread", "wrap", "tortilla", "loaf", "wholemeal"],
+        "Milchprodukte & Eier": ["milk", "butter", "cheese", "yoghurt", "yogurt", "quark", "cream", "creme fraiche",
+                                 "crème fraîche", "cream cheese", "mozzarella", "parmesan", "feta", "egg", "eggs",
+                                 "margarine", "kefir", "buttermilk", "skyr", "cheddar"],
+        "Fleisch & Fisch": ["meat", "chicken", "turkey", "beef", "pork", "mince", "sausage", "ham", "salami", "bacon",
+                            "fish", "salmon", "tuna", "prawn", "shrimp", "cold cuts", "steak", "lamb"],
+        "Tiefkühl": ["frozen", "ice cream", "ice lolly", "pizza", "chips", "fries", "fish fingers", "peas"],
+        "Vorrat": ["pasta", "spaghetti", "noodle", "rice", "flour", "sugar", "salt", "oil", "vinegar", "lentil", "beans",
+                   "chickpea", "tin", "can", "cereal", "muesli", "oats", "porridge", "cornflakes", "honey", "jam",
+                   "peanut butter", "baking powder", "yeast", "stock", "tomato paste", "passata", "couscous",
+                   "quinoa", "olive oil"],
+        "Gewürze & Soßen": ["spice", "paprika", "curry", "ketchup", "mustard", "mayo", "sauce", "soy sauce", "cinnamon",
+                            "oregano", "chilli", "chili", "vanilla", "seasoning"],
+        "Getränke": ["water", "juice", "cola", "lemonade", "beer", "wine", "prosecco", "coffee", "tea", "sparkling",
+                     "cocoa", "energy drink", "iced tea", "smoothie", "squash"],
+        "Süßes & Snacks": ["chocolate", "crisps", "biscuit", "cookie", "sweets", "candy", "nuts", "cracker", "bar",
+                           "popcorn", "pretzels", "snack"],
+        "Drogerie": ["toothpaste", "toothbrush", "shampoo", "shower gel", "soap", "deodorant", "lotion", "razor",
+                     "tissues", "toilet paper", "toilet roll", "cotton", "plaster", "tampon", "pad", "nappies",
+                     "diaper", "sunscreen", "conditioner"],
+        "Haushalt": ["washing-up liquid", "dish soap", "detergent", "laundry", "bin bag", "trash bag", "kitchen roll",
+                     "paper towel", "sponge", "cleaner", "foil", "cling film", "baking paper", "battery", "batteries",
+                     "light bulb", "dishwasher", "tablets", "fabric softener", "candle", "napkins"],
+        "Tierbedarf": ["cat food", "dog food", "pet food", "cat litter", "treats"],
+    },
+    "fr": {
+        "Obst & Gemüse": ["pomme", "banane", "poire", "orange", "citron", "raisin", "fraise", "framboise", "myrtille",
+                          "cerise", "pêche", "nectarine", "mangue", "ananas", "kiwi", "melon", "prune", "tomate",
+                          "concombre", "salade", "laitue", "poivron", "oignon", "ail", "carotte", "courgette",
+                          "aubergine", "brocoli", "chou", "épinard", "poireau", "céleri", "champignon", "avocat",
+                          "gingembre", "persil", "ciboulette", "basilic", "radis", "roquette", "maïs", "potiron",
+                          "citrouille", "fruit", "légume", "herbes", "fenouil", "asperge", "betterave", "pomme de terre"],
+        "Brot & Backwaren": ["pain", "baguette", "croissant", "brioche", "gâteau", "biscotte", "tortilla", "viennoiserie",
+                             "pain de mie"],
+        "Milchprodukte & Eier": ["lait", "beurre", "fromage", "yaourt", "crème", "crème fraîche", "mozzarella",
+                                 "parmesan", "feta", "œuf", "oeuf", "œufs", "oeufs", "margarine", "kéfir", "comté",
+                                 "emmental", "camembert"],
+        "Fleisch & Fisch": ["viande", "poulet", "dinde", "bœuf", "boeuf", "porc", "haché", "saucisse", "jambon",
+                            "saucisson", "lardons", "bacon", "poisson", "saumon", "thon", "crevette", "steak", "agneau",
+                            "charcuterie"],
+        "Tiefkühl": ["surgelé", "glace", "pizza", "frites", "bâtonnets de poisson", "congelé"],
+        "Vorrat": ["pâtes", "spaghetti", "riz", "farine", "sucre", "sel", "huile", "vinaigre", "lentilles", "haricots",
+                   "pois chiches", "conserve", "boîte", "céréales", "muesli", "flocons d'avoine", "miel", "confiture",
+                   "levure", "bouillon", "concentré de tomate", "coulis", "semoule", "couscous", "quinoa",
+                   "huile d'olive"],
+        "Gewürze & Soßen": ["poivre", "épice", "paprika", "curry", "ketchup", "moutarde", "mayonnaise", "sauce",
+                            "sauce soja", "cannelle", "origan", "piment", "vanille"],
+        "Getränke": ["eau", "jus", "cola", "limonade", "bière", "vin", "champagne", "café", "thé", "eau gazeuse",
+                     "cacao", "sirop", "thé glacé"],
+        "Süßes & Snacks": ["chocolat", "chips", "biscuit", "gâteaux secs", "bonbon", "noix", "noisettes", "cacahuètes",
+                           "crackers", "barre", "pop-corn", "bretzels"],
+        "Drogerie": ["dentifrice", "brosse à dents", "shampooing", "gel douche", "savon", "déodorant", "crème",
+                     "rasoir", "mouchoirs", "papier toilette", "coton", "pansement", "tampon", "serviettes hygiéniques",
+                     "couches", "crème solaire", "après-shampooing"],
+        "Haushalt": ["liquide vaisselle", "lessive", "sacs poubelle", "essuie-tout", "éponge", "nettoyant",
+                     "papier alu", "film alimentaire", "papier cuisson", "pile", "piles", "ampoule",
+                     "lave-vaisselle", "tablettes", "adoucissant", "bougie", "serviettes"],
+        "Tierbedarf": ["croquettes", "pâtée", "litière", "friandises"],
+    },
+}
+
+
+# Listed so the catalogue tool sees them (shown through category_name()).
+_CATEGORY_LABELS = (_("Obst & Gemüse"), _("Brot & Backwaren"), _("Milchprodukte & Eier"), _("Fleisch & Fisch"), _("Tiefkühl"),
+                    _("Vorrat"), _("Gewürze & Soßen"), _("Getränke"), _("Süßes & Snacks"), _("Drogerie"), _("Haushalt"),
+                    _("Tierbedarf"), _("Sonstiges"))
+
+
+def category_name(category):
+    """An aisle's name in the app's language (the German name is the stored key)."""
+    return _(category)
+
 
 def grocery_category(text):
     lowered = " " + text.lower() + " "
     # The longest matching keyword wins ("reis" over "eis"); very short
     # keywords must be whole words ("ei" is not "Eistee").
+    from .i18n import language
+    words_for = GROCERY_WORDS.get(language())
     best = None
-    for name, words in GROCERY_CATEGORIES:
+    for name, german in GROCERY_CATEGORIES:
+        words = words_for.get(name, []) if words_for else german
         for word in words:
             key = word.strip()
             if len(key) <= 3:

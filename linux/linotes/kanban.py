@@ -13,19 +13,27 @@ from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from . import model
 from . import smoothscroll
-from .dialogs import ask_text, confirm, error_text, run_async
-from .icons import icon_button
+from . import uploads
+from .dialogs import ask_text, confirm, error_text
+from .icons import drag_autoscroll, icon_button
 from .lists import share_label
+from .i18n import _
 
 
 MAX_ATTACHMENT = 24 * 1024 * 1024    # as for notes: the server takes 25 MB with encryption
 
 
 def human_size(size):
-    for unit in ("Bytes", "KB", "MB"):
+    for unit in (_("Bytes"), "KB", "MB"):
         if size < 1024 or unit == "MB":
             return f"{size:.0f} {unit}" if unit != "MB" else f"{size:.1f} MB".replace(".", ",")
         size /= 1024
+
+
+# About two lines in a 280 px column (titles are larger than the notes preview). Cut in Python: GTK's
+# own line limit with "…" (lines=2, ellipsize) made a board four times slower (card b9046682).
+TITLE_CHARS = 58
+NOTES_CHARS = 72
 
 
 def is_image(item):
@@ -36,6 +44,39 @@ LABEL_COLORS = [
     ("rot", "#e0463a"), ("orange", "#f08c00"), ("gelb", "#e6b800"),
     ("grün", "#2fa84f"), ("blau", "#2b7de0"), ("lila", "#9b59d0"),
 ]
+
+
+def set_comment_text(label, text, colors):
+    """The preview with each comment head in its person's colour (way C, Olaf 07.10.) – plain without colours."""
+    heads = [h for h in model.comment_heads(text, line_start=False) if h[2] in colors] if colors else []
+    if not heads:
+        label.set_use_markup(False)
+        label.set_label(text)
+        return
+    parts, position = [], 0
+    for start, end, name in heads:
+        parts.append(GLib.markup_escape_text(text[position:start]))
+        parts.append(f"<span foreground='{colors[name]}'>{GLib.markup_escape_text(text[start:end])}</span>")
+        position = end
+    parts.append(GLib.markup_escape_text(text[position:]))
+    label.set_markup("".join(parts))
+
+
+def color_comment_heads(buffer, colors):
+    """Comment heads in the card's notes in their person's colour; again on every change, as typing moves them."""
+    start, end = buffer.get_bounds()
+    table = buffer.get_tag_table()
+    for color in model.COMMENT_COLORS.values():
+        tag = table.lookup("head" + color)
+        if tag is not None:
+            buffer.remove_tag(tag, start, end)
+    if not colors:
+        return
+    for head_start, head_end, name in model.comment_heads(buffer.get_text(start, end, False)):
+        color = colors.get(name)
+        if color:
+            tag = table.lookup("head" + color) or buffer.create_tag("head" + color, foreground=color)
+            buffer.apply_tag(tag, buffer.get_iter_at_offset(head_start), buffer.get_iter_at_offset(head_end))
 
 
 def parse_due(text):
@@ -49,12 +90,24 @@ def due_label(day):
     today = datetime.date.today()
     delta = (day - today).days
     if delta == 0:
-        return "Heute"
+        return _("Heute")
     if delta == 1:
-        return "Morgen"
+        return _("Morgen")
     if delta == -1:
-        return "Gestern"
+        return _("Gestern")
     return day.strftime("%d.%m.")
+
+
+class CoverPicture(Gtk.Picture):
+    """A card cover of fixed height: a Picture would grow with a portrait image
+    (a long phone screenshot filled the whole column), so it is cropped instead."""
+
+    HEIGHT = 96
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.VERTICAL:
+            return self.HEIGHT, self.HEIGHT, -1, -1
+        return 0, 0, -1, -1
 
 
 class CardWidget(Gtk.Box):
@@ -81,50 +134,55 @@ class CardWidget(Gtk.Box):
         if cover is not None:
             # The first picture as a cover, as in Trello or Apple's Freeform.
             from .notes import load_thumbnail
-            picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, height_request=96)
+            picture = CoverPicture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
             picture.add_css_class("card-cover")
             load_thumbnail(board.sync, cover["f"], picture, 360, share=card.get("share"))
             self.append(picture)
 
-        title = Gtk.Label(label=data.get("title", ""), xalign=0, wrap=True, hexpand=True)
+        # Long titles take at most two lines (the whole title: tooltip and card dialog).
+        title = Gtk.Label(label=model.clip_text(data.get("title", ""), TITLE_CHARS), xalign=0, wrap=True, hexpand=True,
+                          wrap_mode=2, tooltip_text=data.get("title") or None)
         title.add_css_class("card-title")
         mark = model.PRIORITY_MARKS.get(data.get("priority"))
         if mark:
             line = Gtk.Box(spacing=5)
             priority = Gtk.Label(label=mark, valign=Gtk.Align.START)
             priority.add_css_class("card-priority")
-            priority.set_tooltip_text("Priorität: " + dict(model.PRIORITIES)[data["priority"]])
+            priority.set_tooltip_text(_("Priorität: ") + dict(model.PRIORITIES)[data["priority"]])
             line.append(priority)
             line.append(title)
             self.append(line)
         else:
             self.append(title)
         if data.get("notes"):
-            notes = Gtk.Label(label=data["notes"][:140], xalign=0, wrap=True)
+            # At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the
+            # notes become spaces so no line is wasted. The whole text is in the card dialog.
+            notes = Gtk.Label(xalign=0, wrap=True, wrap_mode=2)
+            set_comment_text(notes, model.clip_text(data["notes"], NOTES_CHARS), board.comment_colors)
             notes.add_css_class("card-meta")
             self.append(notes)
 
         meta = Gtk.Box(spacing=8)
         day = parse_due(data.get("due"))
         if day:
-            due = Gtk.Label(label="Fällig: " + due_label(day), xalign=0)
+            due = Gtk.Label(label=_("Fällig: ") + due_label(day), xalign=0)
             due.add_css_class("card-meta")
             if day < datetime.date.today() and not board.is_last_column(data.get("column")):
                 due.add_css_class("card-overdue")
             meta.append(due)
         elif data.get("done_at") and board.is_last_column(data.get("column")):
-            done = Gtk.Label(label="Erledigt: " + due_label(datetime.date.fromtimestamp(data["done_at"])), xalign=0)
+            done = Gtk.Label(label=_("Erledigt: ") + due_label(datetime.date.fromtimestamp(data["done_at"])), xalign=0)
             done.add_css_class("card-meta")
             meta.append(done)
         if board.is_dev():
             ident = Gtk.Label(label=model.short_id(card["id"]), xalign=0)
             ident.add_css_class("card-id")
-            ident.set_tooltip_text("Karten-ID – in Commits und Berichten zitieren")
+            ident.set_tooltip_text(_("Karten-ID – in Commits und Berichten zitieren"))
             meta.append(ident)
         if files:
             clip = Gtk.Label(label=f"📎 {len(files)}", xalign=0)
             clip.add_css_class("card-meta")
-            clip.set_tooltip_text("Anhänge: " + ", ".join(item.get("n", "Datei") for item in files))
+            clip.set_tooltip_text(_("Anhänge: ") + ", ".join(item.get("n", "Datei") for item in files))
             meta.append(clip)
         spacer = Gtk.Box(hexpand=True)
         meta.append(spacer)
@@ -132,7 +190,7 @@ class CardWidget(Gtk.Box):
             name = board.sync.user_name(data["assignee"])
             chip = Gtk.Label(label=name)
             chip.add_css_class("avatar-chip")
-            chip.set_tooltip_text(f"Zuständig: {name}")
+            chip.set_tooltip_text(_("Zuständig: {name}", name=name))
             meta.append(chip)
         if meta.get_first_child() is not spacer or data.get("assignee"):
             self.append(meta)
@@ -155,12 +213,21 @@ class CardWidget(Gtk.Box):
 
 class ColumnWidget(Gtk.Box):
 
+    WIDTH = 280
+
+    def do_measure(self, orientation, for_size):
+        # Always 280 px wide – also alone (search hits), where the longest text would widen it.
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return self.WIDTH, self.WIDTH, -1, -1
+        return Gtk.Box.do_measure(self, orientation, for_size)
+
     def __init__(self, board, column, cards):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.board = board
         self.column_id = column["id"]
         self.add_css_class("board-column")
-        self.set_size_request(280, -1)
+        self.set_hexpand(False)  # the card titles' hexpand must not widen a lone column (search hits)
+        self.set_halign(Gtk.Align.START)
         self.set_valign(Gtk.Align.START)
 
         header = Gtk.Box(spacing=6)
@@ -170,6 +237,7 @@ class ColumnWidget(Gtk.Box):
         count = Gtk.Label(label=str(len(cards)))
         count.add_css_class("column-count")
         header.append(count)
+        self.count = count
         header.append(Gtk.Box(hexpand=True))
         menu_button = Gtk.MenuButton(icon_name="view-more-symbolic")
         menu_button.add_css_class("flat")
@@ -182,7 +250,7 @@ class ColumnWidget(Gtk.Box):
             self.cards_box.append(CardWidget(board, card))
         self.append(self.cards_box)
 
-        self.add_entry = Gtk.Entry(placeholder_text="Karte hinzufügen …")
+        self.add_entry = Gtk.Entry(placeholder_text=_("Karte hinzufügen …"))
         self.add_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "list-add-symbolic")
         self.add_entry.connect("activate", self.on_add)
         self.append(self.add_entry)
@@ -197,10 +265,10 @@ class ColumnWidget(Gtk.Box):
         popover = Gtk.Popover()
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         for label, callback in (
-            ("Umbenennen …", lambda: self.board.rename_column(self.column_id)),
-            ("Nach links", lambda: self.board.move_column(self.column_id, -1)),
-            ("Nach rechts", lambda: self.board.move_column(self.column_id, 1)),
-            ("Spalte löschen …", lambda: self.board.delete_column(self.column_id)),
+            (_("Umbenennen …"), lambda: self.board.rename_column(self.column_id)),
+            (_("Nach links"), lambda: self.board.move_column(self.column_id, -1)),
+            (_("Nach rechts"), lambda: self.board.move_column(self.column_id, 1)),
+            (_("Spalte löschen …"), lambda: self.board.delete_column(self.column_id)),
         ):
             button = Gtk.Button(label=label)
             button.add_css_class("flat")
@@ -241,6 +309,7 @@ class BoardView(Gtk.Box):
         self.window = window
         self.sync = window.sync
         self.board_id = None
+        self.comment_colors = {}
 
         header = Gtk.Box(spacing=8)
         header.set_margin_start(20)
@@ -254,19 +323,39 @@ class BoardView(Gtk.Box):
         self.subtitle.add_css_class("dim-label")
         titles.append(self.subtitle)
         header.append(titles)
+        # A magnifier finds cards by id, title, notes, fields, commits … (Strg+F while a board is open).
+        search = icon_button("search", _("Karten suchen (Strg+F)"))
+        search.set_valign(Gtk.Align.CENTER)
+        search.connect("clicked", lambda _button: self.start_search())
+        header.append(search)
         # Person with plus = invite people (as in Apple's apps); the tray with the arrow exports.
-        people = icon_button("share", "Personen hinzufügen …")
+        people = icon_button("share", _("Personen hinzufügen …"))
         people.set_valign(Gtk.Align.CENTER)
         people.connect("clicked", lambda _button: self.window.share(self.board_id))
         header.append(people)
-        export = icon_button("export", "Bericht exportieren (PDF oder CSV) …")
+        export = icon_button("export", _("Bericht exportieren (PDF oder CSV) …"))
         export.set_valign(Gtk.Align.CENTER)
         export.connect("clicked", lambda _button: self.window.export_board(self.board_id))
         header.append(export)
-        add_column = Gtk.Button(label="Spalte hinzufügen", valign=Gtk.Align.CENTER)
+        add_column = Gtk.Button(label=_("Spalte hinzufügen"), valign=Gtk.Align.CENTER)
         add_column.connect("clicked", lambda _button: self.add_column())
         header.append(add_column)
         self.append(header)
+
+        self.query = ""
+        self.search_entry = Gtk.SearchEntry(placeholder_text=_("Karten-ID, Titel, Notizen, Commit … "), hexpand=True)
+        self.search_entry.connect("search-changed", lambda entry: self.set_query(entry.get_text()))
+        self.search_entry.connect("activate", lambda _entry: self.open_first_hit())
+        self.search_entry.connect("stop-search", lambda _entry: self.search_bar.set_search_mode(False))
+        self.search_hits = Gtk.Label(css_classes=["dim-label"])
+        search_box = Gtk.Box(spacing=10, margin_start=20, margin_end=20)
+        search_box.append(self.search_entry)
+        search_box.append(self.search_hits)
+        self.search_bar = Gtk.SearchBar(child=search_box, show_close_button=True)
+        self.search_bar.connect_entry(self.search_entry)
+        self.search_bar.connect("notify::search-mode-enabled",
+                                lambda bar, _p: None if bar.get_search_mode() else self.search_entry.set_text(""))
+        self.append(self.search_bar)
 
         self.columns_box = Gtk.Box(spacing=14)
         self.columns_box.set_margin_start(20)
@@ -275,6 +364,8 @@ class BoardView(Gtk.Box):
         self.columns_box.set_margin_bottom(20)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=self.columns_box)
         smoothscroll.enable(scroller)
+        # Dragging a card to the edge scrolls on – to a far column or the top of a long one.
+        drag_autoscroll(scroller, sideways=True)
         self.scroller = scroller
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.append(scroller)
@@ -305,14 +396,62 @@ class BoardView(Gtk.Box):
         return bool(columns) and columns[-1]["id"] == column_id
 
     def show(self, board_id):
+        if board_id != self.board_id:
+            self.search_bar.set_search_mode(False)
         self.board_id = board_id
         self.refresh()
+
+    # --- search ---------------------------------------------------
+
+    def start_search(self):
+        self.search_bar.set_search_mode(True)
+        self.search_entry.grab_focus()
+
+    def set_query(self, text):
+        self.query = text.strip()
+        self.apply_search()
+
+    def card_widgets(self):
+        column = self.columns_box.get_first_child()
+        while column is not None:
+            card = column.cards_box.get_first_child()
+            while card is not None:
+                yield column, card
+                card = card.get_next_sibling()
+            column = column.get_next_sibling()
+
+    def apply_search(self):
+        """Hide the cards that do not match; the columns count hits of their cards."""
+        hits = {}
+        for column, widget in self.card_widgets():
+            card = self.sync.get(widget.card_id)
+            match = card is not None and model.card_matches(card, self.query, self.sync.user_name)
+            widget.set_visible(match)
+            shown, total = hits.get(column, (0, 0))
+            hits[column] = (shown + match, total + 1)
+        for column, (shown, total) in hits.items():
+            column.count.set_label(f"{shown} / {total}" if self.query else str(total))
+            column.set_visible(shown > 0 or not self.query)  # only columns with hits while searching
+        column = self.columns_box.get_first_child()
+        while column is not None:
+            if column not in hits:  # empty column
+                column.set_visible(not self.query)
+            column = column.get_next_sibling()
+        found = sum(shown for shown, _total in hits.values())
+        self.search_hits.set_label((_("{found} Treffer", found=found) if found != 1 else _("1 Treffer")) if self.query else "")
+
+    def open_first_hit(self):
+        for _column, widget in self.card_widgets():
+            if widget.get_visible() and self.query:
+                self.edit_card(widget.card_id)
+                return
 
     def refresh(self):
         board = self.board()
         if board is None:
             return
         self.title.set_label(board["data"].get("name", "Board"))
+        self.comment_colors = model.comment_colors(self.sync, self.board_id)
         # Neuaufbau (auch durch eigene Änderungen, die vom Server zurückkommen)
         # darf weder Scrollposition noch das gerade benutzte Eingabefeld verlieren.
         typing = None
@@ -336,7 +475,9 @@ class BoardView(Gtk.Box):
             total += len(cards)
             self.columns_box.append(ColumnWidget(self, column, cards))
         where = share_label(self.sync, board)
-        self.subtitle.set_label(f"{total} Karten · {where}" + (" · Entwicklungsprojekt" if self.is_dev() else ""))
+        self.subtitle.set_label(_("{total} Karten · {where}", total=total, where=where) + (_(" · Entwicklungsprojekt") if self.is_dev() else ""))
+        if self.query:
+            self.apply_search()  # a rebuild (sync) keeps the search
         self.restore_scroll(scroll, typing[0] if typing and typing[3] else None)
         if typing:
             # Erst nach dem Layout lässt sich das neue Feld fokussieren.
@@ -414,11 +555,11 @@ class BoardView(Gtk.Box):
             columns = self.columns()
             order = (columns[-1]["data"].get("order", 0) + 1) if columns else 0
             self.sync.put("column", {"board": self.board_id, "name": name, "order": order}, self.board().get("share"))
-        ask_text(self.window, "Neue Spalte", create, placeholder="Name der Spalte", action="Hinzufügen")
+        ask_text(self.window, _("Neue Spalte"), create, placeholder=_("Name der Spalte"), action=_("Hinzufügen"))
 
     def rename_column(self, column_id):
         column = self.sync.get(column_id)
-        ask_text(self.window, "Spalte umbenennen",
+        ask_text(self.window, _("Spalte umbenennen"),
                  lambda name, _choice: self.sync.update(column_id, name=name),
                  text=column["data"].get("name", ""))
 
@@ -442,9 +583,9 @@ class BoardView(Gtk.Box):
                 self.sync.delete(card["id"], notify=False)
             self.sync.delete(column_id)
 
-        confirm(self.window, "Spalte löschen?",
-                f"Die Spalte und ihre {len(cards)} Karten werden gelöscht." if cards else "Die leere Spalte wird gelöscht.",
-                "Löschen", remove)
+        confirm(self.window, _("Spalte löschen?"),
+                _("Die Spalte und ihre {count} Karten werden gelöscht.", count=len(cards)) if cards else _("Die leere Spalte wird gelöscht."),
+                _("Löschen"), remove)
 
     def edit_card(self, card_id):
         card = self.sync.get(card_id)
@@ -455,7 +596,7 @@ class BoardView(Gtk.Box):
 class CardDialog(Adw.Dialog):
 
     def __init__(self, board, card):
-        super().__init__(title="Karte")
+        super().__init__(title=_("Karte"))
         self.board = board
         self.sync = board.sync
         self.card_id = card["id"]
@@ -468,30 +609,37 @@ class CardDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
         group = Adw.PreferencesGroup()
 
-        self.title_row = Adw.EntryRow(title="Titel", text=data.get("title", ""))
+        self.title_row = Adw.EntryRow(title=_("Titel"), text=data.get("title", ""))
         group.add(self.title_row)
 
         columns = board.columns()
         self.columns = columns
-        self.column_row = Adw.ComboRow(title="Spalte", model=Gtk.StringList.new([c["data"].get("name", "") for c in columns]))
+        self.column_row = Adw.ComboRow(title=_("Spalte"), model=Gtk.StringList.new([c["data"].get("name", "") for c in columns]))
         column_ids = [c["id"] for c in columns]
         if data.get("column") in column_ids:
             self.column_row.set_selected(column_ids.index(data.get("column")))
         group.add(self.column_row)
 
-        users = [(None, "Niemand")] + [(user["id"], user["name"]) for user in self.sync.state["users"]]
+        # Only people the board is shared with (and oneself) – not everyone one knows. Someone
+        # assigned earlier who is no longer in the board stays visible, so it can be undone.
+        in_board = set(self.sync.share_members(card.get("share"))) | {self.sync.user_id}
+        assigned = data.get("assignee")
+        people = in_board | ({assigned} if assigned is not None else set())
+        users = [(None, _("Niemand"))] + sorted(
+            ((uid, self.sync.user_name(uid) + ("" if uid in in_board else _(" (nicht im Board)"))) for uid in people),
+            key=lambda entry: entry[1].lower())
         self.users = users
-        self.assignee = Adw.ComboRow(title="Zuständig", model=Gtk.StringList.new([name for _id, name in users]))
+        self.assignee = Adw.ComboRow(title=_("Zuständig"), model=Gtk.StringList.new([name for _id, name in users]))
         ids = [user_id for user_id, _name in users]
         self.assignee.set_selected(ids.index(data.get("assignee")) if data.get("assignee") in ids else 0)
         group.add(self.assignee)
 
         priorities = [key for key, _label in model.PRIORITIES]
-        self.priority_row = Adw.ComboRow(title="Priorität", model=Gtk.StringList.new([label for _key, label in model.PRIORITIES]))
+        self.priority_row = Adw.ComboRow(title=_("Priorität"), model=Gtk.StringList.new([label for _key, label in model.PRIORITIES]))
         self.priority_row.set_selected(priorities.index(data.get("priority")) if data.get("priority") in priorities else 0)
         group.add(self.priority_row)
 
-        self.due_switch = Adw.SwitchRow(title="Fälligkeitsdatum")
+        self.due_switch = Adw.SwitchRow(title=_("Fälligkeitsdatum"))
         day = parse_due(data.get("due"))
         self.due_switch.set_active(day is not None)
         group.add(self.due_switch)
@@ -503,7 +651,7 @@ class CardDialog(Adw.Dialog):
         self.due_switch.bind_property("active", calendar_row, "visible", GObject.BindingFlags.SYNC_CREATE)
         group.add(calendar_row)
 
-        colors = Adw.ActionRow(title="Farbe")
+        colors = Adw.ActionRow(title=_("Farbe"))
         color_box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
         self.color = data.get("color")
         self.color_buttons = {}
@@ -536,9 +684,13 @@ class CardDialog(Adw.Dialog):
         group.add(colors)
         page.add(group)
 
-        notes_group = Adw.PreferencesGroup(title="Notizen")
+        notes_group = Adw.PreferencesGroup(title=_("Notizen"))
         self.notes = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.notes.get_buffer().set_text(data.get("notes") or "")
+        colors = board.comment_colors
+        if colors:
+            color_comment_heads(self.notes.get_buffer(), colors)
+            self.notes.get_buffer().connect("changed", lambda buffer: color_comment_heads(buffer, colors))
         self.notes.set_size_request(-1, 110)
         self.notes.add_css_class("card")
         self.notes.set_left_margin(10)
@@ -547,7 +699,7 @@ class CardDialog(Adw.Dialog):
         self.notes.set_bottom_margin(8)
         notes_group.add(self.notes)
         page.add(notes_group)
-        self.files_group = Adw.PreferencesGroup(title="Anhänge")
+        self.files_group = Adw.PreferencesGroup(title=_("Anhänge"))
         page.add(self.files_group)
         self.file_rows = []
         self.fill_files()
@@ -565,12 +717,12 @@ class CardDialog(Adw.Dialog):
 
         self.dev = dev
         if dev:
-            self.impact = self.text_group(page, "Auswirkungsanalyse", card["data"].get("impact") or "",
-                                          "Was ist betroffen, welche Risiken, was muss mitgeprüft werden?")
-            self.verification = self.text_group(page, "Verifikation", card["data"].get("verification") or "",
-                                                "Tests, Prüfungen und Nachweise")
+            self.impact = self.text_group(page, _("Auswirkungsanalyse"), card["data"].get("impact") or "",
+                                          _("Was ist betroffen, welche Risiken, was muss mitgeprüft werden?"))
+            self.verification = self.text_group(page, _("Verifikation"), card["data"].get("verification") or "",
+                                                _("Tests, Prüfungen und Nachweise"))
             # Evidence right below the verification text, so test records travel with the card.
-            self.evidence_group = Adw.PreferencesGroup(title="Nachweise")
+            self.evidence_group = Adw.PreferencesGroup(title=_("Nachweise"))
             page.add(self.evidence_group)
             self.evidence_rows = []
             self.fill_files("evidence")
@@ -582,11 +734,11 @@ class CardDialog(Adw.Dialog):
 
         actions = Adw.PreferencesGroup()
         buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END)
-        delete = Gtk.Button(label="Karte löschen")
+        delete = Gtk.Button(label=_("Karte löschen"))
         delete.add_css_class("destructive-action")
         delete.connect("clicked", lambda _button: self.delete())
         buttons.append(delete)
-        done = Gtk.Button(label="Fertig")
+        done = Gtk.Button(label=_("Fertig"))
         done.add_css_class("suggested-action")
         done.connect("clicked", lambda _button: self.close())
         buttons.append(done)
@@ -607,13 +759,12 @@ class CardDialog(Adw.Dialog):
     # Evidence also records its SHA-256, when and by whom it was added – a report can then
     # prove that a test record is the one that was attached.
     ATTACH_KINDS = {
-        "files": ("Datei oder Bild hinzufügen …", "Datei oder Bild anhängen",
-                  "Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen. Auch per Ziehen.",
-                  "Anhang entfernen"),
-        "evidence": ("Nachweis hinzufügen …", "Nachweis anhängen",
-                     "Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und "
-                     "erscheinen im Bericht mit Prüfsumme (SHA-256).",
-                     "Nachweis entfernen"),
+        "files": (_("Datei oder Bild hinzufügen …"), _("Datei oder Bild anhängen"),
+                  _("Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen. Auch per Ziehen."),
+                  _("Anhang entfernen")),
+        "evidence": (_("Nachweis hinzufügen …"), _("Nachweis anhängen"),
+                     _("Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und erscheinen im Bericht mit Prüfsumme (SHA-256)."),
+                     _("Nachweis entfernen")),
     }
 
     def fill_files(self, key="files"):
@@ -639,7 +790,7 @@ class CardDialog(Adw.Dialog):
                 subtitle = " · ".join(details)
             row = Adw.ActionRow(title=GLib.markup_escape_text(item.get("n") or "Datei"),
                                 subtitle=GLib.markup_escape_text(subtitle), activatable=True)
-            row.set_tooltip_text("Öffnen" + (f"\nSHA-256 {item['h']}" if item.get("h") else ""))
+            row.set_tooltip_text(_("Öffnen") + (f"\nSHA-256 {item['h']}" if item.get("h") else ""))
             if is_image(item):
                 from .notes import load_thumbnail
                 # A fixed 40 px square (a Picture would take the image's own width).
@@ -681,12 +832,13 @@ class CardDialog(Adw.Dialog):
             return
         share = card.get("share")
         window = self.board.window
+        group = self.files_group if key == "files" else self.evidence_group
         for path in paths:
             if not path.is_file():
                 continue
             size = path.stat().st_size
             if size > MAX_ATTACHMENT:
-                window.toast(f"„{path.name}“ ist zu groß (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB).")
+                window.toast(_("„{name}“ ist zu groß (höchstens {value} MB).", name=path.name, value=MAX_ATTACHMENT // 1024 // 1024))
                 continue
             mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             content = path.read_bytes()
@@ -694,19 +846,31 @@ class CardDialog(Adw.Dialog):
             if key == "evidence":
                 entry.update(model.evidence_fields(self.sync, content))
 
-            def done(reference, error, entry=entry):
+            pending = []
+
+            def done(reference, error, entry=entry, pending=pending):
+                for row in pending:
+                    row.get_child().detach()
+                    if row.get_parent() is not None:
+                        group.remove(row)
                 if error is not None:
                     window.toast(error_text(error))
                     return
-                current = self.card()
+                # Saved to the card even if this dialog was closed meanwhile.
+                current = self.sync.get(self.card_id)
                 if current is None:
                     return
                 items = list(current["data"].get(key) or [])
                 items.append({"f": reference, **entry})
                 self.sync.update(self.card_id, **{key: items})
-                self.fill_files(key)
-            window.toast(f"„{path.name}“ wird angehängt …")
-            run_async(lambda content=content: self.sync.upload_file(content, share), done)
+                if self.get_root() is not None:
+                    self.fill_files(key)
+            upload = uploads.start(window, path.name, content, share, done)
+            # Its own row in this card's list while it runs.
+            row = Adw.PreferencesRow(activatable=False, child=uploads.UploadRow(
+                upload, margin_top=10, margin_bottom=10, margin_start=12, margin_end=12))
+            group.add(row)
+            pending.append(row)
 
     def remove_file(self, index, key="files"):
         card = self.card()
@@ -717,7 +881,7 @@ class CardDialog(Adw.Dialog):
             removed = items.pop(index)
             self.sync.update(self.card_id, **{key: items})
             self.fill_files(key)
-            self.board.window.toast(f"„{removed.get('n', 'Datei')}“ entfernt")
+            self.board.window.toast(_("„{name}“ entfernt", name=removed.get('n', 'Datei')))
 
     def text_group(self, page, title, text, hint):
         group = Adw.PreferencesGroup(title=title, description=hint)
@@ -736,29 +900,29 @@ class CardDialog(Adw.Dialog):
     def build_history(self, card):
         """Development projects: card id, version, linked commits and who moved
         the card where, when."""
-        group = Adw.PreferencesGroup(title="Nachverfolgung")
-        ident = Adw.ActionRow(title="Karten-ID", subtitle=card["id"])
+        group = Adw.PreferencesGroup(title=_("Nachverfolgung"))
+        ident = Adw.ActionRow(title=_("Karten-ID"), subtitle=card["id"])
         ident.set_subtitle_selectable(True)
-        copy = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Kurz-ID kopieren")
+        copy = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER, tooltip_text=_("Kurz-ID kopieren"))
         copy.add_css_class("flat")
         copy.connect("clicked", lambda _b: self.get_clipboard().set(model.short_id(card["id"])))
         ident.add_suffix(copy)
         group.add(ident)
-        self.version_row = Adw.EntryRow(title="Umgesetzt in Version", text=card["data"].get("version") or "")
+        self.version_row = Adw.EntryRow(title=_("Umgesetzt in Version"), text=card["data"].get("version") or "")
         group.add(self.version_row)
         commits = card["data"].get("commits") or []
         for commit in commits:
-            row = Adw.ActionRow(title=commit.get("s", ""), subtitle="Commit " + commit.get("h", ""))
+            row = Adw.ActionRow(title=commit.get("s", ""), subtitle=_("Commit ") + commit.get("h", ""))
             row.set_subtitle_selectable(True)
             group.add(row)
         if not commits:
-            group.add(Adw.ActionRow(title="Commits", subtitle="Noch keine – Commits mit der Karten-ID in der Nachricht werden verknüpft."))
+            group.add(Adw.ActionRow(title=_("Commits"), subtitle=_("Noch keine – Commits mit der Karten-ID in der Nachricht werden verknüpft.")))
         history = card["data"].get("history") or []
         if not history:
-            group.add(Adw.ActionRow(title="Verlauf", subtitle="Noch kein Verlauf – er beginnt mit dem nächsten Verschieben."))
+            group.add(Adw.ActionRow(title=_("Verlauf"), subtitle=_("Noch kein Verlauf – er beginnt mit dem nächsten Verschieben.")))
         for step in reversed(history):
             moment = datetime.datetime.fromtimestamp(step.get("at", 0))
-            row = Adw.ActionRow(title=step.get("n") or "Spalte",
+            row = Adw.ActionRow(title=step.get("n") or _("Spalte"),
                                 subtitle=f"{moment:%d.%m.%Y %H:%M} · {self.sync.user_name(step.get('by'))}")
             group.add(row)
         return group
@@ -807,3 +971,47 @@ class CardDialog(Adw.Dialog):
         self.deleted = True
         self.sync.delete(self.card_id)
         self.close()
+
+
+class CommentColorsDialog(Adw.Dialog):
+    """„Farben der Personen“ (development projects, way C, Olaf 07.10.): which colour each person's comment heads
+    have on this board – kept in the board, so everyone who sees it sees the same."""
+
+    CHOICES = [(None, _("Keine")), ("purple", _("Lila")), ("pink", _("Pink")), ("orange", _("Orange")),
+               ("mint", _("Mint")), ("blue", _("Blau")), ("yellow", _("Gelb"))]
+
+    def __init__(self, sync, board_id):
+        super().__init__(title=_("Farben der Personen"))
+        self.sync, self.board_id = sync, board_id
+        self.set_content_width(420)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(description=_("Kommentare in den Karten zeigen den Namen in dieser Farbe."))
+        board = sync.get(board_id)
+        chosen = dict((board["data"].get("colors") if board else None) or {})
+        keys = [key for key, _label in self.CHOICES]
+        self.rows = {}
+        for name in model.comment_names(sync, board_id):
+            row = Adw.ComboRow(title=name, model=Gtk.StringList.new([label for _key, label in self.CHOICES]))
+            row.set_selected(keys.index(chosen.get(name)) if chosen.get(name) in keys else 0)
+            row.connect("notify::selected", lambda _row, _p: self.save())
+            group.add(row)
+            self.rows[name] = row
+        page.add(group)
+        view.set_content(page)
+        self.set_child(view)
+
+    def save(self):
+        board = self.sync.get(self.board_id)
+        if board is None:
+            return
+        colors = dict(board["data"].get("colors") or {})
+        for name, row in self.rows.items():
+            key = self.CHOICES[row.get_selected()][0]
+            if key:
+                colors[name] = key
+            else:
+                colors.pop(name, None)
+        self.sync.update(self.board_id, colors=colors or None)
+

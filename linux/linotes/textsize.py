@@ -8,8 +8,9 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gtk
 
 from . import uiprefs
+from .i18n import _
 
-SIZES = [(0.85, "Klein"), (1.0, "Normal"), (1.15, "Groß"), (1.3, "Sehr groß"), (1.5, "Riesig")]
+SIZES = [(0.85, _("Klein")), (1.0, _("Normal")), (1.15, _("Groß")), (1.3, _("Sehr groß")), (1.5, _("Riesig"))]
 NORMAL = 1
 BASE_PT = 11.25  # .note-editor in style.css
 PREFS = uiprefs.PREFS

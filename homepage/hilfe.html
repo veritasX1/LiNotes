@@ -7,13 +7,37 @@
 <meta name="description" content="Jede Funktion von LiNotes Schritt für Schritt erklärt – für Android und Ubuntu, mit Bildern.">
 <link rel="icon" href="linotes.svg" type="image/svg+xml">
 <link rel="stylesheet" href="site.css">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoftware.de/linotes/hilfe.html"><link rel="alternate" hreflang="en" href="https://lisoftware.de/linotes/en/hilfe.html"><link rel="alternate" hreflang="fr" href="https://lisoftware.de/linotes/fr/hilfe.html">
+<style>
+.apps .wrap { position: relative; }
+.lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
+.lang-switch a[aria-current], .lang-foot a[aria-current] { color: #fff; opacity: 1; font-weight: 600; }
+.lang-foot { display: flex; gap: 14px; justify-content: center; padding-top: 18px; font-size: 13px; }
+.lang-foot a[aria-current] { color: inherit; }
+@media (max-width: 900px) { .lang-switch { display: none; } }
+</style>
+<script>
+(function () {
+  try {
+    if (document.referrer.indexOf(location.origin) === 0) return;
+    var l = ((navigator.languages && navigator.languages[0]) || navigator.language || "").slice(0, 2).toLowerCase();
+    if (l === "de") return;
+    location.replace((l === "fr" ? "fr/" : "en/") + location.pathname.split("/").pop() + location.hash);
+  } catch (e) {}
+})();
+</script><!--/lang-->
 </head>
 <body>
 
 <div class="apps">
   <div class="wrap">
-    <a href="https://linotes.goip.de/" aria-current="page">LiNotes</a>
-    <a href="https://prevux.goip.de/">Prevux</a>
+    <a href="https://lisoftware.de/linotes/" aria-current="page">LiNotes</a>
+    <a href="https://lisoftware.de/prevux/">Prevux</a>
+    <a href="https://lisoftware.de/liboard/">LiBoard</a>
+    <a href="https://lisoftware.de/licida/">LiCida</a>
+    <a href="https://lisoftware.de/lical/">LiCal</a>
+    <a href="https://lisoftware.de/lidio/">LiDio</a>
+  <!--lang--><span class="lang-switch"><a href="hilfe.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/hilfe.html" hreflang="en" lang="en">EN</a><a href="fr/hilfe.html" hreflang="fr" lang="fr">FR</a></span><!--/lang-->
   </div>
 </div>
 
@@ -50,6 +74,9 @@
     <a href="#audio">Audio aufnehmen</a>
     <a href="#abschnitte">Abschnitte einklappen</a>
     <a href="#verlinken">Notizen verlinken</a>
+    <a href="#vorlagen">Vorlagen</a>
+    <a href="#linkvorschau">Link-Vorschau</a>
+    <a href="#profi">Profi-Funktionen</a>
     <a href="#erwaehnen">@-Erwähnungen</a>
     <a href="#aktivitaet">Änderungen anderer</a>
     <a href="#ordnen">Ordner, Sortieren, Galerie</a>
@@ -64,6 +91,7 @@
     <a href="#plaene">Pläne</a>
     <a href="#rotation">Rotation</a>
     <a href="#zeitstrahl">Zeitstrahl</a>
+    <a href="#agil">Agiles Arbeiten</a>
     <h4>Teilen und Sicherheit</h4>
     <a href="#verifizieren">Personen verifizieren</a>
     <a href="#teilen">Teilen</a>
@@ -84,8 +112,8 @@
       <h2>Mit oder ohne Server</h2>
       <div class="shots">
         <div>
-          <p>Beim ersten Start fragt LiNotes nach der <b>Adresse deines Servers</b>. Die bekommst du von der Person, die den Server betreibt – oder du richtest dir <a href="server.html">selbst einen ein</a>.</p>
-          <p>Kein Server? Tippe auf <b>„Ohne Server nutzen“</b>. LiNotes ist dann eine Notizen-App, bei der alles verschlüsselt nur auf diesem Gerät liegt. Später kannst du unter <b>Einstellungen → „Mit Server verbinden …“</b> <span class="tag">Ubuntu</span> Kontomenü einen Server eintragen – deine Notizen werden dann hochgeladen.</p>
+          <p>Beim ersten Start fragt LiNotes nach der <b>Adresse deines Servers</b>. Die bekommst du von der Person, die den Server betreibt, oder du richtest dir <a href="server.html">selbst einen ein</a>.</p>
+          <p>Kein Server? Tippe auf <b>„Ohne Server nutzen“</b>. LiNotes ist dann eine Notizen-App, bei der alles verschlüsselt nur auf diesem Gerät liegt. Später kannst du unter <b>Einstellungen → „Mit Server verbinden …“</b> <span class="tag">Ubuntu</span> Kontomenü einen Server eintragen. Deine Notizen werden dann hochgeladen.</p>
         </div>
         <div class="phone"><img class="zoomable" src="img/android-m-start.webp" alt="Startbildschirm mit Feld für die Serveradresse und „Ohne Server nutzen“" loading="lazy"></div>
       </div>
@@ -94,8 +122,8 @@
     <section id="konto">
       <h2>Konto und Schlüsseldatei</h2>
       <ol class="steps-list">
-        <li><b>Konto anlegen</b>Serveradresse eingeben, „Neues Konto erstellen“ wählen, dann Einladungscode, Benutzernamen (klein, ohne Leerzeichen) und deinen Namen. Ein Passwort gibt es nicht – dein Konto schützt ein Schlüssel, der nur auf deinen Geräten liegt.</li>
-        <li><b>Schlüsseldatei sichern</b>Einstellungen → „Schlüsseldatei sichern …“ <span class="tag">Ubuntu</span> Kontomenü. Passphrase wählen und die Datei z. B. auf einem USB-Stick verwahren. Verlierst du alle Geräte, kommst du nur damit wieder an deine Notizen – niemand sonst kann sie wiederherstellen. LiNotes erinnert dich nach ein paar Tagen daran.</li>
+        <li><b>Konto anlegen</b>Serveradresse eingeben, „Neues Konto erstellen“ wählen, dann Einladungscode, Benutzernamen (klein, ohne Leerzeichen) und deinen Namen. Ein Passwort gibt es nicht: dein Konto schützt ein Schlüssel, der nur auf deinen Geräten liegt.</li>
+        <li><b>Schlüsseldatei sichern</b>Einstellungen → „Schlüsseldatei sichern …“ <span class="tag">Ubuntu</span> Kontomenü. Passphrase wählen und die Datei z. B. auf einem USB-Stick verwahren. Verlierst du alle Geräte, kommst du nur damit wieder an deine Notizen. Niemand sonst kann sie wiederherstellen. LiNotes erinnert dich nach ein paar Tagen daran.</li>
       </ol>
     </section>
 
@@ -103,7 +131,7 @@
       <h2>Weiteres Gerät verbinden</h2>
       <ol class="steps-list">
         <li><b>Auf dem neuen Gerät</b>Serveradresse eingeben und „Mit anderem Gerät verbinden“ wählen, dann deinen Benutzernamen.</li>
-        <li><b>Code bestätigen</b>Das neue Gerät zeigt einen 6-stelligen Code und einen QR-Code. Auf einem Gerät, auf dem du schon angemeldet bist, erscheint „Neues Gerät verbinden?“ – dort den Code eintippen oder scannen. Warst du es nicht selbst: „Ablehnen“.</li>
+        <li><b>Code bestätigen</b>Das neue Gerät zeigt einen 6-stelligen Code und einen QR-Code. Auf einem Gerät, auf dem du schon angemeldet bist, erscheint „Neues Gerät verbinden?“, dort den Code eintippen oder scannen. Warst du es nicht selbst: „Ablehnen“.</li>
       </ol>
     </section>
 
@@ -111,8 +139,8 @@
     <section id="neu">
       <h2>Neue Notiz</h2>
       <p><span class="tag">Android</span> Stift-Symbol oben rechts oder unten in der Notiz. <span class="tag">Ubuntu</span> Stift-Symbol in der Leiste oder <kbd>Strg</kbd>+<kbd>N</kbd>.</p>
-      <p><b>Schnelle Notiz von überall:</b> <span class="tag">Android</span> In den Schnelleinstellungen (Wischen von oben) die Kachel „Neue Notiz“ hinzufügen. <span class="tag">Ubuntu</span> <code class="inline">linotes --neue-notiz</code> öffnet sofort eine neue Notiz – z. B. als eigenes Tastenkürzel in den Ubuntu-Einstellungen.</p>
-      <p>Die erste Zeile wird automatisch zum Titel. Eine neue Notiz, in die du nichts schreibst, verschwindet beim Verlassen von selbst – wie bei Apple.</p>
+      <p><b>Schnelle Notiz von überall:</b> <span class="tag">Android</span> In den Schnelleinstellungen (Wischen von oben) die Kachel „Neue Notiz“ hinzufügen. <span class="tag">Ubuntu</span> <code class="inline">linotes --neue-notiz</code> öffnet sofort eine neue Notiz, z. B. als eigenes Tastenkürzel in den Ubuntu-Einstellungen.</p>
+      <p>Die erste Zeile wird automatisch zum Titel. Eine neue Notiz, in die du nichts schreibst, verschwindet beim Verlassen von selbst, wie bei Apple.</p>
     </section>
 
     <section id="formatieren">
@@ -129,7 +157,7 @@
 
     <section id="markieren">
       <h2>Markieren, Textfarbe, Schrift, Ausrichtung</h2>
-      <p>Text auswählen und über „Aa“ <b>markieren</b> – in Gelb, Orange, Rosa, Lila, Mint oder Blau. Im selben Menü: <b>Textfarbe</b>, <b>Schriftart</b> und <b>Ausrichtung</b> (links, zentriert, rechts). <span class="tag">Ubuntu</span> Gelb markieren geht auch mit <kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>.</p>
+      <p>Text auswählen und über „Aa“ <b>markieren</b>: in Gelb, Orange, Rosa, Lila, Mint oder Blau. Im selben Menü: <b>Textfarbe</b>, <b>Schriftart</b> und <b>Ausrichtung</b> (links, zentriert, rechts). <span class="tag">Ubuntu</span> Gelb markieren geht auch mit <kbd>Strg</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>.</p>
     </section>
 
     <section id="tabellen">
@@ -138,7 +166,7 @@
         <div class="window"><img class="zoomable" src="img/ubuntu-01-notiz.webp" data-light="img/ubuntu-01-notiz.webp" data-dark="img/ubuntu-dark-01-notiz.webp" alt="Notiz mit Budget-Tabelle" loading="lazy"></div>
         <div class="phone"><img class="zoomable" src="img/android-c-notiz.webp" data-light="img/android-c-notiz.webp" data-dark="img/android-dark-c-notiz.webp" alt="Dieselbe Tabelle auf dem Handy" loading="lazy"></div>
       </div>
-      <p><b>Einfügen:</b> Tabellen-Symbol in der Leiste – du bekommst eine Tabelle mit 3 × 3 Zellen.</p>
+      <p><b>Einfügen:</b> Tabellen-Symbol in der Leiste. Du bekommst eine Tabelle mit 3 × 3 Zellen.</p>
       <p><span class="tag">Ubuntu</span> Direkt in die Zellen schreiben. <kbd>Tab</kbd> springt zur nächsten Zelle, in der letzten Zelle entsteht eine neue Zeile. <kbd>Enter</kbd> und die Pfeiltasten wechseln die Zeile. <b>Rechtsklick</b> auf eine Zelle: Zeile darüber/darunter, Spalte links/rechts einfügen, Zeile oder Spalte löschen, Tabelle löschen.</p>
       <p><span class="tag">Android</span> Die Tabelle öffnet sich im Tabellen-Editor. „Weiter“ auf der Tastatur springt zur nächsten Zelle. Unten fügst du Zeilen und Spalten neben der gewählten Zelle ein oder löschst sie. In der Notiz die Tabelle antippen, um sie wieder zu bearbeiten.</p>
     </section>
@@ -146,13 +174,13 @@
     <section id="rechnen">
       <h2>Rechnen</h2>
       <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-03-rechnen.webp" data-light="img/ubuntu-03-rechnen.webp" data-dark="img/ubuntu-dark-03-rechnen.webp" alt="Haushaltsbuch mit Rechnungen" loading="lazy"></div></div>
-      <p>Schreib eine Rechnung und ein <code class="inline">=</code> ans Ende der Zeile – LiNotes ergänzt das Ergebnis. Es gilt Punkt vor Strich, Klammern funktionieren, Dezimalzahlen mit Komma. Eine Beschriftung davor stört nicht: <code class="inline">Fixkosten: 850 + 74 + 35 =</code> ergibt <b>959</b>.</p>
+      <p>Schreib eine Rechnung und ein <code class="inline">=</code> ans Ende der Zeile. LiNotes ergänzt das Ergebnis. Es gilt Punkt vor Strich, Klammern funktionieren, Dezimalzahlen mit Komma. Eine Beschriftung davor stört nicht: <code class="inline">Fixkosten: 850 + 74 + 35 =</code> ergibt <b>959</b>.</p>
     </section>
 
     <section id="medien">
       <h2>Fotos, Dateien, PDFs</h2>
       <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-04-audio-pdf.webp" data-light="img/ubuntu-04-audio-pdf.webp" data-dark="img/ubuntu-dark-04-audio-pdf.webp" alt="Notiz mit Audioaufnahme und PDF-Anhang" loading="lazy"></div></div>
-      <p><span class="tag">Android</span> Foto-Symbol → „Foto aufnehmen“, „Aus Fotos wählen“ oder „Datei anhängen …“. <span class="tag">Ubuntu</span> Foto-Symbol bzw. Büroklammer – oder Dateien einfach in die Notiz ziehen.</p>
+      <p><span class="tag">Android</span> Foto-Symbol → „Foto aufnehmen“, „Aus Fotos wählen“ oder „Datei anhängen …“. <span class="tag">Ubuntu</span> Foto-Symbol bzw. Büroklammer, oder Dateien einfach in die Notiz ziehen.</p>
       <p>Anhänge werden wie alles andere verschlüsselt. PDFs zeigen eine Vorschau der ersten Seite; antippen öffnet die Datei mit der passenden App.</p>
     </section>
 
@@ -160,8 +188,9 @@
       <h2>Audio aufnehmen</h2>
       <div class="shots">
         <div>
-          <p>Mikrofon-Symbol in der Leiste antippen – die Aufnahme beginnt sofort, die Zeit läuft mit. <b>„Fertig“</b> legt sie in die Notiz, <b>„Abbrechen“</b> verwirft sie. Beim ersten Mal fragt Android nach der Mikrofon-Erlaubnis.</p>
-          <p>Die Aufnahme erscheint als Karte mit Dauer. Antippen spielt sie direkt in der Notiz ab – <span class="tag">Android</span> mit einer Leiste unten zum Stoppen, <span class="tag">Ubuntu</span> der Knopf wird zum Stopp-Knopf. Aufnahmen vom Handy lassen sich am Rechner abspielen und umgekehrt.</p>
+          <p>Mikrofon-Symbol in der Leiste antippen. Die Aufnahme beginnt sofort, die Zeit läuft mit. <b>„Fertig“</b> legt sie in die Notiz, <b>„Abbrechen“</b> verwirft sie. Beim ersten Mal fragt Android nach der Mikrofon-Erlaubnis.</p>
+          <p>Die Aufnahme erscheint als Sprachnachricht wie in Apples Nachrichten: farbige Blase mit Wiedergabetaste, Wellenform und Dauer. Antippen spielt sie direkt in der Notiz ab, noch einmal antippen pausiert. Ein Tipp auf die Wellenform springt an diese Stelle; die Zeit zählt rückwärts. Aufnahmen vom Handy lassen sich am Rechner abspielen und umgekehrt.</p>
+          <p>Ein <b>Bild</b> in der Notiz antippen bzw. anklicken öffnet es groß in der Schnellansicht.</p>
         </div>
         <div class="phone"><img class="zoomable" src="img/android-e-audio.webp" data-light="img/android-e-audio.webp" data-dark="img/android-dark-e-audio.webp" alt="Audioaufnahme in einer Notiz auf dem Handy" loading="lazy"></div>
       </div>
@@ -175,13 +204,34 @@
 
     <section id="verlinken">
       <h2>Notizen verlinken</h2>
-      <p>Tippe <code class="inline">&gt;&gt;</code> – es erscheint eine Auswahl deiner Notizen; weitertippen filtert. <span class="tag">Ubuntu</span> Auch mit <kbd>Strg</kbd>+<kbd>K</kbd>. Der Link zeigt immer den aktuellen Titel – auch wenn du die verlinkte Notiz umbenennst. Antippen öffnet sie.</p>
+      <p>Tippe <code class="inline">&gt;&gt;</code>. Es erscheint eine Auswahl deiner Notizen; weitertippen filtert. <span class="tag">Ubuntu</span> Auch mit <kbd>Strg</kbd>+<kbd>K</kbd>. Der Link zeigt immer den aktuellen Titel, auch wenn du die verlinkte Notiz umbenennst. Antippen öffnet sie.</p>
       <p>Webadressen in Notizen sind automatisch antippbar.</p>
+    </section>
+
+    <section id="vorlagen">
+      <h2>Vorlagen</h2>
+      <p><span class="tag">Ubuntu</span> „+“ über der Seitenleiste → „Neue Notiz aus Vorlage …“. <span class="tag">Android</span> In einem Ordner „…“ → „Neue Notiz aus Vorlage …“. Mitgeliefert sind Besprechung, Protokoll, Reisecheckliste und Tagebuch.</p>
+      <p><b>Eigene Vorlage:</b> Eine Notiz anlegen und <span class="tag">Ubuntu</span> Rechtsklick bzw. <span class="tag">Android</span> lange drücken → „Als Vorlage verwenden“. Platzhalter werden beim Anlegen ersetzt: <code>{{Datum}}</code>, <code>{{Uhrzeit}}</code>, <code>{{Wochentag}}</code>. Aus „Besprechung {{Datum}}“ wird z. B. „Besprechung 04.10.2026“.</p>
+    </section>
+
+    <section id="linkvorschau">
+      <h2>Link-Vorschau</h2>
+      <p>Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur <b>Vorschau mit Titel, Bild und Domain</b>, wie bei Apple. Ab Werk ist das <b>aus</b>: <span class="tag">Ubuntu</span> Darstellungsmenü (⋯) → „Link-Vorschau (Webseite abrufen)“, <span class="tag">Android</span> Einstellungen → „Link-Vorschau“.</p>
+      <p><b>Datenschutz wie bei Signal:</b> Nur das Gerät, auf dem du den Link einfügst, ruft die Seite ab. Der Betreiber sieht dabei die Adresse deines Anschlusses, sonst nichts. Die Vorschau samt Bild liegt verschlüsselt in der Notiz; andere Geräte rufen nichts ab. Gesperrte Notizen bekommen keine Vorschau.</p>
+      <p>Vorschau anklicken öffnet die Seite. <span class="tag">Ubuntu</span> Rechtsklick → „Nur als Adresse zeigen“. <span class="tag">Android</span> antippen → „Im Browser öffnen“ oder „Nur als Adresse zeigen“.</p>
+    </section>
+
+    <section id="profi">
+      <h2>Profi-Funktionen</h2>
+      <p>Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Wer mehr will, schaltet die <b>Profi-Funktionen</b> ein: <span class="tag">Ubuntu</span> Darstellungsmenü (⋯) → „Profi-Funktionen“, <span class="tag">Android</span> Einstellungen → „Profi-Funktionen“. Der Schalter gilt für dein Konto auf allen Geräten.</p>
+      <p><b>Code mit Syntaxfarben:</b> Im Format-Menü „Code“ und die Sprache wählen (Python, Kotlin, Shell, JSON). Schlüsselwörter, Texte, Kommentare und Zahlen werden eingefärbt, auch im PDF. Ein leerer Code-Absatz mit Enter beendet den Block. Notizen mit Code werden immer farbig angezeigt, auch wenn die Profi-Funktionen aus sind.</p>
+      <p><b>Fußnoten und Quellen:</b> Im Format-Menü „Fußnote / Quelle …“. An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unten in der Liste „Fußnoten und Quellen“ (so entsteht ein Literaturverzeichnis) und am Ende des PDFs. Die Nummern zählen sich von selbst durch. Nummer anklicken bzw. antippen, um den Text zu ändern oder die Fußnote zu entfernen.</p>
+      <p><b>Formeln (LaTeX):</b> Im Format-Menü „Formel (LaTeX) …“: Formeln in der Schreibweise von LaTeX, z. B. <code>\frac{a}{b}</code>, <code>x^2</code>, <code>\sqrt{x}</code>, <code>\alpha</code>, <code>\sum_{i=1}^{n}</code>, <code>\int_0^1</code>, Matrizen (<code>\begin{pmatrix} … \end{pmatrix}</code>) und Fallunterscheidungen (<code>cases</code>). LiNotes setzt sie selbst, ohne Internet, in der Notiz und im PDF. Formel anklicken bzw. antippen, um sie zu ändern; was LiNotes nicht kennt, wird rot markiert. Ältere LiNotes-Versionen zeigen den LaTeX-Text.</p>
     </section>
 
     <section id="erwaehnen">
       <h2>@-Erwähnungen</h2>
-      <p>In <b>geteilten</b> Notizen am Wortanfang <code class="inline">@</code> tippen – es erscheinen die Personen, mit denen die Notiz geteilt ist. Die erwähnte Person bekommt eine Benachrichtigung „… hat dich erwähnt“; antippen öffnet die Notiz.</p>
+      <p>In <b>geteilten</b> Notizen am Wortanfang <code class="inline">@</code> tippen. Es erscheinen die Personen, mit denen die Notiz geteilt ist. Die erwähnte Person bekommt eine Benachrichtigung „… hat dich erwähnt“; antippen öffnet die Notiz.</p>
     </section>
 
     <section id="aktivitaet">
@@ -197,7 +247,7 @@
       </div>
       <ul>
         <li><b>Ordner und Unterordner:</b> <span class="tag">Android</span> Ordner-Symbol oben rechts. <span class="tag">Ubuntu</span> „+“ über der Seitenleiste. Ordner lassen sich beliebig tief verschachteln.</li>
-        <li><b>Verschieben:</b> Notizen, Listen, Boards und Pläne auf einen Ordner ziehen – <span class="tag">Android</span> gedrückt halten und ziehen, <span class="tag">Ubuntu</span> mit der Maus. Oder lange drücken / Rechtsklick → „Verschieben nach …“.</li>
+        <li><b>Verschieben:</b> Notizen, Listen, Boards und Pläne auf einen Ordner ziehen, <span class="tag">Android</span> gedrückt halten und ziehen, <span class="tag">Ubuntu</span> mit der Maus. Oder lange drücken / Rechtsklick → „Verschieben nach …“.</li>
         <li><b>Sortieren:</b> Menü „…“ → Bearbeitungsdatum, Erstellungsdatum oder Titel. Gilt auf allen Geräten.</li>
         <li><b>Galerie:</b> Menü „…“ → „Als Galerie anzeigen“ <span class="tag">Ubuntu</span> oder <kbd>Strg</kbd>+<kbd>2</kbd>.</li>
         <li><b>Anheften:</b> Notiz lange drücken / Rechtsklick → „Anheften“. Angeheftete Notizen stehen oben.</li>
@@ -206,7 +256,7 @@
 
     <section id="suchen">
       <h2>Suchen und Tags</h2>
-      <p>Das Suchfeld über der Liste durchsucht alle Notizen. Schreibe <code class="inline">#Wort</code> in eine Notiz – der Tag erscheint in der Übersicht zum Filtern.</p>
+      <p>Das Suchfeld über der Liste durchsucht alle Notizen. Schreibe <code class="inline">#Wort</code> in eine Notiz. Der Tag erscheint in der Übersicht zum Filtern.</p>
     </section>
 
     <section id="sperren">
@@ -217,7 +267,7 @@
 
     <section id="pdf">
       <h2>PDF und Drucken</h2>
-      <p><span class="tag">Android</span> In der Notiz „Mehr“ → „Als PDF senden …“ oder „Drucken …“. <span class="tag">Ubuntu</span> Rechtsklick auf die Notiz → „Als PDF exportieren …“ (<kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>) oder „Drucken …“ (<kbd>Strg</kbd>+<kbd>P</kbd>). Das PDF sieht aus wie die Notiz – mit Überschriften, Listen, Tabellen und Fotos.</p>
+      <p><span class="tag">Android</span> In der Notiz „Mehr“ → „Als PDF senden …“ oder „Drucken …“. <span class="tag">Ubuntu</span> Rechtsklick auf die Notiz → „Als PDF exportieren …“ (<kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>) oder „Drucken …“ (<kbd>Strg</kbd>+<kbd>P</kbd>). Das PDF sieht aus wie die Notiz, mit Überschriften, Listen, Tabellen und Fotos.</p>
     </section>
 
     <section id="papierkorb">
@@ -232,7 +282,7 @@
         <div class="window"><img class="zoomable" src="img/ubuntu-07-liste.webp" data-light="img/ubuntu-07-liste.webp" data-dark="img/ubuntu-dark-07-liste.webp" alt="Einkaufsliste unter Ubuntu" loading="lazy"></div>
         <div class="phone"><img class="zoomable" src="img/android-f-liste.webp" data-light="img/android-f-liste.webp" data-dark="img/android-dark-f-liste.webp" alt="Einkaufsliste auf dem Handy" loading="lazy"></div>
       </div>
-      <p>Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis; „Erledigte löschen“ räumt auf. Was andere neu eintragen, zeigt ein Zähler am Reiter „Listen“.</p>
+      <p>Einträge unten eintippen. Sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis; „Erledigte löschen“ räumt auf. Was andere neu eintragen, zeigt ein Zähler am Reiter „Listen“.</p>
     </section>
 
     <section id="boards">
@@ -250,15 +300,16 @@
       <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-13-entwicklung.webp" alt="Entwicklungsprojekt mit Spalten CR bis Freigegeben" loading="lazy"></div></div>
       <p>Board lange drücken / Rechtsklick → <b>„Als Entwicklungsprojekt führen“</b>. Dann zeigen die Karten ihre Kurz-ID zum Zitieren in Commits und Berichten, und im Karten-Dialog gibt es zusätzlich:</p>
       <ul>
-        <li><b>Auswirkungsanalyse</b> – was betroffen ist, welche Risiken, was mitgeprüft werden muss.</li>
-        <li><b>Verifikation</b> – Tests und Prüfungen, dazu <b>Nachweise</b> als Dateien: Prüfprotokolle, Screenshots, Messdaten. Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256) – so lässt sich später belegen, dass es genau dieses Protokoll war.</li>
+        <li><b>Auswirkungsanalyse</b>: was betroffen ist, welche Risiken, was mitgeprüft werden muss.</li>
+        <li><b>Verifikation</b>: Tests und Prüfungen, dazu <b>Nachweise</b> als Dateien: Prüfprotokolle, Screenshots, Messdaten. Sie liegen verschlüsselt an der Karte, mit Zeitpunkt, Person und Prüfsumme (SHA-256). So lässt sich später belegen, dass es genau dieses Protokoll war.</li>
         <li><b>Umgesetzt in Version</b> und die <b>verknüpften Commits</b> (automatisch, wenn die Karten-ID in der Commit-Nachricht steht).</li>
-        <li><b>Verlauf</b> – wer die Karte wann in welche Spalte geschoben hat.</li>
+        <li><b>Verlauf</b>: wer die Karte wann in welche Spalte geschoben hat.</li>
       </ul>
       <div class="shots single"><div class="window"><img class="zoomable" src="img/ubuntu-14-karte.webp" alt="Karten-Dialog eines Change Requests" loading="lazy"></div></div>
-      <p>Der <b>Bericht</b> enthält dann eine Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Version ↔ Abnahme) und für jede Karte eine Detailseite – mit allen Nachweisen samt Prüfsumme, Bilder direkt eingebettet.</p>
+      <p>Der <b>Bericht</b> enthält dann eine Traceability-Matrix (Karte ↔ Commits ↔ Verifikation ↔ Version ↔ Abnahme) und für jede Karte eine Detailseite, mit allen Nachweisen samt Prüfsumme, Bilder direkt eingebettet.</p>
       <div class="shots single"><div class="window" style="background: #fff"><img class="zoomable" src="img/ubuntu-15-bericht-seite-1.webp" alt="Traceability-Matrix im PDF-Bericht" loading="lazy"></div></div>
       <p class="note">Die Bilder zeigen ein fiktives Beispiel: das Automotive-Projekt „Spurhalteassistent LKA – Steuergerät“ mit den Spalten CR, Analyse, Umsetzung, Verifikation und Freigegeben.</p>
+      <p class="note">Ausführliche Beispiele: <a href="beispiel-automotive.html">ASIL-D-Projekt nach ISO 26262 und Automotive SPICE</a> · <a href="beispiel-ki.html">Software entwickeln mit KI</a>.</p>
     </section>
 
     <section id="plaene">
@@ -270,7 +321,7 @@
       <p><b>Neuer Plan:</b> <span class="tag">Android</span> Reiter „Pläne“ → „+“. <span class="tag">Ubuntu</span> „+“ über der Seitenleiste → „Neuer Plan …“. Vorlage wählen: Leerer Plan, Stundenplan, Schichtplan, Putzplan, OP-/Raumplan oder Projektplan.</p>
       <p><b>Raster bearbeiten:</b> <span class="tag">Ubuntu</span> Direkt in die Zellen schreiben, Rechtsklick für Farbe, Zeilen und Spalten. <span class="tag">Android</span> Zelle antippen für Text und Farbe; Zeilen- und Spaltenköpfe antippen zum Umbenennen, Einfügen und Löschen.</p>
       <p><b>Spaltenart</b> (Menü „…“ bzw. Auswahl oben): freie Spalten, Wochentage, einzelne Tage ab einem Datum oder Kalenderwochen ab dieser Woche. Die heutige Spalte ist hervorgehoben.</p>
-      <p><b>PDF:</b> „PDF …“ <span class="tag">Ubuntu</span> bzw. „…“ → „Als PDF teilen …“ <span class="tag">Android</span> – im Querformat zum Aushängen.</p>
+      <p><b>PDF:</b> „PDF …“ <span class="tag">Ubuntu</span> bzw. „…“ → „Als PDF teilen …“ <span class="tag">Android</span>, im Querformat zum Aushängen.</p>
     </section>
 
     <section id="rotation">
@@ -291,15 +342,54 @@
       <p>Aufgaben erscheinen als Balken, Meilensteine als Raute, die rote Linie ist heute. <span class="tag">Ubuntu</span> „+ Aufgabe“ und „+ Meilenstein“ oben; Name, Von, Bis und Farbe in der Liste darunter ändern. <span class="tag">Android</span> „+“ oben rechts oder „Aufgabe hinzufügen“ unter der Liste; eine Aufgabe antippen zum Bearbeiten oder Löschen. Daten im Format TT.MM.JJJJ.</p>
     </section>
 
+    <section id="agil">
+      <h2>Agiles Arbeiten</h2>
+      <p>Boards in LiNotes eignen sich für agiles Arbeiten. Grundlage ist das Manifest für Agile Softwareentwicklung (2001), hier vollständig im Wortlaut:</p>
+      <blockquote class="manifest">
+        <p><b>Manifest für Agile Softwareentwicklung</b></p>
+        <p>Wir erschließen bessere Wege, Software zu entwickeln, indem wir es selbst tun und anderen dabei helfen. Durch diese Tätigkeit haben wir diese Werte zu schätzen gelernt:</p>
+        <p><b>Individuen und Interaktionen</b> mehr als Prozesse und Werkzeuge<br><b>Funktionierende Software</b> mehr als umfassende Dokumentation<br><b>Zusammenarbeit mit dem Kunden</b> mehr als Vertragsverhandlung<br><b>Reagieren auf Veränderung</b> mehr als das Befolgen eines Plans</p>
+        <p>Das heißt, obwohl wir die Werte auf der rechten Seite wichtig finden, schätzen wir die Werte auf der linken Seite höher ein.</p>
+        <p class="note">Kent Beck, Mike Beedle, Arie van Bennekum, Alistair Cockburn, Ward Cunningham, Martin Fowler, James Grenning, Jim Highsmith, Andrew Hunt, Ron Jeffries, Jon Kern, Brian Marick, Robert C. Martin, Steve Mellor, Ken Schwaber, Jeff Sutherland, Dave Thomas</p>
+        <p class="note">© 2001, the above authors<br>this declaration may be freely copied in any form,<br>but only in its entirety through this notice.</p>
+      </blockquote>
+      <p class="note">Quelle: <a href="https://agilemanifesto.org/iso/de/manifesto.html">agilemanifesto.org/iso/de/manifesto.html</a></p>
+      <h3>Die zwölf Prinzipien, kurz gefasst</h3>
+      <ol>
+        <li>Früh und regelmäßig etwas Nützliches liefern. Das stellt Kunden am besten zufrieden.</li>
+        <li>Geänderte Anforderungen sind willkommen, auch spät.</li>
+        <li>In kurzen Abständen funktionierende Ergebnisse liefern, lieber Wochen als Monate.</li>
+        <li>Fachleute und Entwickler arbeiten täglich zusammen.</li>
+        <li>Projekte um motivierte Menschen bauen, ihnen Umfeld, Unterstützung und Vertrauen geben.</li>
+        <li>Am besten informiert das direkte Gespräch.</li>
+        <li>Fortschritt misst sich an dem, was funktioniert.</li>
+        <li>Ein Tempo halten, das alle dauerhaft durchhalten können.</li>
+        <li>Technische Qualität und gutes Design machen beweglich.</li>
+        <li>Einfachheit: möglichst viel Arbeit gar nicht erst tun müssen.</li>
+        <li>Gute Lösungen entstehen in Teams, die sich selbst organisieren.</li>
+        <li>Regelmäßig innehalten, gemeinsam besser werden und das Vorgehen anpassen.</li>
+      </ol>
+      <p class="note">In eigenen Worten zusammengefasst; Wortlaut: <a href="https://agilemanifesto.org/iso/de/principles.html">agilemanifesto.org/iso/de/principles.html</a></p>
+      <h3>Agil arbeiten mit LiNotes</h3>
+      <p>Ein Board zeigt den Arbeitsfluss auf einen Blick: Spalten wie „Offen – In Arbeit – Erledigt“, jede Karte ein kleines, abgeschlossenes Stück Arbeit. So passen die vier Werte dazu:</p>
+      <ul>
+        <li><b>Individuen und Interaktionen:</b> Boards teilen, Karten zuweisen und mit @-Erwähnungen ins Gespräch holen. LiNotes unterstützt das Gespräch, ersetzt es aber nicht.</li>
+        <li><b>Funktionierende Software:</b> Karten klein schneiden und erst nach „Erledigt“ schieben, wenn es wirklich funktioniert; bei Entwicklungsprojekten belegen Nachweise das.</li>
+        <li><b>Zusammenarbeit mit dem Kunden:</b> Auftraggeber ins Board einladen. Sie schreiben Wünsche als Karten und nehmen selbst ab, z. B. so vereinbart, dass nur sie nach „Erledigt“ schieben.</li>
+        <li><b>Reagieren auf Veränderung:</b> Prioritäten jederzeit ändern und Karten umsortieren; Pläne zeigen verschobene Meilensteine offen, statt sie zu verstecken.</li>
+      </ul>
+      <p>Regelmäßig reflektieren: den Bericht als PDF erzeugen und gemeinsam durchgehen. Was lief gut, was ändern wir? Dokumentation nur so viel wie nötig: Auswirkungsanalyse, Verifikation und Nachweise sind für Projekte gedacht, die sie brauchen (z. B. nach ISO 26262 oder Automotive SPICE). Einfache Boards bleiben schlank.</p>
+    </section>
+
     <!-- TEILEN UND SICHERHEIT -->
     <section id="verifizieren">
       <h2>Personen verifizieren</h2>
-      <p>Bevor ihr etwas teilt, verifiziert ihr euch einmal: Einstellungen → „Personen“ → Person antippen <span class="tag">Ubuntu</span> Kontomenü → Personen → „Verifizieren“. Dein Gerät zeigt einen Code; auf dem Gerät der anderen Person erscheint eine Anfrage – dort den Code eintippen oder den QR-Code scannen. So kann niemand, auch nicht der Server, euch einen falschen Schlüssel unterschieben.</p>
+      <p>Bevor ihr etwas teilt, verifiziert ihr euch einmal: Einstellungen → „Personen“ → Person antippen <span class="tag">Ubuntu</span> Kontomenü → Personen → „Verifizieren“. Dein Gerät zeigt einen Code; auf dem Gerät der anderen Person erscheint eine Anfrage, dort den Code eintippen oder den QR-Code scannen. So kann niemand, auch nicht der Server, euch einen falschen Schlüssel unterschieben.</p>
     </section>
 
     <section id="teilen">
       <h2>Teilen</h2>
-      <p>Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, wird automatisch neu verschlüsselt. Geteiltes erkennst du am Personen-Symbol.</p>
+      <p>Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel. Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer. Bis dahin liefert der Server sie nur noch an die Verbliebenen aus. Geteiltes erkennst du am Personen-Symbol.</p>
     </section>
 
     <section id="platz">
@@ -309,7 +399,7 @@
 
     <section id="datenschutz">
       <h2>Was der Server weiß</h2>
-      <p>Alles – Notizen, Listen, Boards, Pläne, Ordnernamen, Bilder und Aufnahmen – wird auf deinem Gerät verschlüsselt, bevor es den Server erreicht. Der Server sieht nur, dass es Einträge gibt, wie groß sie sind und wann sie geändert wurden – nicht, was darin steht. Die Apps enthalten keine Werbung und keine Tracker.</p>
+      <p>Alles (Notizen, Listen, Boards, Pläne, Ordnernamen, Bilder und Aufnahmen) wird auf deinem Gerät verschlüsselt, bevor es den Server erreicht. Der Server sieht nur, dass es Einträge gibt, wie groß sie sind und wann sie geändert wurden, nicht, was darin steht. Die Apps enthalten keine Werbung und keine Tracker.</p>
     </section>
 
     <!-- DARSTELLUNG -->
@@ -319,7 +409,7 @@
         <div>
           <p><span class="tag">Android</span> Einstellungen → Darstellung: <b>Textgröße</b>, <b>Blocksatz</b> und <b>Silbentrennung</b> (nach der Sprache des Handys). Titel und Überschriften bleiben im Flattersatz.</p>
           <p><span class="tag">Ubuntu</span> Menü „…“ neben Liste/Galerie: <b>Textgröße</b> (oder <kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd> / <kbd>Strg</kbd>+<kbd>0</kbd>) und <b>Blocksatz</b>. Silbentrennung gibt es unter Ubuntu nicht.</p>
-          <p>Alles gilt pro Gerät – groß und im Blocksatz am Handy, kompakt am Laptop.</p>
+          <p>Alles gilt pro Gerät: groß und im Blocksatz am Handy, kompakt am Laptop.</p>
         </div>
         <div class="phone"><img class="zoomable" src="img/android-l-einstellungen.webp" data-light="img/android-l-einstellungen.webp" data-dark="img/android-dark-l-einstellungen.webp" alt="Einstellungen auf dem Handy" loading="lazy"></div>
       </div>
@@ -350,14 +440,15 @@
 <footer>
   <div class="wrap made">
     <img src="linotes.svg" alt="" width="34" height="34">
-    <p><b>Entwickelt in Schleswig-Holstein.</b><br>Von Olaf Winkler – zwischen Nord- und Ostsee.</p>
+    <p>Ein privates, nichtkommerzielles Projekt von Olaf Winkler aus Schleswig-Holstein.</p>
   </div>
   <div class="wrap cols">
     <div><h4>LiNotes</h4><p><a href="index.html">Startseite</a> · <a href="server.html">Eigener Server</a> · <a href="index.html#laden">Laden</a></p></div>
-    <div><h4>Offener Quelltext</h4><p>Jede Zeile von LiNotes ist einsehbar: <a href="https://github.com/veritasX1/LiNotes">github.com/veritasX1/LiNotes</a> – mit allen Versionen zum Herunterladen. Freie Software unter der <a href="https://github.com/veritasX1/LiNotes/blob/main/LICENSE">GPL-3.0</a>.</p>
+    <div><h4>Offener Quelltext</h4><p>Der vollständige Quelltext von LiNotes liegt auf <a href="https://github.com/veritasX1/LiNotes">github.com/veritasX1/LiNotes</a>, mit allen Versionen zum Herunterladen. Freie Software unter der <a href="https://github.com/veritasX1/LiNotes/blob/main/LICENSE">GPL-3.0</a>.</p>
       <h4 style="margin-top: 14px">Datenschutz dieser Seite</h4><p>Keine Cookies, keine Inhalte von fremden Servern, keine Zugriffsprotokolle.</p></div>
     <div><h4>Hinweis</h4><p>LiNotes ist ein unabhängiges Projekt und steht in keiner Verbindung zu Apple Inc.</p></div>
   </div>
+<!--lang--><div class="wrap lang-foot"><a href="hilfe.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/hilfe.html" hreflang="en" lang="en">EN</a><a href="fr/hilfe.html" hreflang="fr" lang="fr">FR</a></div><!--/lang-->
 </footer>
 <script src="site.js"></script>
 </body>

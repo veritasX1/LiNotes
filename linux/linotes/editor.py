@@ -16,15 +16,20 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Graphene", "1.0")
 gi.require_version("Pango", "1.0")
+gi.require_version("Adw", "1")
 
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Graphene, Gtk, Pango
 
-from . import audio, calc, model, textsize
+from . import audio, calc, linkpreview, mathtex, model, syntax, textsize
 from .table import NoteTable
+from .i18n import _
 
 
 PARAGRAPHS = ("title", "heading", "subheading", "body", "mono", "quote",
-              "bullet", "dash", "number", "check")
+              "bullet", "dash", "number", "check", "code")
+# Code colors (Profi-Funktion; only displayed, never stored as spans).
+SYNTAX_COLORS = {"keyword": (0.61, 0.32, 0.88), "string": (0.10, 0.58, 0.32), "comment": (0.52, 0.52, 0.55),
+                 "number": (0.88, 0.48, 0.0)}
 LISTS = ("bullet", "dash", "number", "check")
 # Headings that can be collapsed (like Apple): rank – a section ends at the next heading of the same or a higher rank.
 FOLDABLE = {"heading": 1, "subheading": 2}
@@ -45,13 +50,42 @@ EXCLUSIVE = (tuple(HIGHLIGHTS), tuple(TEXT_COLORS), tuple(FONTS))
 INLINE = ("b", "i", "u", "s") + tuple(HIGHLIGHTS) + tuple(TEXT_COLORS) + tuple(FONTS)
 ALIGNMENTS = {"center": Gtk.Justification.CENTER, "right": Gtk.Justification.RIGHT}
 # Web addresses that become clickable links (trailing punctuation is not part of the address).
-LINK = re.compile(r"(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
+# Web addresses, mail and phone links, and the way back into LiMail/LiCal (Zusammenspiel; Michelle 07.10., card 0cb30240).
+LINK = re.compile(r"(?:https?://|www\.|(?:mailto|tel):|(?:limail|lical|linotes)://)[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
 MAX_INDENT = 4
 INDENT = 26
 LIST_MARGIN = 30
 OBJECT = "￼"
 
 ACCENT = (0.90, 0.64, 0.0)
+
+
+class FootnoteList(Gtk.Box):
+    """Under the note: "Fußnoten und Quellen" with the numbered texts (follows the editor)."""
+
+    def __init__(self, editor):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=36, margin_end=36,
+                         margin_bottom=24, visible=False)
+        self.add_css_class("footnote-list")
+        editor.connect("footnotes-changed", lambda _editor, texts: self.show(texts))
+
+    def show(self, texts):
+        while (child := self.get_first_child()) is not None:
+            self.remove(child)
+        if texts:
+            self.append(Gtk.Separator(margin_bottom=6))
+            self.append(Gtk.Label(label=_("Fußnoten und Quellen"), xalign=0, css_classes=["heading"]))
+            for number, text in enumerate(texts, 1):
+                row = Gtk.Box(spacing=8)
+                row.append(Gtk.Label(label=f"{number}", xalign=1, width_chars=2, valign=Gtk.Align.START,
+                                     css_classes=["footnote-number"]))
+                row.append(Gtk.Label(label=text, xalign=0, wrap=True, hexpand=True, selectable=True))
+                self.append(row)
+        self.set_visible(bool(texts))
+
+
+# Waveforms of recordings by file id (file ids never change content).
+WAVEFORMS = {}
 
 
 class NoteEditor(Gtk.TextView):
@@ -65,6 +99,10 @@ class NoteEditor(Gtk.TextView):
         "open-note": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         # A click on an attached file (argument: the file block).
         "open-file": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        # A web address was finished alone on a line (Enter or pasted): the window may make a preview.
+        "link-line": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        # The footnotes changed (texts in reading order) – the note pane lists them under the note.
+        "footnotes-changed": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
     }
 
     def __init__(self, image_loader=None):
@@ -138,6 +176,13 @@ class NoteEditor(Gtk.TextView):
         tag("subheading", scale=1.18, weight=Pango.Weight.SEMIBOLD, pixels_above_lines=4, justification=Gtk.Justification.LEFT)
         tag("body")
         tag("mono", family="Monospace", scale=0.92)
+        tag("code", family="Monospace", scale=0.92, paragraph_background_rgba=rgba(0.5, 0.5, 0.55, 0.12),
+            left_margin=48, right_margin=48, justification=Gtk.Justification.LEFT)
+        for lang in syntax.LANGUAGES:
+            tag("lang-" + lang)
+        for kind, color in SYNTAX_COLORS.items():
+            tag("syn-" + kind, foreground_rgba=rgba(*color))
+        self.get_buffer().get_tag_table().lookup("syn-comment").set_property("style", Pango.Style.ITALIC)
         tag("quote", left_margin=20, foreground_rgba=rgba(0.45, 0.45, 0.48), style=Pango.Style.ITALIC)
         for name in LISTS:
             tag(name)
@@ -286,6 +331,8 @@ class NoteEditor(Gtk.TextView):
         if self.pending_alignment and self.pending_alignment[0] == line:
             self.set_alignment(self.pending_alignment[1], range(line, end_line + 1))
         self.pending_alignment = None
+        if not self.loading:
+            self.check_link_lines(line, end_line, text)
         if text == "=" and location.ends_line():
             # Like Apple's Math Notes: "12,5 * 4 =" gets its result.
             mark = buffer.create_mark(None, location, False)
@@ -312,6 +359,8 @@ class NoteEditor(Gtk.TextView):
         self.queue_draw()
         if self.loading:
             return
+        self.highlight_code()
+        GLib.idle_add(lambda: self.renumber_footnotes() and False)
         self.mark_links()
         self.refold()
         if self.edit_source is not None:
@@ -426,6 +475,12 @@ class NoteEditor(Gtk.TextView):
             self.emit_style()
             return True
 
+        if style == "code" and not text.strip():
+            # An empty code line ends the code block (like an empty list item ends a list).
+            self.set_line_style(line, "body", 0, checked=False)
+            self.emit_style()
+            return True
+
         if style in LISTS and not text.strip():
             # An empty list item ends the list (or outdents first).
             if level:
@@ -445,9 +500,11 @@ class NoteEditor(Gtk.TextView):
         # The old line keeps its style; the new one continues lists, but
         # titles and headings are followed by normal text.
         self.set_line_style(line, style, level)
-        next_style = style if style in LISTS + ("mono", "quote", "body") else "body"
+        next_style = style if style in LISTS + ("mono", "quote", "body", "code") else "body"
         # Inline styles of the split text stay where they were; new text is plain.
         self.set_line_style(new_line, next_style, level if next_style in LISTS else 0, checked=False)
+        if style == "code":
+            self.set_code_language(self.line_language(line), [new_line])
         # Like Notes: the alignment carries on to the next line.
         first = buffer.get_iter_at_mark(line_start)
         buffer.delete_mark(line_start)
@@ -555,6 +612,47 @@ class NoteEditor(Gtk.TextView):
     def set_justified(self, on):
         """Blocksatz (per device, like the text size): running text fills the line."""
         self.set_justification(Gtk.Justification.FILL if on else Gtk.Justification.LEFT)
+
+    # --- code (Profi-Funktion) ---
+
+    def line_language(self, line):
+        start = self.line_bounds(line)[0]
+        table = self.buffer.get_tag_table()
+        return next((lang for lang in syntax.LANGUAGES if start.has_tag(table.lookup("lang-" + lang))), None)
+
+    def set_code_language(self, lang, lines=None):
+        for line in (lines if lines is not None else self.selected_lines()):
+            start, _end, with_break = self.line_bounds(line)
+            for other in syntax.LANGUAGES:
+                self.buffer.remove_tag_by_name("lang-" + other, start, with_break)
+            if lang in syntax.LANGUAGES:
+                self.buffer.apply_tag_by_name("lang-" + lang, start, with_break)
+        self.highlight_code()
+
+    def make_code(self, lang, lines=None):
+        """Format → Code (language): the selected lines become a code block."""
+        lines = list(lines if lines is not None else self.selected_lines())
+        for line in lines:
+            self.set_line_style(line, "code", 0, checked=False)
+        self.set_code_language(lang, lines)
+        self.emit_style()
+        self.emit("edited")
+
+    def highlight_code(self):
+        """Color keywords, strings, comments and numbers in code lines (display only)."""
+        buffer = self.buffer
+        table = buffer.get_tag_table()
+        code = table.lookup("code")
+        for line in range(buffer.get_line_count()):
+            start, end, _with_break = self.line_bounds(line)
+            for kind in SYNTAX_COLORS:
+                buffer.remove_tag_by_name("syn-" + kind, start, end)
+            if not start.has_tag(code):
+                continue
+            text = buffer.get_slice(start, end, True)
+            base = start.get_offset()
+            for begin, finish, kind in syntax.tokens(text, self.line_language(line)):
+                buffer.apply_tag_by_name("syn-" + kind, buffer.get_iter_at_offset(base + begin), buffer.get_iter_at_offset(base + finish))
 
     def set_alignment(self, name, lines=None):
         """Align the selected lines left (None), centered or right, like Format → Text in Notes."""
@@ -671,7 +769,7 @@ class NoteEditor(Gtk.TextView):
         found, iterator = self.get_iter_at_location(buffer_x, buffer_y)
         if found:
             for tag in iterator.get_tags():
-                if model.link_target(tag.get_property("name")):
+                if model.link_target(tag.get_property("name")) or model.footnote_text(tag.get_property("name")) is not None:
                     return tag.get_property("name")
         tag = self.get_buffer().get_tag_table().lookup("link")
         if not found or not iterator.has_tag(tag):
@@ -681,7 +779,7 @@ class NoteEditor(Gtk.TextView):
             start.backward_to_tag_toggle(tag)
         end.forward_to_tag_toggle(tag)
         url = self.get_buffer().get_text(start, end, False)
-        return url if url.startswith(("http://", "https://")) else "https://" + url
+        return "https://" + url if url.startswith("www.") else url   # limail://, mailto: … stay as they are
 
     # ========================================================
     # LINKS TO OTHER NOTES (">>")
@@ -709,8 +807,104 @@ class NoteEditor(Gtk.TextView):
             table.add(tag)
         return tag
 
+    # --- footnotes (Profi-Funktion) ---
+
+    def footnote_tag(self, name):
+        """A small raised number in the accent color, named like the saved span ("fn:<text>")."""
+        table = self.buffer.get_tag_table()
+        tag = table.lookup(name)
+        if tag is None:
+            tag = Gtk.TextTag(name=name)
+            tag.set_property("rise", 5 * Pango.SCALE)
+            tag.set_property("scale", 0.72)
+            tag.set_property("weight", Pango.Weight.BOLD)
+            tag.set_property("foreground-rgba", rgba(0.72, 0.49, 0.0, 1.0))
+            table.add(tag)
+        return tag
+
+    def footnote_ranges(self):
+        """[(start offset, end offset, span name)] of all footnote numbers, in reading order."""
+        ranges = []
+        probe = self.buffer.get_start_iter()
+        while True:
+            for tag in probe.get_toggled_tags(True):
+                name = tag.get_property("name")
+                if model.footnote_text(name) is not None:
+                    finish = probe.copy()
+                    finish.forward_to_tag_toggle(tag)
+                    ranges.append((probe.get_offset(), finish.get_offset(), name))
+            if not probe.forward_to_tag_toggle(None):
+                break
+        return sorted(ranges)
+
+    def renumber_footnotes(self):
+        """Footnote numbers follow the reading order (1, 2, 3 …) – after loading and every edit."""
+        buffer = self.buffer
+        ranges = self.footnote_ranges()
+        changed = False
+        for number, (start, end, name) in reversed(list(enumerate(ranges, 1))):
+            begin, finish = buffer.get_iter_at_offset(start), buffer.get_iter_at_offset(end)
+            if buffer.get_text(begin, finish, False) == str(number):
+                continue
+            changed = True
+            self.loading = True
+            buffer.delete(begin, finish)
+            buffer.insert_with_tags(buffer.get_iter_at_offset(start), str(number), self.footnote_tag(name))
+            self.loading = False
+        texts = [model.footnote_text(name) for _start, _end, name in self.footnote_ranges()]
+        if texts != getattr(self, "shown_footnotes", None):
+            self.shown_footnotes = texts
+            self.emit("footnotes-changed", texts)
+        if changed:
+            self.emit("edited")
+        return False
+
+    def insert_footnote(self, text):
+        """Format → Fußnote: a number at the cursor, the text in the list under the note."""
+        name = model.FOOTNOTE + text.strip()
+        buffer = self.buffer
+        cursor = buffer.get_iter_at_mark(buffer.get_insert())
+        self.loading = True
+        buffer.insert_with_tags(cursor, "0", self.footnote_tag(name))
+        self.loading = False
+        self.renumber_footnotes()
+        self.emit("edited")
+
+    def edit_footnote(self, name):
+        """A click on a footnote number: change its text or remove it."""
+        dialog = Adw.AlertDialog(heading=_("Fußnote"), body=_("Erscheint unten in der Liste „Fußnoten und Quellen“ und im PDF."))
+        entry = Gtk.Entry(text=model.footnote_text(name) or "", activates_default=True)
+        dialog.set_extra_child(entry)
+        dialog.add_response("delete", _("Entfernen"))
+        dialog.add_response("cancel", _("Abbrechen"))
+        dialog.add_response("save", _("Sichern"))
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("save")
+
+        def answered(_dialog, response):
+            ranges = [(a, b) for a, b, n in self.footnote_ranges() if n == name]
+            if not ranges or response == "cancel":
+                return
+            start, end = ranges[0]
+            buffer = self.buffer
+            begin, finish = buffer.get_iter_at_offset(start), buffer.get_iter_at_offset(end)
+            buffer.begin_user_action()
+            if response == "delete":
+                buffer.delete(begin, finish)
+            elif entry.get_text().strip():
+                buffer.remove_tag(self.footnote_tag(name), begin, finish)
+                buffer.apply_tag(self.footnote_tag(model.FOOTNOTE + entry.get_text().strip()), begin, finish)
+            buffer.end_user_action()
+            self.renumber_footnotes()
+            self.emit("edited")
+        dialog.connect("response", answered)
+        dialog.present(self.get_root())
+
     def span_tag(self, name):
-        """The tag for a saved link span: note link or mention."""
+        """The tag for a saved link span: note link, mention or footnote."""
+        if model.footnote_text(name) is not None:
+            return self.footnote_tag(name)
         if model.link_target(name):
             return self.note_link_tag(model.link_target(name))
         return self.mention_tag(model.mention_target(name))
@@ -723,6 +917,10 @@ class NoteEditor(Gtk.TextView):
             names.update(tag.get_property("name") for tag in probe.get_tags())
             probe.forward_char()
         for name in names:
+            if model.footnote_text(name) is not None:
+                # A footnote number never takes typed text (it is renumbered by itself).
+                self.buffer.remove_tag(self.buffer.get_tag_table().lookup(name), start, end)
+                continue
             if not model.link_target(name) and model.mention_target(name) is None:
                 continue
             tag = self.buffer.get_tag_table().lookup(name)
@@ -927,7 +1125,9 @@ class NoteEditor(Gtk.TextView):
         url = self.link_at(x, y) if n_press == 1 else None
         if url:
             gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-            if model.link_target(url):
+            if model.footnote_text(url) is not None:
+                self.edit_footnote(url)
+            elif model.link_target(url):
                 self.emit("open-note", model.link_target(url))
             else:
                 Gtk.UriLauncher.new(url).launch(self.get_root(), None, None)
@@ -955,6 +1155,40 @@ class NoteEditor(Gtk.TextView):
     def marker_x(self, line):
         return self.get_left_margin() + LIST_MARGIN - 16 + INDENT * self.line_level(line)
 
+    def list_numbers(self, first, last):
+        """Numbers of the "1." list lines from first to last. Counting starts at the top of the numbered
+        run that first lies in, not at the top of the note: every drawn frame walked the whole note
+        (card b9046682)."""
+        top = first
+        while top > 0 and self.line_style(top - 1) in LISTS:
+            top -= 1
+        numbers, counter = {}, {}
+        for line in range(top, last + 1):
+            style = self.line_style(line)
+            if style == "number":
+                level = self.line_level(line)
+                counter[level] = counter.get(level, 0) + 1
+                for deeper in [key for key in counter if key > level]:
+                    del counter[deeper]
+                numbers[line] = counter[level]
+            elif style not in LISTS:
+                counter = {}
+        return numbers
+
+    def has_section_body(self, line):
+        """Whether the heading on line has text below it to fold – section_end(line) > line, but
+        stopping at the first such line instead of walking the whole section on every frame."""
+        rank = FOLDABLE.get(self.line_style(line))
+        if rank is None:
+            return False
+        for other in range(line + 1, self.buffer.get_line_count()):
+            other_rank = RANKS.get(self.line_style(other))
+            if other_rank is not None and other_rank <= rank:
+                return False
+            if self.buffer.get_text(*self.line_bounds(other)[:2], True).strip():
+                return True
+        return False
+
     def do_snapshot_layer(self, layer, snapshot):
         if layer != Gtk.TextViewLayer.ABOVE_TEXT:
             return
@@ -963,26 +1197,14 @@ class NoteEditor(Gtk.TextView):
         last = self.get_line_at_y(visible.y + visible.height)[0].get_line()
 
         color = self.get_color()
-        numbers = {}
-        counter = {}
-        # Numbering has to start at the top of each numbered run.
-        for line in range(0, last + 1):
-            style = self.line_style(line)
-            level = self.line_level(line)
-            if style == "number":
-                counter[level] = counter.get(level, 0) + 1
-                for deeper in [key for key in counter if key > level]:
-                    del counter[deeper]
-                numbers[line] = counter[level]
-            elif style not in LISTS:
-                counter = {}
+        numbers = self.list_numbers(first, last)
 
         cr = snapshot.append_cairo(Graphene.Rect().init(visible.x, visible.y, visible.width, visible.height))
         folded = self.buffer.get_tag_table().lookup("folded")
         for line in range(first, last + 1):
             if self.buffer.get_iter_at_line(line)[1].has_tag(folded):
                 continue  # inside a collapsed section
-            if self.line_style(line) in FOLDABLE and self.section_end(line) > line:
+            if self.line_style(line) in FOLDABLE and self.has_section_body(line):
                 self.draw_chevron(cr, line, color)
                 continue
             if self.is_divider(line):
@@ -1060,10 +1282,12 @@ class NoteEditor(Gtk.TextView):
                 self.add_image(anchor, block.get("f"), block.get("w"))
             elif kind == "divider":
                 self.add_divider(buffer.create_child_anchor(end))
-            elif kind == "file":
+            elif kind in ("file", "link"):
                 self.add_file(buffer.create_child_anchor(end), block)
             elif kind == "table":
                 self.add_table(buffer.create_child_anchor(end), block)
+            elif kind == "math":
+                self.add_math(buffer.create_child_anchor(end), block.get("x", ""))
             else:
                 block = model.refresh_note_links(block, self.note_title, self.user_name)
                 text = block.get("x", "")
@@ -1074,7 +1298,8 @@ class NoteEditor(Gtk.TextView):
                         start_offset, end_offset, name = span
                     except ValueError:
                         continue
-                    if name in INLINE or model.link_target(name) or model.mention_target(name) is not None:
+                    if (name in INLINE or model.link_target(name) or model.mention_target(name) is not None
+                            or model.footnote_text(name) is not None):
                         if name not in INLINE:
                             self.span_tag(name)
                         buffer.apply_tag_by_name(
@@ -1087,16 +1312,22 @@ class NoteEditor(Gtk.TextView):
             line = buffer.get_line_count() - 1 if index == len(blocks) - 1 else buffer.get_line_count() - 2
             style = kind if kind in PARAGRAPHS else "body"
             self.set_line_style(line, style, int(block.get("l", 0)), checked=bool(block.get("c")))
-            if kind in ("image", "divider", "file", "table"):
+            if kind in ("image", "divider", "file", "link", "table", "math"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("image", start, with_break)
+            if kind == "math":
+                self.set_alignment("center", [line])
             if block.get("a") in ALIGNMENTS:
                 self.set_alignment(block["a"], [line])
+            if kind == "code" and block.get("lang") in syntax.LANGUAGES:
+                self.set_code_language(block["lang"], [line])
             if kind in FOLDABLE and block.get("z"):
                 start, _end, with_break = self.line_bounds(line)
                 buffer.apply_tag_by_name("collapsed", start, with_break)
         buffer.end_irreversible_action()
         self.loading = False
+        self.highlight_code()
+        self.renumber_footnotes()
         self.mark_links()
         self.refold()
         cursor = buffer.get_iter_at_offset(min(offset, buffer.get_char_count()))
@@ -1109,6 +1340,7 @@ class NoteEditor(Gtk.TextView):
     def to_blocks(self):
         buffer = self.buffer
         blocks = []
+        names = self.span_names()  # once, not per line
         for line in range(buffer.get_line_count()):
             start, end, _with_break = self.line_bounds(line)
             anchor = start.get_child_anchor()
@@ -1116,6 +1348,8 @@ class NoteEditor(Gtk.TextView):
                 image = self.anchors[anchor]
                 if image.get("table"):
                     blocks.append(model.table_block(image["table"].rows()))
+                elif "math" in image:
+                    blocks.append({"t": "math", "x": image["math"]})
                 elif image.get("attachment"):
                     blocks.append(dict(image["attachment"]))
                 else:
@@ -1137,7 +1371,9 @@ class NoteEditor(Gtk.TextView):
                 block["z"] = True
             if self.line_alignment(line):
                 block["a"] = self.line_alignment(line)
-            spans = self.spans(start, end)
+            if block["t"] == "code" and self.line_language(line):
+                block["lang"] = self.line_language(line)
+            spans = self.spans(start, end, names)
             if spans:
                 block["s"] = spans
             blocks.append(block)
@@ -1146,25 +1382,41 @@ class NoteEditor(Gtk.TextView):
             blocks.pop()
         return blocks
 
-    def spans(self, start, end):
-        result = []
+    def span_names(self):
+        """Names of all tags that are saved as spans: inline styles plus note links, mentions, footnotes."""
+        names = set(INLINE)
+        self.buffer.get_tag_table().foreach(lambda tag: names.add(tag.get_property("name"))
+                                            if model.link_target(tag.get_property("name"))
+                                            or model.mention_target(tag.get_property("name")) is not None
+                                            or model.footnote_text(tag.get_property("name")) is not None else None)
+        return names
+
+    def spans(self, start, end, names=None):
+        """[start, end, name] of the saved styles in one line – one pass over the tag toggles (the old
+        per-tag search over the whole tag table made saving a long note take seconds, card b9046682)."""
+        names = names if names is not None else self.span_names()
         base = start.get_offset()
-        table = self.buffer.get_tag_table()
-        links = []
-        table.foreach(lambda tag: links.append(tag.get_property("name"))
-                      if model.link_target(tag.get_property("name")) or model.mention_target(tag.get_property("name")) is not None
-                      else None)
-        for name in INLINE + tuple(links):
-            tag = table.lookup(name)
-            probe = start.copy()
-            while probe.compare(end) < 0:
-                if probe.has_tag(tag) or probe.starts_tag(tag):
-                    span_start = probe.get_offset()
-                    if not probe.forward_to_tag_toggle(tag) or probe.compare(end) > 0:
-                        probe = end.copy()
-                    result.append([span_start - base, probe.get_offset() - base, name])
-                elif not probe.forward_to_tag_toggle(tag):
-                    break
+        result = []
+        opened = {}
+        for tag in start.get_tags():
+            if tag.get_property("name") in names:
+                opened[tag.get_property("name")] = base
+        probe = start.copy()
+        while probe.forward_to_tag_toggle(None) and probe.compare(end) < 0:
+            offset = probe.get_offset()
+            for tag in probe.get_toggled_tags(False):
+                name = tag.get_property("name")
+                if name in opened:
+                    begin = opened.pop(name)
+                    if offset > begin:
+                        result.append([begin - base, offset - base, name])
+            for tag in probe.get_toggled_tags(True):
+                name = tag.get_property("name")
+                if name in names:
+                    opened[name] = offset
+        for name, begin in opened.items():
+            if end.get_offset() > begin:
+                result.append([begin - base, end.get_offset() - base, name])
         return sorted(result)
 
     # ========================================================
@@ -1179,6 +1431,13 @@ class NoteEditor(Gtk.TextView):
         picture.set_size_request(360, 220)
         self.anchors[anchor] = {"file": file_id, "width": width, "picture": picture}
         self.add_child_at_anchor(picture, anchor)
+        # A click opens the picture in the quick look instead of putting the cursor before it (900036dc).
+        click = Gtk.GestureClick()
+        click.connect("released", lambda gesture, *_args: (gesture.set_state(Gtk.EventSequenceState.CLAIMED),
+                                                           self.emit("open-file", {"t": "image", "f": file_id, "n": "Bild", "m": "image/*"})))
+        picture.add_controller(click)
+        picture.set_cursor_from_name("zoom-in")
+        picture.set_tooltip_text(_("Ansehen"))
         if self.image_loader and file_id:
             def load():
                 try:
@@ -1221,8 +1480,123 @@ class NoteEditor(Gtk.TextView):
         """Attach a file (block {"t": "file", "f", "n", "m", "b"}) on a line of its own."""
         self.insert_image(None, attachment=block)
 
+    # ========================================================
+    # LINK PREVIEWS (web address alone on a line → card)
+    # ========================================================
+
+    def check_link_lines(self, first_line, last_line, text):
+        """After Enter (or pasting a lone address): every finished line that is just a web address."""
+        lines = range(first_line, last_line) if "\n" in text else ([first_line] if linkpreview.lone_url(text) else [])
+        for number in lines:
+            start, end, _with_break = self.line_bounds(number)
+            if start.get_child_anchor() is not None:
+                continue
+            url = linkpreview.lone_url(self.buffer.get_text(start, end, False))
+            if url:
+                GLib.idle_add(lambda url=url: self.emit("link-line", url) and False)
+
+    def replace_url_line(self, url, block):
+        """The line that still holds only `url` becomes the preview card; the cursor stays where it is."""
+        buffer = self.buffer
+        for number in range(buffer.get_line_count()):
+            start, end, _with_break = self.line_bounds(number)
+            if start.get_child_anchor() is None and buffer.get_text(start, end, False).strip() == url:
+                break
+        else:
+            return False
+        cursor = buffer.create_mark(None, buffer.get_iter_at_mark(buffer.get_insert()), False)
+        buffer.begin_user_action()
+        buffer.delete(start, end)
+        buffer.place_cursor(buffer.get_iter_at_line(number)[1])
+        self.insert_image(None, attachment=block)
+        # insert_image leaves an empty line after the card – it replaces the old one.
+        after = buffer.get_iter_at_line(number + 1)[1]
+        following = after.copy()
+        if following.forward_line() and not buffer.get_text(after, following, False).strip("\n"):
+            buffer.delete(after, following)
+        buffer.end_user_action()
+        buffer.place_cursor(buffer.get_iter_at_mark(cursor))
+        buffer.delete_mark(cursor)
+        self.emit("edited")
+        return True
+
+    def unlink_preview(self, anchor):
+        """Back to the plain address (right click → "Nur als Adresse")."""
+        entry = self.anchors.get(anchor)
+        if not entry or not entry.get("attachment"):
+            return
+        url = entry["attachment"].get("u") or entry["attachment"].get("x") or ""
+        buffer = self.buffer
+        start = buffer.get_iter_at_child_anchor(anchor)
+        end = start.copy()
+        end.forward_char()
+        buffer.begin_user_action()
+        buffer.remove_tag_by_name("image", start, end)
+        del self.anchors[anchor]
+        buffer.delete(start, end)
+        # Inserted as "loading", or the lone address would right away ask for a preview again.
+        self.loading = True
+        buffer.insert(buffer.get_iter_at_offset(start.get_offset()), url)
+        self.loading = False
+        buffer.end_user_action()
+        self.mark_links()
+        self.emit("edited")
+
+    def add_link(self, anchor, block):
+        """A preview card like Apple's: picture, title, domain; a click opens the page."""
+        card = Gtk.Box(spacing=12, css_classes=["file-card", "link-card"])
+        card.set_size_request(360, -1)
+        thumb = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, css_classes=["link-thumb"])
+        thumb.set_size_request(72, 72)
+        icon = Gtk.Image(icon_name="web-browser-symbolic", pixel_size=32, css_classes=["dim-label"])
+        holder = Gtk.Stack(valign=Gtk.Align.CENTER)
+        holder.add_named(icon, "icon")
+        holder.add_named(thumb, "picture")
+        card.append(holder)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True, spacing=2)
+        text.append(Gtk.Label(label=block.get("n") or block.get("dm") or block.get("u", ""), xalign=0, wrap=True, lines=2,
+                              ellipsize=Pango.EllipsizeMode.END, max_width_chars=40, css_classes=["heading"]))
+        if block.get("ds"):
+            text.append(Gtk.Label(label=block["ds"], xalign=0, wrap=True, lines=2, ellipsize=Pango.EllipsizeMode.END,
+                                  max_width_chars=48, css_classes=["caption"]))
+        text.append(Gtk.Label(label=block.get("dm") or linkpreview.domain(block.get("u", "")), xalign=0,
+                              css_classes=["dim-label", "caption"]))
+        card.append(text)
+        url = block.get("u") or block.get("x") or ""
+        click = Gtk.GestureClick()
+        click.connect("released", lambda *_args: Gtk.UriLauncher(uri=url).launch(self.get_root(), None, None))
+        card.add_controller(click)
+        menu = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
+
+        def pressed(gesture, _n, x, y):
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            popover = Gtk.Popover()
+            plain = Gtk.Button(label=_("Nur als Adresse zeigen"), css_classes=["flat"])
+            plain.connect("clicked", lambda _b: (popover.popdown(), GLib.idle_add(lambda: self.unlink_preview(anchor) and False)))
+            popover.set_child(plain)
+            popover.set_parent(card)
+            popover.connect("closed", lambda p: GLib.idle_add(lambda: p.unparent() and False))
+            popover.popup()
+        menu.connect("pressed", pressed)
+        card.add_controller(menu)
+        card.set_cursor_from_name("pointer")
+        card.set_tooltip_text(url)
+        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
+        self.add_child_at_anchor(card, anchor)
+        if self.image_loader and block.get("f"):
+            def load():
+                try:
+                    texture = Gdk.Texture.new_from_filename(str(self.image_loader(block["f"])))
+                except Exception:
+                    return
+                GLib.idle_add(lambda: (thumb.set_paintable(texture), holder.set_visible_child_name("picture")) and False)
+            threading.Thread(target=load, daemon=True).start()
+
     def add_file(self, anchor, block):
         """A file as a card like in Notes: preview (first PDF page) or type icon, name, size."""
+        if block.get("t") == "link":
+            self.add_link(anchor, block)
+            return
         if audio.is_audio(block):
             self.add_recording(anchor, block)
             return
@@ -1235,7 +1609,7 @@ class NoteEditor(Gtk.TextView):
         holder.append(preview)
         card.append(holder)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
-        text.append(Gtk.Label(label=block.get("n") or "Datei", xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=40,
+        text.append(Gtk.Label(label=block.get("n") or _("Datei"), xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=40,
                               css_classes=["heading"]))
         text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
         card.append(text)
@@ -1243,7 +1617,7 @@ class NoteEditor(Gtk.TextView):
         click.connect("released", lambda *_args: self.emit("open-file", dict(block)))
         card.add_controller(click)
         card.set_cursor_from_name("pointer")
-        card.set_tooltip_text("Öffnen")
+        card.set_tooltip_text(_("Öffnen"))
         self.anchors[anchor] = {"attachment": dict(block), "picture": card}
         self.add_child_at_anchor(card, anchor)
         if (block.get("m") == "application/pdf") and self.image_loader and block.get("f"):
@@ -1258,24 +1632,71 @@ class NoteEditor(Gtk.TextView):
             threading.Thread(target=render, daemon=True).start()
 
     def add_recording(self, anchor, block):
-        """An audio recording as a card with a play button; plays inside the note."""
-        card = Gtk.Box(spacing=12, css_classes=["file-card", "audio-card"])
-        card.set_size_request(360, -1)
-        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "suggested-action"],
-                            valign=Gtk.Align.CENTER, tooltip_text="Abspielen")
-        card.append(button)
-        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
-        text.append(Gtk.Label(label="Audioaufnahme", xalign=0, css_classes=["heading"]))
-        text.append(Gtk.Label(label=file_details(block), xalign=0, css_classes=["dim-label", "caption"]))
-        card.append(text)
+        """A recording as a message bubble like a voice message in Apple's Messages (Olaf's choice of
+        five designs, 900036dc): play/pause, the recording's waveform (a click jumps there) and its
+        length. A click anywhere on the bubble plays or pauses – the cursor stays where it is."""
+        title, subtitle = audio.recording_label(block)
+        bubble = Gtk.Box(spacing=10, css_classes=["audio-bubble"], halign=Gtk.Align.START,
+                         tooltip_text=" · ".join(part for part in (title, subtitle) if part))
+        button = Gtk.Button(icon_name="media-playback-start-symbolic", css_classes=["circular", "audio-bubble-play"],
+                            valign=Gtk.Align.CENTER, tooltip_text=_("Abspielen"))
+        bubble.append(button)
+        wave = Gtk.DrawingArea(content_width=audio.BARS * 5, content_height=28, valign=Gtk.Align.CENTER)
+        wave.set_cursor_from_name("pointer")
+        bubble.append(wave)
+        length = float(block.get("d") or 0)
+        time_label = Gtk.Label(label=audio.duration_text(length), css_classes=["audio-bubble-time", "numeric"], width_chars=4, xalign=1)
+        bubble.append(time_label)
+        state = {"timer": None, "fraction": 0.0, "peaks": WAVEFORMS.get(block.get("f")), "pending": None}
+
+        def draw(widget, cr, width, height):
+            color = widget.get_color()
+            peaks = state["peaks"] or [0.08] * audio.BARS
+            step = width / len(peaks)
+            for index, value in enumerate(peaks):
+                played = (index + 0.5) / len(peaks) <= state["fraction"]
+                cr.set_source_rgba(color.red, color.green, color.blue, 1.0 if played else 0.45)
+                bar = max(3.0, value * height)
+                x = index * step + (step - 3) / 2
+                cr.move_to(x + 1.5, (height - bar) / 2 + 1.5)
+                cr.line_to(x + 1.5, (height + bar) / 2 - 1.5)
+                cr.set_line_width(3)
+                cr.set_line_cap(1)
+                cr.stroke()
+        wave.set_draw_func(draw)
+
+        def refresh():
+            if self.player.on_state is not show:
+                return False
+            total = self.player.duration() or length
+            position = self.player.position()
+            state["fraction"] = position / total if total else 0.0
+            time_label.set_label(audio.duration_text(max(0.0, total - position)))
+            wave.queue_draw()
+            return True
 
         def show(playing):
-            button.set_icon_name("media-playback-stop-symbolic" if playing else "media-playback-start-symbolic")
-            button.set_tooltip_text("Stopp" if playing else "Abspielen")
+            loaded = playing in ("playing", "paused")
+            running = playing == "playing"
+            button.set_icon_name("media-playback-pause-symbolic" if running else "media-playback-start-symbolic")
+            button.set_tooltip_text(_("Pause") if running else _("Abspielen"))
+            if running and state["pending"] is not None:
+                # A click on the waveform before playing: jump there once the recording runs.
+                target, state["pending"] = state["pending"], None
+                GLib.timeout_add(150, lambda: (self.player.seek(target * (self.player.duration() or length)), refresh()) and False)
+            if loaded and state["timer"] is None:
+                state["timer"] = GLib.timeout_add(100, lambda: refresh() or state.update(timer=None))
+            if not loaded:
+                if state["timer"] is not None:
+                    GLib.source_remove(state["timer"])
+                    state["timer"] = None
+                state["fraction"] = 0.0
+                time_label.set_label(audio.duration_text(length))
+                wave.queue_draw()
 
-        def toggle(_button):
+        def toggle(*_args):
             if self.player.on_state is show:
-                self.player.stop()
+                self.player.toggle()
                 return
             if not self.image_loader or not block.get("f"):
                 return
@@ -1289,9 +1710,44 @@ class NoteEditor(Gtk.TextView):
                     path = None
                 GLib.idle_add(lambda: (button.set_sensitive(True), path and self.player.play(path, show)) and False)
             threading.Thread(target=fetch, daemon=True).start()
+
+        def seek(gesture, _n, x, _y):
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            fraction = max(0.0, min(1.0, x / max(1, wave.get_width())))
+            if self.player.on_state is show:
+                self.player.seek(fraction * (self.player.duration() or length))
+                if self.player.paused:
+                    self.player.toggle()
+                refresh()
+            else:
+                state["pending"] = fraction
+                toggle()
+
         button.connect("clicked", toggle)
-        self.anchors[anchor] = {"attachment": dict(block), "picture": card}
-        self.add_child_at_anchor(card, anchor)
+        wave_click = Gtk.GestureClick()
+        wave_click.connect("released", seek)
+        wave.add_controller(wave_click)
+        # The whole bubble: a click plays/pauses (button and waveform handle their own clicks).
+        click = Gtk.GestureClick()
+        click.connect("released", lambda gesture, *_args: (gesture.set_state(Gtk.EventSequenceState.CLAIMED), toggle()))
+        bubble.add_controller(click)
+        bubble.set_cursor_from_name("pointer")
+        self.anchors[anchor] = {"attachment": dict(block), "picture": bubble, "player": (toggle, show)}
+        self.add_child_at_anchor(bubble, anchor)
+        if state["peaks"] is None and self.image_loader and block.get("f"):
+            def measure():
+                try:
+                    peaks = audio.waveform(self.image_loader(block["f"]))
+                except Exception as error:
+                    print("LiNotes: Wellenform nicht lesbar:", error)
+                    return
+                WAVEFORMS[block["f"]] = peaks
+
+                def done():
+                    state["peaks"] = peaks
+                    wave.queue_draw()
+                GLib.idle_add(lambda: done() and False)
+            threading.Thread(target=measure, daemon=True).start()
 
     def add_table(self, anchor, block):
         """A table (like Apple's): cells edited in place, saved with the note."""
@@ -1315,7 +1771,128 @@ class NoteEditor(Gtk.TextView):
                 self.on_changed(buffer)
                 return
 
-    def insert_image(self, file_id, divider=False, attachment=None, table=None):
+    # ========================================================
+    # FORMULAS (LaTeX, Profi-Funktion) – set by mathtex.py
+    # ========================================================
+
+    def math_size(self):
+        """Formulas a little larger than the text (follows the text size setting)."""
+        font = self.get_pango_context().get_font_description()
+        size = font.get_size() / Pango.SCALE
+        if not font.get_size_is_absolute():
+            size *= 96 / 72
+        return max(10.0, size * 1.15)
+
+    def add_math(self, anchor, source):
+        """A formula on a line of its own, centered; a click opens its source for editing."""
+        area = Gtk.DrawingArea(css_classes=["math-block"])
+        area.set_cursor_from_name("pointer")
+        area.set_tooltip_text(_("Formel bearbeiten"))
+        entry = {"math": source, "picture": area}
+        self.anchors[anchor] = entry
+        self.show_math(entry)
+        click = Gtk.GestureClick()
+        click.connect("released", lambda *_args: self.edit_math(anchor))
+        area.add_controller(click)
+        self.add_child_at_anchor(area, anchor)
+        return area
+
+    def show_math(self, entry):
+        """Set the formula once (drawing reuses the result, typing elsewhere costs nothing)."""
+        area = entry["picture"]
+        source = entry["math"]
+        if source.strip():
+            formula = mathtex.layout(source, self.math_size(), mathtex.measure)
+        else:
+            formula = mathtex.layout(_("\\text{Formel}"), self.math_size(), mathtex.measure)
+        empty = not source.strip()
+        pad = 6
+        area.set_content_width(max(1, int(formula.width + 2 * pad + 1)))
+        area.set_content_height(max(1, int(formula.height + 2 * pad + 1)))
+
+        def draw(widget, cr, _width, _height):
+            color = widget.get_color()
+            if empty:
+                cr.push_group()
+            mathtex.draw(cr, formula, pad, pad, (color.red, color.green, color.blue))
+            if empty:
+                cr.pop_group_to_source()
+                cr.paint_with_alpha(0.4)
+        area.set_draw_func(draw)
+        area.queue_draw()
+
+    def refresh_math(self):
+        for entry in self.anchors.values():
+            if "math" in entry:
+                self.show_math(entry)
+
+    def math_entry(self, anchor):
+        return self.anchors.get(anchor) if anchor in self.anchors and "math" in self.anchors[anchor] else None
+
+    def set_math(self, anchor, source):
+        entry = self.math_entry(anchor)
+        if entry is None or entry["math"] == source:
+            return
+        entry["math"] = source
+        self.show_math(entry)
+        self.on_changed(self.buffer)
+
+    def edit_math(self, anchor):
+        """Source on the left side of a popover, the set formula live below it."""
+        entry = self.math_entry(anchor)
+        if entry is None:
+            return
+        popover = Gtk.Popover(position=Gtk.PositionType.BOTTOM)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(6)
+        box.append(Gtk.Label(label=_("Formel (LaTeX)"), xalign=0, css_classes=["heading"]))
+        source = Gtk.TextView(monospace=True, wrap_mode=Gtk.WrapMode.CHAR, top_margin=6, bottom_margin=6,
+                              left_margin=6, right_margin=6, accepts_tab=False, css_classes=["card"])
+        source.get_buffer().set_text(entry["math"])
+        scroller = Gtk.ScrolledWindow(child=source, min_content_height=70, max_content_height=200, propagate_natural_height=True)
+        scroller.set_size_request(440, -1)
+        box.append(scroller)
+        hint = Gtk.Label(label=_("z. B.  \\frac{a}{b}   x^2   \\sqrt{x}   \\alpha   \\sum_{i=1}^{n}"),
+                         xalign=0, css_classes=["dim-label", "caption"])
+        box.append(hint)
+        problem = Gtk.Label(label=_("Rot markierte Teile kennt LiNotes nicht."), xalign=0, css_classes=["error", "caption"], visible=False)
+        box.append(problem)
+        buttons = Gtk.Box(spacing=8)
+        remove = Gtk.Button(label=_("Löschen"), css_classes=["destructive-action"])
+        buttons.append(remove)
+        buttons.append(Gtk.Box(hexpand=True))
+        done = Gtk.Button(label=_("Fertig"), css_classes=["suggested-action"])
+        buttons.append(done)
+        box.append(buttons)
+        popover.set_child(box)
+
+        def changed(buffer):
+            text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+            self.set_math(anchor, text)
+            problem.set_visible(bool(text.strip()) and mathtex.layout(text, 12, mathtex.measure).error)
+        source.get_buffer().connect("changed", changed)
+        done.connect("clicked", lambda _b: popover.popdown())
+        remove.connect("clicked", lambda _b: (popover.popdown(), GLib.idle_add(lambda: self.delete_anchor_line(anchor) and False)))
+        keys = Gtk.EventControllerKey()
+
+        def key(_controller, keyval, _code, state):
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and state & Gdk.ModifierType.CONTROL_MASK:
+                popover.popdown()
+                return True
+            return False
+        keys.connect("key-pressed", key)
+        source.add_controller(keys)
+        popover.set_parent(entry["picture"])
+        popover.connect("closed", lambda p: GLib.idle_add(lambda: p.unparent() and False))
+        popover.popup()
+        source.grab_focus()
+
+    def insert_math(self, source=""):
+        """Format → Formel: a new formula line, its editor open right away."""
+        self.insert_image(None, math=source)
+
+    def insert_image(self, file_id, divider=False, attachment=None, table=None, math=None):
         buffer = self.buffer
         cursor = buffer.get_iter_at_mark(buffer.get_insert())
         if not cursor.starts_line():
@@ -1331,6 +1908,8 @@ class NoteEditor(Gtk.TextView):
             self.add_divider(anchor)
         elif table is not None:
             widget = self.add_table(anchor, table)
+        elif math is not None:
+            self.add_math(anchor, math)
         elif attachment:
             self.add_file(anchor, attachment)
         else:
@@ -1342,13 +1921,17 @@ class NoteEditor(Gtk.TextView):
         self.set_line_style(line, "body", 0, checked=False)
         start, _end, with_break = self.line_bounds(line)
         buffer.apply_tag_by_name("image", start, with_break)
-        if divider or attachment or table is not None:
+        if math is not None:
+            self.set_alignment("center", [line])
+        if divider or attachment or table is not None or math is not None:
             # Typing goes on below the line.
             self.set_line_style(line + 1, "body", 0, checked=False)
             buffer.place_cursor(buffer.get_iter_at_line(line + 1)[1])
         self.on_changed(buffer)
         if table is not None:
             GLib.idle_add(lambda: widget.cells[0][0].grab_focus() and False)
+        if math is not None:
+            GLib.idle_add(lambda: self.edit_math(anchor) and False)
 
 
 def file_details(block):
@@ -1359,7 +1942,7 @@ def file_details(block):
     elif size >= 1024:
         amount = f"{round(size / 1024)} KB"
     else:
-        amount = f"{size} Bytes"
+        amount = _("{size} Bytes", size=size)
     if audio.is_audio(block) and block.get("d"):
         return f"{audio.duration_text(block['d'])} · {amount}"
     kind = Gio.content_type_get_description(Gio.content_type_from_mime_type(block.get("m") or "") or "application/octet-stream")

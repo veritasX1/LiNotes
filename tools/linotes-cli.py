@@ -14,6 +14,7 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py card <karte>              # Details
     linotes-cli.py move <karte> <spalte>
     linotes-cli.py comment <karte> <text>    # hängt Text an die Notizen an
+    linotes-cli.py rename <karte> <titel>     # Titel einer Karte ändern
     linotes-cli.py priority <karte> <hoch|mittel|niedrig|keine>
     linotes-cli.py export <board> <datei.pdf|datei.csv>
     linotes-cli.py trace-commits <board> [repo]   # Commits mit [karten-id] an die Karten hängen
@@ -21,9 +22,19 @@ statt im GNOME-Schlüsselbund.
     linotes-cli.py field <karte> <impact|verification|version> <text>   # Feld eines Entwicklungsprojekts setzen
     linotes-cli.py dump <board> [datei.json]     # alle Karten mit Spalte, Notizen, Feldern, Commits
     linotes-cli.py evidence <karte> <datei> […]  # Nachweise (Prüfprotokolle, Screenshots) mit SHA-256 anhängen
+    linotes-cli.py evidence-remove <karte> <name> […]  # Nachweise mit diesem Dateinamen von der Karte nehmen
+    linotes-cli.py rename-board <board> <neuer name>
+    linotes-cli.py share-board <board> <person …>  # Personen zu einem eigenen Board hinzufügen
+    linotes-cli.py new-board <name> [person …]   # neues Board (Entwicklungsprojekt), geteilt mit den Personen
+    linotes-cli.py dev-board <board>             # Board als Entwicklungsprojekt (Felder, Commits, Nachweise)
+    linotes-cli.py new-folder <name> [person …]  # Ordner oben, geteilt – alles darin ist mitgeteilt
+    linotes-cli.py note <ordner> <datei.md>      # Notiz aus einfachem Markdown (gleicher Titel = aktualisieren)
+    linotes-cli.py plan <ordner> <name> <datei.json>  # Zeitstrahl-Plan (gleicher Name = aktualisieren)
+    linotes-cli.py folder-board <ordner> <name>  # Entwicklungsprojekt-Board im Ordner
 """
 
 import json
+import re
 import os
 import sys
 import time
@@ -209,6 +220,47 @@ def cmd_boards():
         print(f"{b['id'][:8]}  {b['data'].get('name', 'Board'):<30} von {owner}  ({b['space']})")
 
 
+def cmd_rename_board(ref, name):
+    eng = engine()
+    board = find(eng, "board", ref)
+    old = board["data"].get("name")
+    eng.update(board["id"], notify=False, name=name.strip())
+    flush(eng)
+    print(f"Board „{old}“ → „{name.strip()}“")
+
+
+def cmd_new_board(name, *people):
+    """A new board with the usual columns, shared with these people (e.g. Olaf), as a development project."""
+    eng = engine()
+    board = eng.put("board", {"name": name.strip(), "order": time.time(), "dev": True})
+    for order, (_key, column) in enumerate(model.DEFAULT_COLUMNS):
+        eng.put("column", {"board": board["id"], "name": column, "order": order}, notify=False)
+    if people:
+        eng.set_sharing(board["id"], [person(eng, ref)["id"] for ref in people])
+    flush(eng)
+    print(f"Board „{name.strip()}“ angelegt [{board['id'][:8]}], geteilt mit: {', '.join(people) or 'niemandem'}")
+
+
+def cmd_share_board(ref, *people):
+    """Add people to a board's sharing (the ones already in it stay); the key is renewed for the new circle."""
+    eng = engine()
+    board = find(eng, "board", ref)
+    current = [uid for uid in eng.share_members(board.get("share")) if uid != eng.user_id] if board.get("share") else []
+    added = [person(eng, name)["id"] for name in people]
+    eng.set_sharing(board["id"], sorted(set(current) | set(added)))
+    flush(eng)
+    names = [u["name"] for u in eng.users() if u["id"] in set(current) | set(added)]
+    print(f"Board „{board['data'].get('name')}“ geteilt mit: {', '.join(names)}")
+
+
+def cmd_dev_board(ref):
+    eng = engine()
+    board = find(eng, "board", ref)
+    eng.update(board["id"], notify=False, dev=True)
+    flush(eng)
+    print(f"Board „{board['data'].get('name')}“ ist jetzt ein Entwicklungsprojekt")
+
+
 def cmd_board(ref):
     eng = engine()
     board = find(eng, "board", ref)
@@ -304,10 +356,18 @@ def cmd_comment(card_ref, text):
     card = find(eng, "card", card_ref)
     notes = card["data"].get("notes", "")
     stamp = time.strftime("%d.%m. %H:%M")
-    notes = (notes.rstrip() + "\n\n" if notes.strip() else "") + f"[Claude {stamp}] {text}"
+    notes = (notes.rstrip() + "\n\n" if notes.strip() else "") + f"[{eng.user.get('name') or PROFILE} {stamp}] {text}"
     eng.update(card["id"], notify=False, notes=notes)
     flush(eng)
     print("ok")
+
+
+def cmd_rename(card_ref, title):
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    eng.update(card["id"], notify=False, title=title)
+    flush(eng)
+    print(f"„{title}“")
 
 
 def cmd_add(board_ref, column_ref, title, notes=""):
@@ -316,11 +376,11 @@ def cmd_add(board_ref, column_ref, title, notes=""):
     col = find(eng, "column", column_ref, board=board["id"])
     others = cards(eng, col["id"])
     order = (others[-1]["data"].get("order", 0) + 1) if others else 1
-    eng.put("card", {"board": board["id"], "column": col["id"], "title": title,
-                     "notes": notes, "order": order, **model.new_card_fields(eng, col["id"])},
-            board.get("share"), notify=False)
+    obj = eng.put("card", {"board": board["id"], "column": col["id"], "title": title,
+                           "notes": notes, "order": order, **model.new_card_fields(eng, col["id"])},
+                  board.get("share"), notify=False)
     flush(eng)
-    print("ok")
+    print("ok", obj["id"][:8])
 
 
 DEV_FIELDS = ("impact", "verification", "version")
@@ -376,6 +436,151 @@ def cmd_evidence(card_ref, *paths):
     eng.update(card["id"], notify=False, evidence=items)
     flush(eng)
     print(f"„{card['data'].get('title')}“: {len(paths)} Nachweis(e) angehängt, insgesamt {len(items)}")
+
+
+def cmd_evidence_remove(card_ref, *names):
+    """Take verification records off a card by file name (as the app's "Entfernen": the card no longer refers to them)."""
+    if not names:
+        sys.exit("Mindestens einen Dateinamen angeben")
+    eng = engine()
+    card = find(eng, "card", card_ref)
+    items = list(card["data"].get("evidence") or [])
+    kept = [item for item in items if item.get("n") not in names]
+    missing = set(names) - {item.get("n") for item in items}
+    if missing:
+        sys.exit("Nicht an der Karte: " + ", ".join(sorted(missing)))
+    eng.update(card["id"], notify=False, evidence=kept)
+    flush(eng)
+    print(f"„{card['data'].get('title')}“: {len(items) - len(kept)} Nachweis(e) entfernt, noch {len(kept)}")
+
+
+def cmd_new_folder(name, *people):
+    """A folder at the top level, shared with these people – everything created inside is shared too."""
+    eng = engine()
+    folder = eng.put("folder", {"name": name.strip(), "order": time.time()})
+    if people:
+        eng.set_sharing(folder["id"], [person(eng, ref)["id"] for ref in people])
+    flush(eng)
+    print(f"Ordner „{name.strip()}“ angelegt [{folder['id'][:8]}], geteilt mit: {', '.join(people) or 'niemandem'}")
+
+
+INLINE_MD = re.compile(r"\*\*(.+?)\*\*")
+
+
+def markdown_blocks(text):
+    """Simple Markdown → note blocks: # title, ## heading, ### subheading, - bullet, 1. number,
+    - [ ] / - [x] check, > quote, | table |, ``` mono, **bold**; everything else is body text."""
+    blocks, table, mono = [], [], None
+
+    def line_block(kind, raw, **extra):
+        spans, plain, pos = [], "", 0
+        for match in INLINE_MD.finditer(raw):
+            plain += raw[pos:match.start()]
+            spans.append([len(plain), len(plain) + len(match.group(1)), "b"])
+            plain += match.group(1)
+            pos = match.end()
+        plain += raw[pos:]
+        block = {"t": kind, "x": plain, **extra}
+        if spans:
+            block["s"] = spans
+        blocks.append(block)
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if mono is not None:
+            if line.startswith("```"):
+                mono = None
+            else:
+                blocks.append({"t": "mono", "x": line})
+            continue
+        if line.startswith("|"):
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if not all(re.fullmatch(r":?-{2,}:?", cell) for cell in cells):
+                table.append(cells)
+            continue
+        if table:
+            blocks.append(model.table_block(table))
+            table = []
+        level = (len(raw) - len(raw.lstrip(" "))) // 2
+        stripped = line.strip()
+        lv = {"l": level} if level else {}
+        if line.startswith("```"):
+            mono = True
+        elif not stripped:
+            if blocks and blocks[-1].get("x"):
+                blocks.append({"t": "body", "x": ""})
+        elif line.startswith("# "):
+            line_block("title", line[2:])
+        elif line.startswith("## "):
+            line_block("heading", line[3:])
+        elif line.startswith("### "):
+            line_block("subheading", line[4:])
+        elif re.match(r"- \[[ xX]\] ", stripped):
+            line_block("check", stripped[6:], c=stripped[3] in "xX", **lv)
+        elif stripped.startswith("- "):
+            line_block("bullet", stripped[2:], **lv)
+        elif re.match(r"\d+\. ", stripped):
+            line_block("number", stripped.split(" ", 1)[1], **lv)
+        elif stripped.startswith("> "):
+            line_block("quote", stripped[2:])
+        else:
+            line_block("body", stripped)
+    if table:
+        blocks.append(model.table_block(table))
+    while len(blocks) > 1 and blocks[-1]["t"] == "body" and not blocks[-1]["x"]:
+        blocks.pop()
+    return blocks
+
+
+def cmd_note(folder_ref, path):
+    """A note from a Markdown file in this folder (shared like the folder). Same first line = update."""
+    eng = engine()
+    folder = find(eng, "folder", folder_ref)
+    blocks = markdown_blocks(Path(path).read_text())
+    title = model.blocks_title(blocks)
+    existing = [n for n in eng.objects("note") if n["data"].get("folder") == folder["id"]
+                and model.blocks_title(model.note_blocks(n)) == title]
+    now = time.time()
+    if existing:
+        eng.update(existing[0]["id"], body=blocks, modified=now)
+        note_id, verb = existing[0]["id"], "aktualisiert"
+    else:
+        note = eng.put("note", {"folder": folder["id"], "body": blocks, "created": now, "modified": now},
+                       folder.get("share"))
+        note_id, verb = note["id"], "angelegt"
+    flush(eng)
+    print(f"Notiz „{title}“ {verb} [{note_id[:8]}] in „{folder['data'].get('name')}“ ({len(blocks)} Zeilen)")
+
+
+def cmd_plan(folder_ref, name, path):
+    """A timeline plan in this folder from JSON: [{"x": task, "from": "YYYY-MM-DD", "to": …, "k": color, "m": milestone}].
+    Same name = update."""
+    eng = engine()
+    folder = find(eng, "folder", folder_ref)
+    tasks = json.loads(Path(path).read_text())
+    existing = [p for p in eng.objects("plan") if p["data"].get("folder") == folder["id"] and p["data"].get("name") == name]
+    if existing:
+        eng.update(existing[0]["id"], tasks=tasks, mode="timeline")
+        plan_id, verb = existing[0]["id"], "aktualisiert"
+    else:
+        plan = eng.put("plan", {"mode": "timeline", "tasks": tasks, "name": name, "order": time.time(),
+                                "folder": folder["id"]}, folder.get("share"))
+        plan_id, verb = plan["id"], "angelegt"
+    flush(eng)
+    print(f"Plan „{name}“ {verb} [{plan_id[:8]}] mit {len(tasks)} Einträgen")
+
+
+def cmd_folder_board(folder_ref, name):
+    """A development-project board inside this folder (shared like the folder)."""
+    eng = engine()
+    folder = find(eng, "folder", folder_ref)
+    share = folder.get("share")
+    board = eng.put("board", {"name": name.strip(), "order": time.time(), "dev": True, "folder": folder["id"]}, share)
+    # Like the other app boards: only Olaf moves cards from Testing to Erledigt.
+    for order, column in enumerate(("Offen", "In Arbeit", "Testing", "Erledigt")):
+        eng.put("column", {"board": board["id"], "name": column, "order": order}, share, notify=False)
+    flush(eng)
+    print(f"Board „{name.strip()}“ angelegt [{board['id'][:8]}] in „{folder['data'].get('name')}“")
 
 
 def main():

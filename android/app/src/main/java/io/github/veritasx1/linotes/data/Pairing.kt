@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import org.json.JSONObject
 import java.security.MessageDigest
 
@@ -22,7 +24,7 @@ object Pairing {
 
     fun parseQr(text: String): Scanned {
         val parts = text.trim().split("|")
-        if (parts.size != 4 || parts[0] != "LINOTES" || parts[1] !in setOf("link", "verify")) throw PairingError("Kein LiNotes-Code")
+        if (parts.size != 4 || parts[0] != "LINOTES" || parts[1] !in setOf("link", "verify")) throw PairingError(tr("Kein LiNotes-Code"))
         return Scanned(parts[1], parts[2], parts[3])
     }
 
@@ -34,7 +36,7 @@ object Pairing {
             val messages = try {
                 api.relayGet(channel, last, wait)
             } catch (error: ApiException) {
-                if (error.status == 404) throw PairingError("Der Vorgang wurde abgebrochen oder ist abgelaufen.")
+                if (error.status == 404) throw PairingError(tr("Der Vorgang wurde abgebrochen oder ist abgelaufen."))
                 throw error
             }
             for (index in 0 until messages.length()) {
@@ -43,7 +45,7 @@ object Pairing {
                 last = message.getInt("seq")
             }
         }
-        throw PairingError("Zeitüberschreitung")
+        throw PairingError(tr("Zeitüberschreitung"))
     }
 
     private fun payloadKey(ke: ByteArray) = E2E.hkdf(ke, "linotes v2 pairing payload")
@@ -70,7 +72,7 @@ object Pairing {
             val result = spake.finish(E2E.hex(reply.getString("p")))
             if (!equal(reply.optString("c"), E2E.toHex(result.expected))) {
                 close()
-                throw PairingError("Der Code war falsch. Bitte neu versuchen.")
+                throw PairingError(tr("Der Code war falsch. Bitte neu versuchen."))
             }
             val content = E2E.open(payloadKey(result.ke), reply.getJSONObject("k"), "link")
             api.relayPost(channel, "A", JSONObject().put("ok", true).put("c", E2E.toHex(result.confirmation)).toString())
@@ -92,14 +94,14 @@ object Pairing {
         val done = try {
             JSONObject(waitMessage(api, channel, first.getInt("seq"), "A", 40).getString("body"))
         } catch (error: PairingError) {
-            throw PairingError("Das neue Gerät hat nicht bestätigt – war der Code richtig?")
+            throw PairingError(tr("Das neue Gerät hat nicht bestätigt – war der Code richtig?"))
         }
-        if (!equal(done.optString("c"), E2E.toHex(result.expected))) throw PairingError("Der Code war falsch.")
+        if (!equal(done.optString("c"), E2E.toHex(result.expected))) throw PairingError(tr("Der Code war falsch."))
     }
 
     // --- verifying a person ---------------------------------------------
 
-    private fun peerPublic(users: List<User>, id: Int) = users.firstOrNull { it.id == id }?.identity ?: throw PairingError("Unbekanntes Konto")
+    private fun peerPublic(users: List<User>, id: Int) = users.firstOrNull { it.id == id }?.identity ?: throw PairingError(tr("Unbekannter Account"))
 
     /** Shows the code (role A). */
     class VerifyShow(private val api: Api, private val otherId: Int) {
@@ -115,9 +117,9 @@ object Pairing {
         fun await(myPublic: String, users: List<User>, cancelled: () -> Boolean): String {
             val reply = JSONObject(waitMessage(api, channel, 1, "B", 9 * 60, cancelled).getString("body"))
             val result = spake.finish(E2E.hex(reply.getString("p")))
-            if (!equal(reply.optString("c"), E2E.toHex(result.expected))) throw PairingError("Der eingegebene Code war falsch.")
+            if (!equal(reply.optString("c"), E2E.toHex(result.expected))) throw PairingError(tr("Der eingegebene Code war falsch."))
             val peer = peerPublic(users, otherId)
-            if (!equal(reply.optString("m"), mac(result.ke, VERIFY_B, peer))) throw PairingError("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!")
+            if (!equal(reply.optString("m"), mac(result.ke, VERIFY_B, peer))) throw PairingError(tr("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
             api.relayPost(channel, "A", JSONObject().put("c", E2E.toHex(result.confirmation)).put("m", mac(result.ke, VERIFY_A, myPublic)).toString())
             return E2E.fingerprint(peer)
         }
@@ -131,9 +133,9 @@ object Pairing {
         api.relayPost(channel, "B", JSONObject().put("p", E2E.toHex(spake.message)).put("c", E2E.toHex(result.confirmation))
             .put("m", mac(result.ke, VERIFY_B, myPublic)).toString())
         val done = JSONObject(waitMessage(api, channel, first.getInt("seq"), "A", 60).getString("body"))
-        if (!equal(done.optString("c"), E2E.toHex(result.expected))) throw PairingError("Der Code war falsch.")
+        if (!equal(done.optString("c"), E2E.toHex(result.expected))) throw PairingError(tr("Der Code war falsch."))
         val peer = peerPublic(users, otherId)
-        if (!equal(done.optString("m"), mac(result.ke, VERIFY_A, peer))) throw PairingError("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!")
+        if (!equal(done.optString("m"), mac(result.ke, VERIFY_A, peer))) throw PairingError(tr("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
         return E2E.fingerprint(peer)
     }
 

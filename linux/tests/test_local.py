@@ -50,7 +50,7 @@ def test_local_then_connect():
     assert note["id"] in ids and not any(f"-{S.LOCAL_USER}" in i.replace(f"-{uid}", "") for i in ids)
     again.stop()
     S.clear_credentials(again.server, response["user"]["username"])
-    print("ohne Server → Konto: OK")
+    print("ohne Server → Account: OK")
 
 
 if __name__ == "__main__":

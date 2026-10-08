@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.veritasx1.linotes.data.Keep
+import io.github.veritasx1.linotes.data.LinkPreview
 import io.github.veritasx1.linotes.data.Model
 import io.github.veritasx1.linotes.data.SyncObject
 import io.github.veritasx1.linotes.data.Vault
@@ -81,9 +84,16 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     var keepChoice by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    var linkMenu by remember { mutableStateOf<JSONObject?>(null) }
+    // Footnotes (Profi-Funktion): the list under the note, tapping a number, adding one.
+    var footnotes by remember(noteId) { mutableStateOf<List<String>>(emptyList()) }
+    var footnoteMenu by remember { mutableStateOf<FootnoteSpan?>(null) }
+    var footnoteEdit by remember { mutableStateOf<FootnoteSpan?>(null) }
+    var footnoteNew by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     // The table being edited (its block as it is in the note).
     var tableEditing by remember { mutableStateOf<JSONObject?>(null) }
+    var mathEditing by remember { mutableStateOf<JSONObject?>(null) }
     val player = remember(noteId) { AudioPlayer() }
     DisposableEffect(noteId) { onDispose { player.stop() } }
     // Text typed after ">>" while the note choice is shown (null: no choice open).
@@ -120,7 +130,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         return
     }
     val folder = sync.get(note.data.optString("folder"))
-    val backLabel = folder?.data?.optString("name") ?: "Notizen"
+    val backLabel = folder?.data?.optString("name") ?: tr("Notizen")
     val locked = note.data.has("enc")
     val trashed = note.data.has("trashed")
 
@@ -134,9 +144,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 val bitmap: Bitmap? = withContext(Dispatchers.IO) {
                     try {
                         val bytes = sync.fetchFile(fileId, sync.get(noteId)?.share).readBytes()
-                        RichEditor.decodeImage(bytes).also { if (it == null) android.util.Log.w("LiNotes", "Bild nicht lesbar: $fileId (${bytes.size} Bytes)") }
+                        RichEditor.decodeImage(bytes).also { if (it == null) android.util.Log.w("LiNotes", tr("Bild nicht lesbar: {fileId} ({size} Bytes)", "fileId" to fileId, "size" to bytes.size)) }
                     } catch (error: Exception) {
-                        android.util.Log.w("LiNotes", "Bild nicht geladen: $fileId", error)
+                        android.util.Log.w("LiNotes", tr("Bild nicht geladen: {fileId}", "fileId" to fileId), error)
                         null
                     }
                 }
@@ -154,6 +164,18 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             textLocale = java.util.Locale.getDefault()
             hyphenationFrequency = if (sync.hyphenate) android.text.Layout.HYPHENATION_FREQUENCY_FULL else android.text.Layout.HYPHENATION_FREQUENCY_NONE
             breakStrategy = if (sync.justify || sync.hyphenate) android.text.Layout.BREAK_STRATEGY_HIGH_QUALITY else android.text.Layout.BREAK_STRATEGY_SIMPLE
+        }
+    }
+    // The playing recording's card follows the player (position, pause) and goes back when it stops.
+    var shownAudio by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(player.playing) {
+        shownAudio?.let { if (it != player.playing) editor.showAudio(it, null) }
+        shownAudio = player.playing
+        val id = player.playing ?: return@LaunchedEffect
+        while (player.playing == id) {
+            player.update()
+            editor.showAudio(id, RichEditor.AudioView(!player.paused, player.position, player.length))
+            delay(250)
         }
     }
     val loadedBlocks = remember(noteId) { mutableStateOf<String?>(null) }
@@ -219,7 +241,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                 }
                 if (changes != null) {
                     editor.markChanged(changes)
-                    activityNote = "${sync.userName(current.updatedBy)} hat geändert · ${Model.shortDate(Model.modified(current))} – die Änderungen sind markiert."
+                    activityNote = tr("{person} hat geändert · {shortDate} – die Änderungen sind markiert.", "person" to (sync.userName(current.updatedBy)), "shortDate" to (Model.shortDate(Model.modified(current))))
                 }
                 sync.rememberSeen(current, body)
             }
@@ -255,10 +277,79 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onLinkRequested = { linkQuery = editor.pendingLinkQuery() ?: "" }
         // Attachments: decrypt under their own name and open with the app for the type.
+        // A web address alone on a line → preview card, only if switched on (Settings → Link-Vorschau)
+        // and never in locked notes. Only this phone fetches the page; picture and card are stored
+        // encrypted in the note. Fails quietly: the address simply stays a link.
+        editor.onLinkLine = { url ->
+            val current = sync.get(noteId)
+            if (sync.linkPreviews && current != null && !current.data.has("enc") && !trashed) sync.launch {
+                try {
+                    val found = LinkPreview.fetch(url)
+                    val reference = found.picture?.let { sync.uploadFile(it, current.share) }
+                    val block = LinkPreview.block(url, found, reference)
+                    withContext(Dispatchers.Main) { if (editor.isAttachedToWindow) editor.replaceUrlLine(url, block) }
+                } catch (error: Exception) {
+                    android.util.Log.i("LiNotes", tr("keine Link-Vorschau: {error}", "error" to error))
+                }
+            }
+        }
+        editor.onFootnotesChanged = { footnotes = it }
+        editor.onFootnote = { footnoteMenu = it }
+        // Recordings play in their message bubble (900036dc): play/pause, a tap on the waveform jumps there.
+        editor.onAudio = { block, action, fraction ->
+            val fileId = block.optString("f")
+            if (player.playing == fileId) {
+                if (action == "seek") {
+                    player.seek((player.length * fraction).toLong())
+                    if (player.paused) player.toggle()
+                } else player.toggle()
+            } else scope.launch {
+                try {
+                    val file = withContext(Dispatchers.IO) { sync.fetchFile(fileId, sync.get(noteId)?.share) }
+                    player.play(fileId, file)
+                    if (action == "seek") player.seek((player.length * fraction).toLong())
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
+        editor.loadWaveform = { fileId, done ->
+            scope.launch {
+                val peaks = withContext(Dispatchers.IO) {
+                    runCatching { AudioNotes.waveform(sync.fetchFile(fileId, sync.get(noteId)?.share)) }
+                        .onFailure { android.util.Log.i("LiNotes", tr("keine Wellenform: {it}", "it" to it)) }.getOrNull()
+                }
+                done(peaks)
+            }
+        }
+        // A tapped picture opens in the quick look (900036dc).
+        editor.onOpenImage = { fileId ->
+            scope.launch {
+                try {
+                    val look = withContext(Dispatchers.IO) {
+                        val source = sync.fetchFile(fileId, sync.get(noteId)?.share)
+                        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        android.graphics.BitmapFactory.decodeFile(source.absolutePath, bounds)
+                        val mime = bounds.outMimeType ?: "image/jpeg"
+                        val folder = java.io.File(context.cacheDir, "attachments/" + fileId.substringAfter(":").take(12)).apply { mkdirs() }
+                        val target = java.io.File(folder, tr("Bild.") + (android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"))
+                        source.copyTo(target, overwrite = true)
+                        LookFile(target, mime)
+                    }
+                    state.quickLook = look
+                } catch (error: Exception) {
+                    state.showToast(errorText(error))
+                }
+            }
+        }
         editor.onOpenFile = { block ->
             // Recordings play inside the note (like Apple), other files open in their app.
-            if (block.optString("t") == "table") {
+            if (block.optString("t") == "link") {
+                linkMenu = block
+            } else if (block.optString("t") == "table") {
                 if (!trashed) tableEditing = block
+            } else if (block.optString("t") == "math") {
+                if (!trashed) mathEditing = block
             } else if (AudioNotes.isAudio(block)) {
                 val fileId = block.getString("f")
                 if (player.playing == fileId) player.stop()
@@ -275,9 +366,9 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                     val file = withContext(Dispatchers.IO) {
                         val source = sync.fetchFile(block.getString("f"), sync.get(noteId)?.share)
                         val folder = java.io.File(context.cacheDir, "attachments/" + block.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
-                        java.io.File(folder, java.io.File(block.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
+                        java.io.File(folder, java.io.File(block.optString("n", tr("Datei"))).name).also { source.copyTo(it, overwrite = true) }
                     }
-                    state.openFile(file, block.optString("m", "application/octet-stream"))
+                    state.quickLook = LookFile(file, block.optString("m", "application/octet-stream"))
                 } catch (error: Exception) {
                     state.showToast(errorText(error))
                 }
@@ -298,7 +389,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                             }
                         }
                     } catch (error: Exception) {
-                        android.util.Log.w("LiNotes", "PDF-Vorschau nicht möglich", error)
+                        android.util.Log.w("LiNotes", tr("PDF-Vorschau nicht möglich"), error)
                         null
                     }
                 })
@@ -306,7 +397,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         editor.onOpenNote = { id ->
             val target = sync.get(id)
-            if (target == null || target.data.has("trashed")) state.toastLater("Die verlinkte Notiz gibt es nicht mehr.")
+            if (target == null || target.data.has("trashed")) state.toastLater(tr("Die verlinkte Notiz gibt es nicht mehr."))
             else { save(); state.push(Route.Editor(id)) }
         }
         onDispose {
@@ -330,26 +421,26 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         NavBar(
             title = "", backLabel = backLabel, onBack = { save(); state.pop() }, background = colors.plain,
             actions = {
-                if (!trashed && !locked) BarButton(Glyph.Share, "Teilen") { save(); state.push(Route.Share(note.id)) }
+                if (!trashed && !locked) BarButton(Glyph.Share, tr("Teilen")) { save(); state.push(Route.Share(note.id)) }
                 // Like Apple: the open lock in an unlocked note locks it again right away.
-                if (locked && state.vaultKey != null) BarButton(Glyph.LockOpen, "Jetzt sperren") { state.lockAll() }
-                BarButton(Glyph.More, "Mehr") { save(); showMenu = true }
+                if (locked && state.vaultKey != null) BarButton(Glyph.LockOpen, tr("Jetzt sperren")) { state.lockAll() }
+                BarButton(Glyph.More, tr("Mehr")) { save(); showMenu = true }
             },
         )
         if (trashed) {
             Row(Modifier.fillMaxWidth().background(colors.fill).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Diese Notiz liegt in „Zuletzt gelöscht“.", style = Type.footnote, color = colors.label, modifier = Modifier.weight(1f))
-                TextButton("Wiederherstellen") { restoreNote(state, note) }
+                Text(tr("Diese Notiz liegt in „Zuletzt gelöscht“."), style = Type.footnote, color = colors.label, modifier = Modifier.weight(1f))
+                TextButton(tr("Wiederherstellen")) { restoreNote(state, note) }
             }
         }
         if (note.evicted) {
             Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 GlyphIcon(if (loadFailed) Glyph.CloudOff else Glyph.Cloud, colors.secondary, 56.dp)
                 Spacer(Modifier.height(16.dp))
-                Text(if (loadFailed) "Die Notiz liegt nur auf dem Server" else "Wird vom Server geladen …", style = Type.title3, color = colors.label)
+                Text(if (loadFailed) tr("Die Notiz liegt nur auf dem Server") else tr("Wird vom Server geladen …"), style = Type.title3, color = colors.label)
                 if (loadFailed) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Sie kann geöffnet werden, sobald eine Verbindung besteht.", style = Type.subheadline, color = colors.secondary)
+                    Text(tr("Sie kann geöffnet werden, sobald eine Verbindung besteht."), style = Type.subheadline, color = colors.secondary)
                 }
             }
             return@Column
@@ -380,6 +471,12 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
         }
         val imeBottom = WindowInsets.ime.getBottom(density)
         LaunchedEffect(imeBottom) { if (imeBottom > 0) { kotlinx.coroutines.delay(50); keepCaretVisible() } }
+        // The format panel takes room below the text: keep the selection above it, without the
+        // system's selection menu on top of the panel's buttons.
+        LaunchedEffect(showFormat) {
+            editor.selectionMenuSuppressed = showFormat
+            if (showFormat) { kotlinx.coroutines.delay(80); keepCaretVisible() }
+        }
         Column(Modifier.weight(1f).imePadding()) {
             Column(Modifier.weight(1f).onSizeChanged { viewportHeight = it.height }.verticalScroll(scrollState)) {
                 Text(Model.longDate(Model.modified(note)), style = Type.footnote, color = colors.secondary,
@@ -391,33 +488,34 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
                             .padding(horizontal = 10.dp, vertical = 6.dp))
                 }
                 AndroidView({ editor }, Modifier.fillMaxWidth().onGloballyPositioned { editorTop = it.positionInParent().y })
+                if (footnotes.isNotEmpty()) FootnoteList(footnotes)
             }
-            PlayerBar(player)
             linkQuery?.let { query ->
                 val mention = editor.linkKind == "mention"
                 val choices = if (mention) editor.mentionPeople().filter { it.second.contains(query, ignoreCase = true) }
                     .map { (id, name) -> Triple(id.toString(), name, "@$name") }
                 else Model.linkChoices(sync.all("note"), noteId, query).map { Triple(it.id, Model.title(it), Model.title(it)) }
-                LinkPanel(if (mention) "Person erwähnen" else "Mit Notiz verlinken", if (mention) Glyph.Person else Glyph.Notes,
-                    if (mention) "Keine passende Person" else "Keine passende Notiz", choices, onPick = { (id, title, _) ->
+                LinkPanel(if (mention) tr("Person erwähnen") else tr("Mit Notiz verlinken"), if (mention) Glyph.Person else Glyph.Notes,
+                    if (mention) tr("Keine passende Person") else tr("Keine passende Notiz"), choices, onPick = { (id, title, _) ->
                     linkQuery = null
                     editor.finishLink(id, title)
                 }) { linkQuery = null; editor.finishLink(null, null) }
             }
-            if (showFormat) FormatPanel(editor, styleTick) { showFormat = false }
+            if (showFormat) FormatPanel(editor, styleTick, pro = sync.proFeatures, onFootnote = { showFormat = false; footnoteNew = true },
+                onMath = { showFormat = false; JSONObject().put("t", "math").put("x", "").let { block -> editor.insertMath(block); mathEditing = block } }) { showFormat = false }
             if (!trashed) EditorToolbar(
                 onFormat = { showFormat = !showFormat },
                 onChecklist = { editor.applyParagraph("check") },
                 // Like Apple: a 3×3 table, editing starts right away.
                 onTable = { Model.newTable().let { block -> editor.insertTable(block); tableEditing = block } },
                 onPhoto = {
-                    if (locked) state.toastLater("In gesperrten Notizen sind keine Fotos und Anhänge möglich.")
+                    if (locked) state.toastLater(tr("In gesperrten Notizen sind keine Fotos und Anhänge möglich."))
                     else photoMenu = true
                 },
                 // Like Apple: record audio into the note (encrypted like every attachment).
                 onRecord = {
-                    if (locked) state.toastLater("In gesperrten Notizen sind keine Aufnahmen möglich.")
-                    else state.requestMicrophone { granted -> if (granted) recording = true else state.toastLater("Ohne Mikrofon-Erlaubnis keine Aufnahme.") }
+                    if (locked) state.toastLater(tr("In gesperrten Notizen sind keine Aufnahmen möglich."))
+                    else state.requestMicrophone { granted -> if (granted) recording = true else state.toastLater(tr("Ohne Mikrofon-Erlaubnis keine Aufnahme.")) }
                 },
                 onCompose = { save(); state.pop(); newNote(state, note.data.optString("folder").let { "folder:$it" }) },
             )
@@ -427,7 +525,7 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     /** Like Apple: the open note as PDF, to the share sheet or the print dialog. */
     fun exportPdf(print: Boolean) {
         val blocks = editor.toBlocks()
-        val title = blocks.firstOrNull { it.optString("x").isNotBlank() }?.optString("x")?.trim()?.take(120) ?: "Notiz"
+        val title = blocks.firstOrNull { it.optString("x").isNotBlank() }?.optString("x")?.trim()?.take(120) ?: tr("Notiz")
         val header = "$title · ${Model.longDate(Model.modified(note))}"
         val share = note.share
         scope.launch {
@@ -446,61 +544,89 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
     if (showMenu) {
         ActionSheet(null, buildList {
             if (trashed) {
-                add(SheetAction("Wiederherstellen") { restoreNote(state, note) })
-                add(SheetAction("Endgültig löschen", destructive = true) { sync.delete(note.id); state.pop() })
+                add(SheetAction(tr("Wiederherstellen")) { restoreNote(state, note) })
+                add(SheetAction(tr("Endgültig löschen"), destructive = true) { sync.delete(note.id); state.pop() })
             } else {
-                add(SheetAction(if (note.data.optBoolean("pinned")) "Lösen" else "Anheften") { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
-                add(SheetAction("Verschieben …") { moving = true })
-                if (!locked) add(SheetAction("Teilen …") { state.push(Route.Share(note.id)) })
-                add(SheetAction("Als PDF senden …") { exportPdf(print = false) })
-                add(SheetAction("Drucken …") { exportPdf(print = true) })
-                add(SheetAction(if (locked) "Sperre entfernen" else "Notiz sperren") { locking = !locked })
-                if (!sync.isLocal) add(SheetAction("Auf dem Gerät behalten: " + Keep.label(sync.keepOf(note))) { keepChoice = true })
-                add(SheetAction(if (sortChecked) "Abgehakte nicht mehr sortieren" else "Abgehakte nach unten sortieren") { sortChecked = !sortChecked })
-                add(SheetAction("Löschen", destructive = true) { trashNote(state, note); state.pop() })
+                add(SheetAction(if (note.data.optBoolean("pinned")) tr("Lösen") else tr("Anheften")) { sync.update(note.id) { it.put("pinned", !it.optBoolean("pinned")) } })
+                add(SheetAction(tr("Verschieben …")) { moving = true })
+                add(archiveAction(state, note))
+                if (!locked) add(templateAction(state, note))
+                if (!locked) add(SheetAction(tr("Teilen …")) { state.push(Route.Share(note.id)) })
+                add(SheetAction(tr("Als PDF senden …")) { exportPdf(print = false) })
+                add(SheetAction(tr("Drucken …")) { exportPdf(print = true) })
+                add(SheetAction(if (locked) tr("Sperre entfernen") else tr("Notiz sperren")) { locking = !locked })
+                if (!sync.isLocal) add(SheetAction(tr("Auf dem Gerät behalten: ") + Keep.label(sync.keepOf(note))) { keepChoice = true })
+                add(SheetAction(if (sortChecked) tr("Abgehakte nicht mehr sortieren") else tr("Abgehakte nach unten sortieren")) { sortChecked = !sortChecked })
+                add(SheetAction(tr("Löschen"), destructive = true) { trashNote(state, note); state.pop() })
             }
         }) { showMenu = false }
     }
     if (moving) MoveSheet(state, note) { moving = false }
     if (keepChoice) {
         val current = note.data.optString("keep")
-        ActionSheet("Wie lange soll diese Notiz auf dem Handy bleiben?",
-            listOf(SheetAction("Wie in den Einstellungen (${Keep.label(sync.keepDefault())})" + if (current.isEmpty()) " ✓" else "") {
+        ActionSheet(tr("Wie lange soll diese Notiz auf dem Handy bleiben?"),
+            listOf(SheetAction(tr("Wie in den Einstellungen ({label})", "label" to (Keep.label(sync.keepDefault()))) + if (current.isEmpty()) " ✓" else "") {
                 sync.update(note.id) { it.remove("keep") }
             }) + Keep.choices.map { (value, label) ->
                 SheetAction(label + if (value == current) " ✓" else "") { sync.update(note.id) { it.put("keep", value) } }
             }) { keepChoice = false }
     }
     locking?.let { lock -> LockFlow(state, note, lock) { locking = null; unlockedRevision++ } }
+    if (footnoteNew) AlertDialog(tr("Fußnote oder Quelle"), tr("An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF."),
+        confirm = tr("Einfügen"), fields = listOf(AlertField(tr("z. B. Müller, Gartenbau, 2020, S. 41"))), onDismiss = { footnoteNew = false }) { values ->
+        if (values[0].isNotBlank()) editor.insertFootnote(values[0])
+        footnoteNew = false
+    }
+    footnoteMenu?.let { span ->
+        ActionSheet(span.note.ifEmpty { tr("Fußnote") }, listOf(
+            SheetAction(tr("Bearbeiten …")) { footnoteEdit = span },
+            SheetAction(tr("Entfernen"), destructive = true) { editor.editFootnote(span, null) },
+        )) { footnoteMenu = null }
+    }
+    footnoteEdit?.let { span ->
+        AlertDialog(tr("Fußnote"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Text"), span.note)), onDismiss = { footnoteEdit = null }) { values ->
+            if (values[0].isNotBlank()) editor.editFootnote(span, values[0])
+            footnoteEdit = null
+        }
+    }
+    linkMenu?.let { block ->
+        ActionSheet(block.optString("dm").ifEmpty { block.optString("u") }, listOf(
+            SheetAction(tr("Im Browser öffnen")) {
+                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(block.optString("u")))) }
+            },
+            SheetAction(tr("Nur als Adresse zeigen")) { editor.unlinkPreview(block) },
+        )) { linkMenu = null }
+    }
     if (photoMenu) {
         // Like Notes: take a photo or choose one.
         fun insert(bytes: ByteArray, @Suppress("UNUSED_PARAMETER") mime: String) {
-            scope.launch {
-                try {
-                    val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                    editor.insertImage(id)
-                } catch (error: Exception) {
-                    state.showToast(errorText(error))
-                }
+            state.upload(tr("Foto"), bytes, note.share) { id ->
+                if (editor.isAttachedToWindow) editor.insertImage(id) else appendBlock(state, noteId, JSONObject().put("t", "image").put("f", id))
             }
         }
         ActionSheet(null, listOf(
-            SheetAction("Foto aufnehmen") { state.takePhoto(::insert) },
-            SheetAction("Aus Fotos wählen") { state.pickImage(::insert) },
+            SheetAction(tr("Foto aufnehmen")) { state.takePhoto(::insert) },
+            SheetAction(tr("Aus Fotos wählen")) { state.pickImage(::insert) },
             // Like Apple: attach a PDF or any other file (encrypted like photos).
-            SheetAction("Datei anhängen …") {
+            SheetAction(tr("Datei anhängen …")) {
                 state.pickFile { name, mime, bytes ->
-                    scope.launch {
-                        try {
-                            val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                            editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size))
-                        } catch (error: Exception) {
-                            state.showToast(errorText(error))
-                        }
+                    state.upload(name, bytes, note.share) { id ->
+                        val block = JSONObject().put("t", "file").put("f", id).put("n", name).put("m", mime).put("b", bytes.size)
+                        if (editor.isAttachedToWindow) editor.insertFile(block) else appendBlock(state, noteId, block)
                     }
                 }
             },
         )) { photoMenu = false }
+    }
+    mathEditing?.let { block ->
+        MathEditor(block, onDone = { changed ->
+            editor.replaceBlock(block, changed)
+            mathEditing = null
+        }, onCancel = {
+            // A new formula left empty is not kept.
+            if (block.optString("x").isBlank()) editor.replaceBlock(block, null)
+            mathEditing = null
+        })
     }
     tableEditing?.let { block ->
         TableEditor(block) { changed ->
@@ -513,13 +639,16 @@ fun EditorScreen(state: AppState, noteId: String, revision: Long) {
             onDone = { file, length ->
                 recording = false
                 scope.launch {
-                    try {
-                        val bytes = withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
-                        val id = withContext(Dispatchers.IO) { sync.uploadFile(bytes, note.share) }
-                        editor.insertFile(JSONObject().put("t", "file").put("f", id).put("n", file.name).put("m", AudioNotes.mime)
-                            .put("b", bytes.size).put("d", Math.round(length * 10) / 10.0))
+                    val bytes = try {
+                        withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
                     } catch (error: Exception) {
                         state.showToast(errorText(error))
+                        return@launch
+                    }
+                    state.upload(file.name, bytes, note.share) { id ->
+                        val block = JSONObject().put("t", "file").put("f", id).put("n", file.name).put("m", AudioNotes.mime)
+                            .put("b", bytes.size).put("d", Math.round(length * 10) / 10.0)
+                        if (editor.isAttachedToWindow) editor.insertFile(block) else appendBlock(state, noteId, block)
                     }
                 }
             },
@@ -541,25 +670,26 @@ private fun LockedPlaceholder(state: AppState, onUnlocked: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         GlyphIcon(Glyph.Lock, colors.secondary, 56.dp)
         Spacer(Modifier.height(16.dp))
-        Text("Diese Notiz ist gesperrt", style = Type.title3, color = colors.label)
+        Text(tr("Diese Notiz ist gesperrt"), style = Type.title3, color = colors.label)
         Spacer(Modifier.height(6.dp))
-        Text(if (state.biometricEnabled) "Entsperre sie mit Fingerabdruck, PIN oder Muster." else "Gib dein Notizen-Passwort ein, um sie anzusehen.", style = Type.subheadline, color = colors.secondary)
+        Text(if (state.biometricEnabled) tr("Entsperre sie mit Fingerabdruck, PIN oder Muster.") else tr("Gib dein Notizen-Passwort ein, um sie anzusehen."), style = Type.subheadline, color = colors.secondary)
         Spacer(Modifier.height(24.dp))
-        PrimaryButton("Notiz anzeigen", modifier = Modifier.width(220.dp)) { unlock() }
+        PrimaryButton(tr("Notiz anzeigen"), modifier = Modifier.width(220.dp)) { unlock() }
     }
     if (asking) UnlockDialog(state, onDismiss = { asking = false }) { asking = false; onUnlocked() }
 }
 
 @Composable
-fun UnlockDialog(state: AppState, reason: String = "Gib dein Notizen-Passwort ein.", onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+fun UnlockDialog(state: AppState, reason: String = tr("Gib dein Notizen-Passwort ein."), onDismiss: () -> Unit, onUnlocked: () -> Unit) {
     val scope = rememberCoroutineScope()
     val hint = state.vaultObject()?.data?.optString("hint").orEmpty()
     // Like Apple: the hint only after a wrong password, then together with that message; the field starts empty again.
     var wrong by remember { mutableIntStateOf(0) }
     key(wrong) {
         AlertDialog(
-            "Gesperrte Notizen", if (wrong == 0) reason else "Falsches Passwort." + if (hint.isNotEmpty()) "\nMerkhilfe: $hint" else "",
-            "OK", fields = listOf(AlertField("Passwort", password = true)), onDismiss = onDismiss,
+            tr("Gesperrte Notizen"),
+            if (wrong == 0) reason else tr("Falsches Passwort.") + if (hint.isNotEmpty()) tr("\nMerkhilfe: {hint}", "hint" to hint) else "",
+            "OK", fields = listOf(AlertField(tr("Passwort"), password = true)), onDismiss = onDismiss,
         ) { values ->
             scope.launch {
                 val ok = withContext(Dispatchers.Default) {
@@ -586,7 +716,7 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             data.remove("body")
             data.put("enc", Vault.sealBody(key, body)).put("title", Model.blocksTitle(body)).put("modified", Model.now())
             sync.put("note", data, current.share, current.id)
-            state.toastLater("Notiz gesperrt")
+            state.toastLater(tr("Notiz gesperrt"))
             // Locking hides the content right away.
             state.lockAll()
         } else {
@@ -595,27 +725,27 @@ fun LockFlow(state: AppState, note: SyncObject, lock: Boolean, onDone: () -> Uni
             data.remove("title")
             data.put("body", body)
             sync.put("note", data, current.share, current.id)
-            state.toastLater("Sperre entfernt")
+            state.toastLater(tr("Sperre entfernt"))
         }
         onDone()
     }
 
     when {
         lock && note.share != null -> {
-            LaunchedEffect(Unit) { state.showToast("Geteilte Notizen können nicht gesperrt werden."); onDone() }
+            LaunchedEffect(Unit) { state.showToast(tr("Geteilte Notizen können nicht gesperrt werden.")); onDone() }
         }
         state.vaultKey != null -> LaunchedEffect(Unit) { state.touchVault(); perform() }
         !state.hasVault() -> AlertDialog(
-            "Notizen-Passwort festlegen",
-            "Gesperrte Notizen werden auf dem Gerät mit diesem Passwort verschlüsselt – nicht einmal der Server kann sie lesen. " +
-                "Vergisst du es, lassen sich gesperrte Notizen nicht wiederherstellen.",
-            "Festlegen",
-            fields = listOf(AlertField("Passwort", password = true), AlertField("Bestätigen", password = true), AlertField("Merkhilfe")),
+            tr("Notizen-Passwort festlegen"),
+            tr("Gesperrte Notizen werden auf dem Gerät mit diesem Passwort verschlüsselt – nicht einmal der Server kann sie lesen. ") +
+                tr("Vergisst du es, lassen sich gesperrte Notizen nicht wiederherstellen."),
+            tr("Festlegen"),
+            fields = listOf(AlertField(tr("Passwort"), password = true), AlertField(tr("Bestätigen"), password = true), AlertField(tr("Merkhilfe"))),
             onDismiss = onDone,
         ) { values ->
             when {
-                values[0].length < 6 -> state.toastLater("Mindestens 6 Zeichen.")
-                values[0] != values[1] -> state.toastLater("Die Passwörter stimmen nicht überein.")
+                values[0].length < 6 -> state.toastLater(tr("Mindestens 6 Zeichen."))
+                values[0] != values[1] -> state.toastLater(tr("Die Passwörter stimmen nicht überein."))
                 else -> scope.launch {
                     withContext(Dispatchers.Default) { state.createVault(values[0], values[2]) }
                     perform()
@@ -641,12 +771,12 @@ private fun EditorToolbar(onFormat: () -> Unit, onChecklist: () -> Unit, onTable
         HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(48.dp).padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            BarButton(Glyph.Format, "Format", onClick = onFormat)
-            BarButton(Glyph.Checklist, "Checkliste", onClick = onChecklist)
-            BarButton(Glyph.Table, "Tabelle", onClick = onTable)
-            BarButton(Glyph.Photo, "Foto", onClick = onPhoto)
-            BarButton(Glyph.Mic, "Audio aufnehmen", onClick = onRecord)
-            BarButton(Glyph.Compose, "Neue Notiz", onClick = onCompose)
+            BarButton(Glyph.Format, tr("Format"), onClick = onFormat)
+            BarButton(Glyph.Checklist, tr("Checkliste"), onClick = onChecklist)
+            BarButton(Glyph.Table, tr("Tabelle"), onClick = onTable)
+            BarButton(Glyph.Photo, tr("Foto"), onClick = onPhoto)
+            BarButton(Glyph.Mic, tr("Audio aufnehmen"), onClick = onRecord)
+            BarButton(Glyph.Compose, tr("Neue Notiz"), onClick = onCompose)
         }
     }
 }
@@ -675,13 +805,13 @@ private fun LinkPanel(heading: String, glyph: Glyph, empty: String, choices: Lis
 }
 
 @Composable
-private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
+private fun FormatPanel(editor: RichEditor, tick: Int, pro: Boolean, onFootnote: () -> Unit, onMath: () -> Unit = {}, onClose: () -> Unit) {
     val colors = palette
     val current = remember(tick) { editor.currentStyle() }
     val inline = remember(tick) { editor.activeInline() }
     Column(Modifier.fillMaxWidth().background(colors.background).padding(horizontal = 14.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Format", style = Type.headline, color = colors.label, modifier = Modifier.weight(1f))
+            Text(tr("Format"), style = Type.headline, color = colors.label, modifier = Modifier.weight(1f))
             Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(colors.fill).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
                 GlyphIcon(Glyph.Close, colors.secondary, 12.dp)
             }
@@ -689,8 +819,8 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((type, label, size, weight) in listOf(
-                Quad("title", "Titel", 20, FontWeight.Bold), Quad("heading", "Überschrift", 17, FontWeight.Bold),
-                Quad("subheading", "Unterüberschrift", 15, FontWeight.SemiBold), Quad("body", "Text", 15, FontWeight.Normal),
+                Quad("title", tr("Titel"), 20, FontWeight.Bold), Quad("heading", tr("Überschrift"), 17, FontWeight.Bold),
+                Quad("subheading", tr("Unterüberschrift"), 15, FontWeight.SemiBold), Quad("body", tr("Text"), 15, FontWeight.Normal),
             )) {
                 val active = current == type
                 Text(label, fontSize = size.sp, fontWeight = weight, color = if (active) Color.White else colors.label, maxLines = 1,
@@ -716,7 +846,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         // Highlight colors like in Apple's Notes; the active color is ringed, tapping it again removes it.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Markieren", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            Text(tr("Markieren"), fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
             for ((name, rgb) in HIGHLIGHTS) {
                 val active = name in inline
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp))
@@ -732,7 +862,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         // Text color (like Apple: purple, pink, orange, mint, blue).
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Textfarbe", fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
+            Text(tr("Textfarbe"), fontSize = 15.sp, color = colors.label, modifier = Modifier.padding(end = 4.dp))
             for ((name, rgb) in TEXT_COLORS) {
                 val active = name in inline
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(if (active) colors.fill else colors.surface)
@@ -749,14 +879,14 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         // Font and paragraph alignment.
         val align = remember(tick) { editor.currentAlignment() }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((name, label, family) in listOf(Triple(null, "Standard", FontFamily.Default), Triple("f:serif", "Serif", FontFamily.Serif),
-                Triple("f:mono", "Mono", FontFamily.Monospace))) {
+            for ((name, label, family) in listOf(Triple(null, tr("Standard"), FontFamily.Default), Triple("f:serif", tr("Serif"), FontFamily.Serif),
+                Triple("f:mono", tr("Mono"), FontFamily.Monospace))) {
                 val active = if (name == null) FONTS.keys.none { it in inline } else name in inline
                 Text(label, fontSize = 14.sp, fontFamily = family, color = if (active) Color.White else colors.label,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
                         .clickable { editor.setFont(name) }.padding(horizontal = 9.dp, vertical = 8.dp))
             }
-            for ((name, label) in listOf(null to "Links", "center" to "Mitte", "right" to "Rechts")) {
+            for ((name, label) in listOf(null to tr("Links"), "center" to tr("Mitte"), "right" to tr("Rechts"))) {
                 val active = align == name
                 Text(label, fontSize = 14.sp, color = if (active) Color.White else colors.label,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (active) colors.accent else colors.surface)
@@ -765,7 +895,7 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((type, label) in listOf("bullet" to "• Liste", "dash" to "– Liste", "number" to "1. Liste", "mono" to "Mono", "quote" to "Zitat")) {
+            for ((type, label) in listOf("bullet" to tr("• Liste"), "dash" to tr("– Liste"), "number" to tr("1. Liste"), "mono" to tr("Mono"), "quote" to tr("Zitat"))) {
                 val active = current == type
                 Text(label, fontSize = 14.sp, color = if (active) Color.White else colors.label,
                     fontFamily = if (type == "mono") FontFamily.Monospace else FontFamily.Default,
@@ -775,15 +905,65 @@ private fun FormatPanel(editor: RichEditor, tick: Int, onClose: () -> Unit) {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Ausrücken", fontSize = 14.sp, color = colors.label,
+            Text(tr("Ausrücken"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(-1) }.padding(horizontal = 10.dp, vertical = 8.dp))
-            Text("Einrücken", fontSize = 14.sp, color = colors.label,
+            Text(tr("Einrücken"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.indent(1) }.padding(horizontal = 10.dp, vertical = 8.dp))
             // Also: "---" and Enter on an empty line.
-            Text("Trennlinie", fontSize = 14.sp, color = colors.label,
+            Text(tr("Trennlinie"), fontSize = 14.sp, color = colors.label,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.insertDivider() }.padding(horizontal = 10.dp, vertical = 8.dp))
+        }
+        // Profi-Funktionen only when switched on (Settings) – Tante Erna sees a calm panel.
+        if (pro) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Code"), fontSize = 15.sp, color = colors.label, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
+                for ((lang, label) in io.github.veritasx1.linotes.data.Syntax.LANGUAGES) {
+                    Text(label, fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable { editor.makeCode(lang) }
+                            .padding(horizontal = 9.dp, vertical = 8.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr("Fußnote / Quelle …"), fontSize = 14.sp, color = colors.label,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onFootnote)
+                        .padding(horizontal = 10.dp, vertical = 8.dp))
+                Text(tr("Formel (LaTeX) …"), fontSize = 14.sp, color = colors.label, fontFamily = FontFamily.Serif,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(colors.surface).clickable(onClick = onMath)
+                        .padding(horizontal = 10.dp, vertical = 8.dp))
+            }
         }
     }
 }
 
 private data class Quad(val type: String, val label: String, val size: Int, val weight: FontWeight)
+
+/** An upload that finished after the note was closed: its block goes to the end of the note. */
+private fun appendBlock(state: AppState, noteId: String, block: JSONObject) {
+    val sync = state.sync
+    val current = sync.get(noteId) ?: return
+    if (current.data.has("enc") || current.data.has("trashed")) return
+    val data = JSONObject(current.data.toString())
+    val body = data.optJSONArray("body") ?: JSONArray()
+    body.put(block)
+    data.put("body", body).put("modified", Model.now())
+    sync.put("note", data, current.share, current.id)
+}
+
+/** Under the note: "Fußnoten und Quellen", numbered like in the text. */
+@Composable
+private fun FootnoteList(notes: List<String>) {
+    val colors = palette
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
+        HorizontalDivider(Modifier.width(120.dp), 0.8.dp, colors.separator)
+        Text(tr("Fußnoten und Quellen"), style = Type.subheadline.copy(fontWeight = FontWeight.SemiBold), color = colors.label,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+        notes.forEachIndexed { index, note ->
+            Row(Modifier.padding(vertical = 2.dp)) {
+                Text("${index + 1}", style = Type.footnote.copy(fontWeight = FontWeight.Bold), color = colors.accentText, modifier = Modifier.width(20.dp))
+                Text(note, style = Type.footnote, color = colors.label)
+            }
+        }
+    }
+}

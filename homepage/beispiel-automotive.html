@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Beispiel: ASIL-D-Projekt mit LiNotes – ISO 26262 und Automotive SPICE</title>
+<meta name="description" content="Ein komplexes Automotive-Projekt mit LiNotes: elektromechanische Bremse ASIL D mit Hauptrechner ASIL C(D) und Safety-Monitor ASIL A(D) – aufbauen, steuern, nachweisen, abschließen. Mit Abdeckung von ISO 26262 und Automotive SPICE.">
+<link rel="icon" href="linotes.svg" type="image/svg+xml">
+<link rel="stylesheet" href="site.css">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoftware.de/linotes/beispiel-automotive.html"><link rel="alternate" hreflang="en" href="https://lisoftware.de/linotes/en/beispiel-automotive.html"><link rel="alternate" hreflang="fr" href="https://lisoftware.de/linotes/fr/beispiel-automotive.html">
+<style>
+.apps .wrap { position: relative; }
+.lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
+.lang-switch a[aria-current], .lang-foot a[aria-current] { color: #fff; opacity: 1; font-weight: 600; }
+.lang-foot { display: flex; gap: 14px; justify-content: center; padding-top: 18px; font-size: 13px; }
+.lang-foot a[aria-current] { color: inherit; }
+@media (max-width: 900px) { .lang-switch { display: none; } }
+</style>
+<script>
+(function () {
+  try {
+    if (document.referrer.indexOf(location.origin) === 0) return;
+    var l = ((navigator.languages && navigator.languages[0]) || navigator.language || "").slice(0, 2).toLowerCase();
+    if (l === "de") return;
+    location.replace((l === "fr" ? "fr/" : "en/") + location.pathname.split("/").pop() + location.hash);
+  } catch (e) {}
+})();
+</script><!--/lang-->
+</head>
+<body>
+
+<div class="apps">
+  <div class="wrap">
+    <a href="https://lisoftware.de/linotes/" aria-current="page">LiNotes</a>
+    <a href="https://lisoftware.de/prevux/">Prevux</a>
+    <a href="https://lisoftware.de/liboard/">LiBoard</a>
+    <a href="https://lisoftware.de/licida/">LiCida</a>
+    <a href="https://lisoftware.de/lical/">LiCal</a>
+    <a href="https://lisoftware.de/lidio/">LiDio</a>
+  <!--lang--><span class="lang-switch"><a href="beispiel-automotive.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/beispiel-automotive.html" hreflang="en" lang="en">EN</a><a href="fr/beispiel-automotive.html" hreflang="fr" lang="fr">FR</a></span><!--/lang-->
+  </div>
+</div>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="linotes.svg" alt="">LiNotes</a>
+    <nav class="links">
+      <a href="#aufbauen">Aufbauen</a>
+      <a href="#steuern">Steuern</a>
+      <a href="#nachweisen">Nachweisen</a>
+      <a href="#abschluss">Abschluss</a>
+      <a href="#iso26262">ISO 26262</a>
+      <a href="#aspice">ASPICE</a>
+      <a href="beispiel-ki.html">Beispiel KI</a>
+    </nav>
+    <a class="btn small cta" href="index.html#laden">Laden</a>
+  </div>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="wrap">
+    <span class="badge reveal">Beispielprojekt · Automotive · ISO 26262 · Automotive SPICE</span>
+    <h1 class="display reveal d1">Ein ASIL-D-Projekt.<br><span class="gradient-text">Von der HARA bis zur Freigabe.</span></h1>
+    <p class="lead reveal d2">Eine elektromechanische Bremse für die Hinterachse, ASIL D, aufgeteilt auf einen Hauptrechner ASIL C(D) und einen Safety-Monitor ASIL A(D). So baust du ein solches Projekt in LiNotes auf, steuerst es mit deinem Team und Zulieferer und bringst es mit lückenlosem Berichtswesen zum Abschluss.</p>
+    <div class="actions reveal d3">
+      <a class="btn" href="#aufbauen">Projekt ansehen</a>
+      <a class="btn ghost" href="#iso26262">Was LiNotes abdeckt</a>
+    </div>
+    <div class="hero-stage reveal">
+      <div class="window"><img class="zoomable" src="img/beispiele/a4-systemboard.webp" data-light="img/beispiele/a4-systemboard.webp" data-dark="img/beispiele/dark-a4-systemboard.webp" alt="Board „EMB System – Anforderungen und Änderungen“ mit den Spalten CR, Analyse, Umsetzung, Verifikation und Freigegeben" width="1800" height="1038"></div>
+    </div>
+    <p class="center" style="color: var(--muted); font-size: 14px; margin-top: 8px">Alle Namen, Anforderungen, Zahlen und Ergebnisse sind erfunden. Die Bilder zeigen die echte LiNotes-App mit diesen Beispieldaten.</p>
+  </div>
+</section>
+
+<section class="wrap center" style="padding-top: 40px; max-width: 1000px">
+  <div class="facts">
+    <div class="reveal"><div class="num gradient-text">4</div><div class="lbl">Entwicklungsboards: System, MCU A, MCU B, Fehlerberichte</div></div>
+    <div class="reveal d1"><div class="num gradient-text">7</div><div class="lbl">Projektordner entlang des Sicherheitslebenszyklus</div></div>
+    <div class="reveal d2"><div class="num gradient-text">6</div><div class="lbl">Rollen: vom Safety Manager bis zum Zulieferer</div></div>
+    <div class="reveal d3"><div class="num gradient-text">SHA-256</div><div class="lbl">für jeden Nachweis im Bericht</div></div>
+  </div>
+</section>
+
+<!-- 1. BUILD -->
+<section id="aufbauen" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">1 · Aufbauen</p>
+      <h2 class="headline">Die Projektstruktur ist<br>der Sicherheitslebenszyklus.</h2>
+      <p class="lead">Ein Ordner für das Item, Unterordner für jede Phase und jedes Element. Darin liegen Notizen, Boards, Pläne und Checklisten nebeneinander, wie in einer Projektablage, nur durchsuchbar und Ende-zu-Ende-verschlüsselt.</p>
+    </div>
+    <div class="split">
+      <div class="reveal">
+        <h3 class="title">Ordner nach Phase und Element.</h3>
+        <ul class="checks">
+          <li><b>01 Sicherheitsplan und Konzept</b>: Sicherheitsplan, Item-Definition, HARA, funktionales Sicherheitskonzept (ISO 26262-2, -3).</li>
+          <li><b>02 System</b>: technisches Sicherheitskonzept und das System-Board (ISO 26262-4).</li>
+          <li><b>03 Hauptrechner, ASIL C(D)</b> und <b>04 Safety-Monitor, ASIL A(D)</b>: je ein eigenes Board für die dekomponierten Elemente (ISO 26262-5, -6, -9).</li>
+          <li><b>05 Problemlösung</b>: Fehlerberichte aus Test und Feld.</li>
+          <li><b>06 Freigabe und Safety Case</b>: Bestätigungsmaßnahmen, Protokolle, Safety Case.</li>
+        </ul>
+      </div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/a1-projektordner.webp" data-light="img/beispiele/a1-projektordner.webp" data-dark="img/beispiele/dark-a1-projektordner.webp" alt="Sicherheitsplan in Ordner 01 mit Rollen-Tabelle und Arbeitsweise" loading="lazy"></div>
+    </div>
+    <div class="split reverse" style="margin-top: 70px">
+      <div class="reveal">
+        <h3 class="title">HARA und Sicherheitsziele.</h3>
+        <p class="lead">Gefährdungen mit Schwere, Häufigkeit und Beherrschbarkeit als Tabelle, darunter die Sicherheitsziele SG-01 bis SG-03. Jede Anforderung, die später entsteht, nennt „ihr“ Sicherheitsziel. So bleibt der rote Faden sichtbar.</p>
+      </div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/a2-hara.webp" data-light="img/beispiele/a2-hara.webp" data-dark="img/beispiele/dark-a2-hara.webp" alt="HARA-Notiz mit Tabelle S/E/C/ASIL und Sicherheitszielen" loading="lazy"></div>
+    </div>
+    <div class="split" style="margin-top: 70px">
+      <div class="reveal">
+        <h3 class="title">ASIL-Dekomposition:<br>D = C(D) + A(D).</h3>
+        <p class="lead">Das technische Sicherheitskonzept teilt SG-01 nach ISO 26262-9 auf zwei unabhängige Elemente auf: den Hauptrechner (MCU A) mit ASIL C(D) und den Safety-Monitor (MCU B) mit ASIL A(D). Die Analyse abhängiger Fehler und die Hardware-Metriken aus der FMEDA stehen gleich daneben.</p>
+        <ul class="checks">
+          <li><b>Jedes Element bekommt ein eigenes Board</b>, mit eigenem Team, eigenem Status, eigenem Bericht.</li>
+          <li><b>Unabhängigkeit</b> wird in der Auswirkungsanalyse jeder Karte mitgeprüft.</li>
+        </ul>
+      </div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/a3-sicherheitskonzept.webp" data-light="img/beispiele/a3-sicherheitskonzept.webp" data-dark="img/beispiele/dark-a3-sicherheitskonzept.webp" alt="Technisches Sicherheitskonzept mit Dekompositionstabelle und Hardware-Metriken" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. STEER -->
+<section id="steuern">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">2 · Steuern</p>
+      <h2 class="headline">Jede Anforderung, jede Änderung,<br>jeder Fehler: eine Karte.</h2>
+      <p class="lead">Ein Board wird mit einem Klick zum Entwicklungsprojekt. Dann tragen Karten eine Kurz-ID, ihren Statusverlauf und die Felder für Auswirkungsanalyse, Verifikation, Version und Commits.</p>
+    </div>
+    <div class="center reveal">
+      <div class="segmented" data-showcase="#board-showcase">
+        <button class="on" data-win="img/beispiele/a4-systemboard.webp|img/beispiele/dark-a4-systemboard.webp" data-caption="System: Systemanforderungen (SysRS) und Änderungsanträge (CR) des Kunden. Spalten = Status nach SUP.10, die Abnahme in „Freigegeben“ erfolgt durch den Safety Manager.">System</button>
+        <button data-win="img/beispiele/a7-hauptrechner.webp|img/beispiele/dark-a7-hauptrechner.webp" data-caption="Hauptrechner MCU A – ASIL C(D): Software-Anforderungen mit MC/DC-Abdeckung als Nachweis, Treiber für den neuen Sensor in Umsetzung.">MCU A · C(D)</button>
+        <button data-win="img/beispiele/a8-monitor.webp|img/beispiele/dark-a8-monitor.webp" data-caption="Safety-Monitor MCU B – ASIL A(D): unabhängiger Abschaltpfad und Fensterwatchdog, diversitär zur MCU A.">MCU B · A(D)</button>
+        <button data-win="img/beispiele/a9-fehlerberichte.webp|img/beispiele/dark-a9-fehlerberichte.webp" data-caption="Fehlerberichte (SUP.9): vom Klimakammertest des Zulieferers bis zur Kundendienstmeldung – mit Ursache, Korrektur und Nachweis.">Fehlerberichte</button>
+      </div>
+    </div>
+    <div class="showcase duo-wrap reveal" id="board-showcase">
+      <div class="window"><img class="zoomable" data-slot="win" src="img/beispiele/a4-systemboard.webp" data-light="img/beispiele/a4-systemboard.webp" data-dark="img/beispiele/dark-a4-systemboard.webp" alt="Entwicklungsboard" loading="lazy"></div>
+      <p class="caption" data-slot="caption">System: Systemanforderungen (SysRS) und Änderungsanträge (CR) des Kunden. Spalten = Status nach SUP.10, die Abnahme in „Freigegeben“ erfolgt durch den Safety Manager.</p>
+    </div>
+    <div class="tiles" style="margin-top: 50px">
+      <div class="tile reveal"><h3>Auswirkungsanalyse zuerst</h3><p>Bevor eine Karte in die Umsetzung geht: Welches Sicherheitsziel, welches ASIL, welche Elemente, welcher Regressionsumfang (ISO 26262-8 §8.4.3).</p></div>
+      <div class="tile reveal d1"><h3>Rollen und Zuständigkeit</h3><p>Safety Manager, Entwicklung, Hardware, Zulieferer: Jede Karte hat eine zuständige Person. Mit @-Erwähnungen holt man jemanden gezielt dazu.</p></div>
+      <div class="tile reveal d2"><h3>Zulieferer einbinden</h3><p>Boards lassen sich einzeln mit verifizierten Personen teilen. Der Prüfstand des Zulieferers sieht genau seine Karten, Ende-zu-Ende-verschlüsselt (DIA, ISO 26262-8 §5).</p></div>
+      <div class="tile reveal"><h3>Commits automatisch</h3><p>Steht die Karten-ID in der Commit-Nachricht, verknüpft LiNotes den Commit mit der Karte: bidirektionale Rückverfolgbarkeit ohne Handarbeit.</p></div>
+      <div class="tile reveal d1"><h3>Statusverlauf</h3><p>Wer hat die Karte wann von „Analyse“ nach „Umsetzung“ geschoben? Der Verlauf steht an jeder Karte und im Bericht.</p></div>
+      <div class="tile reveal d2"><h3>Version</h3><p>Jede Karte nennt den Stand, in dem sie umgesetzt ist (z. B. SW 2.3.0 / HW C2), für Konfigurationsmanagement und Freigabe.</p></div>
+    </div>
+    <div class="split reverse" style="margin-top: 80px">
+      <div class="reveal">
+        <h3 class="title">Der Projektplan<br>bis zum SOP.</h3>
+        <p class="lead">Phasen nach Teil 3 bis 6, Musterstände B und C, Confirmation Reviews und das Functional Safety Assessment als Meilensteine. Die rote Linie ist heute. Ein Blick zeigt, wo das Projekt steht.</p>
+      </div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/a10-projektplan.webp" data-light="img/beispiele/a10-projektplan.webp" data-dark="img/beispiele/dark-a10-projektplan.webp" alt="Projektplan als Zeitstrahl mit Phasen, Mustern und Meilensteinen bis SOP" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. EVIDENCE + REPORTING -->
+<section id="nachweisen" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">3 · Nachweisen</p>
+      <h2 class="headline">Der Nachweis hängt<br>an der Anforderung.</h2>
+      <p class="lead">Kein Verweis auf ein Protokoll irgendwo auf einem Laufwerk: Testberichte, Messkurven und Screenshots liegen verschlüsselt direkt an der Karte, mit Zeitpunkt, Person und Prüfsumme.</p>
+    </div>
+    <div class="report-pair">
+      <div class="window reveal" style="background: var(--card)"><img class="zoomable" src="img/beispiele/a5-karte.webp" data-light="img/beispiele/a5-karte.webp" data-dark="img/beispiele/dark-a5-karte.webp" alt="Karte SysRS-012 mit Spalte, Zuständig, Priorität und Notizen" loading="lazy"></div>
+      <div class="window reveal d1" style="background: var(--card)"><img class="zoomable" src="img/beispiele/a6-nachweise.webp" data-light="img/beispiele/a6-nachweise.webp" data-dark="img/beispiele/dark-a6-nachweise.webp" alt="Dieselbe Karte: Auswirkungsanalyse, Verifikation mit Kriterien und der Nachweis HIL-Fehlerinjektion" loading="lazy"></div>
+    </div>
+    <p class="center" style="color: var(--muted); margin-top: 18px">SysRS-012 „Fehlerreaktionszeit ≤ 50 ms“: Auswirkungsanalyse über drei Elemente, Kriterien und der HIL-Bericht mit 24 Fehlerfällen als Nachweis.</p>
+
+    <div class="section-head reveal" style="margin-top: 100px">
+      <h2 class="headline">Berichtswesen<br>auf Knopfdruck.</h2>
+      <p class="lead">Rechtsklick auf ein Board → „Bericht exportieren“. Heraus kommt eine PDF mit Traceability-Matrix und einer Detailseite je Karte: Beschreibung, Auswirkungsanalyse, Verifikation, Nachweise mit SHA-256 und eingebetteten Bildern, Commits, Verlauf und Abnahme. Als CSV für die Weiterverarbeitung.</p>
+    </div>
+    <div class="report-pair">
+      <div class="window reveal"><img class="zoomable" src="img/beispiele/bericht-system-1.webp" alt="Bericht System-Board: Traceability-Matrix" loading="lazy"></div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/bericht-system-5.webp" alt="Bericht: Detailseite mit eingebettetem HIL-Nachweis und Prüfsumme" loading="lazy"></div>
+    </div>
+    <div class="tiles" style="margin-top: 40px">
+      <div class="tile reveal"><h3>Im Rhythmus</h3><p>Monatlich je Board an Kunde und Assessor: ein PDF je Element, mit Datum im Dateinamen.</p></div>
+      <div class="tile reveal d1"><h3>Prüfbar</h3><p>Die SHA-256 im Bericht belegt, welche Datei als Nachweis anhing, auch Jahre später.</p></div>
+      <div class="tile reveal d2"><h3>Abnahme sichtbar</h3><p>Wer eine Karte nach „Freigegeben“ geschoben hat und wann, steht in der Matrix.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. CLOSE -->
+<section id="abschluss">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <p class="eyebrow">4 · Abschluss</p>
+        <h2 class="headline">Bestätigen,<br>bewerten, freigeben.</h2>
+        <p class="lead">Die Bestätigungsmaßnahmen nach ISO 26262-2 (Confirmation Reviews, Audit, Assessment) laufen als Checkliste mit Unabhängigkeitsgrad. Der Safety Case sammelt die Argumentation und verweist auf die Berichte der Boards.</p>
+        <ul class="checks">
+          <li><b>Protokolle</b> der Reviews als Notiz, Auflagen als Karten im jeweiligen Board.</li>
+          <li><b>Freigabe für die Serienproduktion</b>, wenn alle Karten freigegeben und alle Bestätigungsmaßnahmen erledigt sind.</li>
+          <li><b>Abschlussbericht</b>: die PDF-Berichte aller Boards plus Safety Case, mit Prüfsummen aller Nachweise.</li>
+        </ul>
+      </div>
+      <div class="window reveal d1"><img class="zoomable" src="img/beispiele/a11-bestaetigung.webp" data-light="img/beispiele/a11-bestaetigung.webp" data-dark="img/beispiele/dark-a11-bestaetigung.webp" alt="Liste Bestätigungsmaßnahmen mit offenen und erledigten Reviews" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ISO 26262 -->
+<section id="iso26262" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">Einordnung</p>
+      <h2 class="headline">Was LiNotes bei<br>ISO 26262 abdeckt.</h2>
+      <p class="lead">Ehrlich eingeordnet: LiNotes ist ein Werkzeug für Organisation, Änderungsmanagement, Rückverfolgbarkeit und Nachweise. Fachliche Analysen wie FMEDA, FTA oder Timing-Analyse macht es nicht selbst. Deren Ergebnisse dokumentiert und verknüpft es.</p>
+    </div>
+    <div class="legend"><span><span class="pill full">abgedeckt</span> durch Funktionen der App</span><span><span class="pill part">teilweise</span> mit Grenzen</span><span><span class="pill doc">dokumentiert</span> Ergebnisse ablegen und verknüpfen</span><span><span class="pill no">nicht im Fokus</span></span></div>
+    <div class="table-wrap reveal">
+      <table class="coverage">
+        <tr><th>Teil</th><th>Inhalt</th><th>Grad</th><th>So im Beispiel</th></tr>
+        <tr><td>Teil 2</td><td>Management der funktionalen Sicherheit</td><td><span class="pill part">teilweise</span></td><td>Sicherheitsplan und Rollen als Notiz, <b>Bestätigungsmaßnahmen</b> als Checkliste, Safety Case als Notiz mit Verweisen auf die Berichte.</td></tr>
+        <tr><td>Teil 3</td><td>Konzeptphase</td><td><span class="pill doc">dokumentiert</span></td><td>Item-Definition, <b>HARA</b> mit S/E/C/ASIL-Tabelle, Sicherheitsziele und funktionales Sicherheitskonzept als Notizen.</td></tr>
+        <tr><td>Teil 4</td><td>Produktentwicklung Systemebene</td><td><span class="pill part">teilweise</span></td><td>Technisches Sicherheitskonzept, <b>Systemanforderungen als Karten</b> mit Verifikation und HIL-Nachweisen; Integrations- und Testphasen im Projektplan.</td></tr>
+        <tr><td>Teil 5</td><td>Produktentwicklung Hardware</td><td><span class="pill doc">dokumentiert</span></td><td>Hardware-Metriken (SPFM, LFM, PMHF) aus der FMEDA als Ergebnis; Hardware-Änderungen als Karten mit Auswirkungsanalyse.</td></tr>
+        <tr><td>Teil 6</td><td>Produktentwicklung Software</td><td><span class="pill part">teilweise</span></td><td>Software-Anforderungen je Element als Karten, <b>MC/DC-Bericht als Nachweis</b>, Commits verknüpft. Statische Analyse und Abdeckungsmessung kommen aus deinen Werkzeugen.</td></tr>
+        <tr><td>Teil 7</td><td>Produktion, Betrieb, Service</td><td><span class="pill no">nicht im Fokus</span></td><td>Möglich: Feldbeobachtung als Fehlerbericht-Board.</td></tr>
+        <tr><td>Teil 8 §5</td><td>Verteilte Entwicklung (DIA)</td><td><span class="pill full">abgedeckt</span></td><td>Boards gezielt mit dem Zulieferer teilen, Zuständigkeiten an jeder Karte, Ende-zu-Ende-verschlüsselt.</td></tr>
+        <tr><td>Teil 8 §6</td><td>Sicherheitsanforderungen</td><td><span class="pill part">teilweise</span></td><td>Eindeutige ID, Status, Zuordnung zu Sicherheitsziel und Element, Rückverfolgung zu Commits und Nachweisen. Keine formalen Attribute oder Baselines wie in einem Anforderungswerkzeug.</td></tr>
+        <tr><td>Teil 8 §7</td><td>Konfigurationsmanagement</td><td><span class="pill part">teilweise</span></td><td>Version an jeder Karte, verknüpfte Commits, Statusverlauf. Baselines und Stände selbst liegen in Git bzw. deinem KM-System.</td></tr>
+        <tr><td>Teil 8 §8</td><td>Änderungsmanagement</td><td><span class="pill full">abgedeckt</span></td><td>CR-Workflow mit Spalten, <b>Auswirkungsanalyse</b>, Entscheidung, Umsetzung, Verifikation, Abnahme mit Person und Zeit.</td></tr>
+        <tr><td>Teil 8 §9</td><td>Verifikation</td><td><span class="pill full">abgedeckt</span></td><td>Kriterien je Karte, <b>Nachweise mit SHA-256</b>, Bericht mit eingebetteten Testberichten.</td></tr>
+        <tr><td>Teil 8 §10</td><td>Dokumentation</td><td><span class="pill part">teilweise</span></td><td>Notizen, Berichte als PDF, alles verschlüsselt und durchsuchbar. Notizen haben keine Versionshistorie. Freigegebene Dokumente zusätzlich als PDF-Nachweis mit Prüfsumme ablegen.</td></tr>
+        <tr><td>Teil 8 §11</td><td>Vertrauen in Software-Werkzeuge</td><td><span class="pill no">beim Anwender</span></td><td>LiNotes ist <b>kein qualifiziertes Werkzeug</b>. Die Werkzeugklassifizierung (TI/TD → TCL) und ggf. Qualifizierung liegt bei dir.</td></tr>
+        <tr><td>Teil 9</td><td>ASIL-orientierte Analysen</td><td><span class="pill doc">dokumentiert</span></td><td><b>ASIL-Dekomposition</b> D → C(D) + A(D) und Analyse abhängiger Fehler im technischen Sicherheitskonzept, je Element ein Board.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ASPICE -->
+<section id="aspice">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">Einordnung</p>
+      <h2 class="headline">Und bei<br>Automotive SPICE.</h2>
+      <p class="lead">Bezeichnungen nach Automotive SPICE 3.1; in Version 4.0 sind die Prozesse ähnlich geschnitten. Ein Assessment bewertet deine Arbeitsweise. LiNotes liefert die Arbeitsprodukte und Nachweise dafür.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table class="coverage">
+        <tr><th>Prozess</th><th>Inhalt</th><th>Grad</th><th>So im Beispiel</th></tr>
+        <tr><td>SUP.10</td><td>Änderungsmanagement</td><td><span class="pill full">abgedeckt</span></td><td>Änderungsanträge als Karten, Status über Spalten, Auswirkungsanalyse, Entscheidung, Nachverfolgung bis zur Abnahme, Bericht.</td></tr>
+        <tr><td>SUP.9</td><td>Problemlösungsmanagement</td><td><span class="pill full">abgedeckt</span></td><td>Board „Fehlerberichte“: Meldung, Analyse, Korrektur, Verifikation, Abschluss, mit Ursache und Nachweis.</td></tr>
+        <tr><td>MAN.3</td><td>Projektmanagement</td><td><span class="pill full">abgedeckt</span></td><td>Projektplan mit Phasen und Meilensteinen, Zuständigkeiten, Prioritäten und Fälligkeiten an Karten, Fortschritt je Spalte.</td></tr>
+        <tr><td>ACQ.4</td><td>Lieferantenüberwachung</td><td><span class="pill part">teilweise</span></td><td>Gemeinsame Boards mit dem Zulieferer, Testnachweise direkt von ihm; Verträge und Bewertungen außerhalb.</td></tr>
+        <tr><td>SUP.8</td><td>Konfigurationsmanagement</td><td><span class="pill part">teilweise</span></td><td>Versionen und Commits an den Karten; Baselines im Versionsverwaltungssystem.</td></tr>
+        <tr><td>SUP.1</td><td>Qualitätssicherung</td><td><span class="pill part">teilweise</span></td><td>Checklisten, Review-Protokolle, Abnahme mit Person und Zeit; Eskalation über Karten.</td></tr>
+        <tr><td>SUP.4</td><td>Gemeinsame Reviews</td><td><span class="pill part">teilweise</span></td><td>Protokolle als Notiz, Auflagen als Karten mit Zuständigkeit und Nachweis.</td></tr>
+        <tr><td>SYS.2–SYS.5</td><td>System-Anforderungen bis Systemtest</td><td><span class="pill part">teilweise</span></td><td>Bidirektionale Rückverfolgbarkeit Anforderung ↔ Umsetzung (Commits) ↔ Test (Nachweise) je Karte; Architektur und Testspezifikation in deinen Werkzeugen.</td></tr>
+        <tr><td>SWE.1–SWE.6</td><td>Software-Anforderungen bis SW-Test</td><td><span class="pill part">teilweise</span></td><td>Wie oben auf Elementebene (MCU A, MCU B), mit MC/DC- und Unit-Test-Berichten als Nachweis.</td></tr>
+        <tr><td>SUP.7</td><td>Dokumentation</td><td><span class="pill part">teilweise</span></td><td>Projektablage in Ordnern, Berichte als PDF; ohne Dokumenten-Freigabeworkflow.</td></tr>
+      </table>
+    </div>
+    <p class="small-note">Dieses Beispiel ist eine Orientierung, keine Norm- oder Rechtsberatung. Ob ein Vorgehen ein Assessment besteht, entscheiden dein Prozess, deine Nachweise und die Bewertung durch unabhängige Prüfer.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap center">
+    <h2 class="headline reveal">Selbst ausprobieren.</h2>
+    <p class="lead reveal d1">LiNotes ist kostenlos, quelloffen und läuft auf deinem eigenen Server, auch ohne Server lokal.</p>
+    <div class="actions reveal d2" style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 30px">
+      <a class="btn" href="index.html#laden">LiNotes laden</a>
+      <a class="btn ghost" href="beispiel-ki.html">Beispiel: Entwickeln mit KI</a>
+      <a class="btn ghost" href="hilfe.html#entwicklung">Hilfe zu Entwicklungsprojekten</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap made">
+    <img src="linotes.svg" alt="" width="34" height="34">
+    <p>Ein privates, nichtkommerzielles Projekt von Olaf Winkler aus Schleswig-Holstein.</p>
+  </div>
+  <div class="wrap cols">
+    <div>
+      <h4>LiNotes</h4>
+      <p>Notizen, Listen, Aufgaben und Pläne, zuerst für eine Familie entstanden.</p>
+      <p><a href="index.html">Startseite</a> · <a href="hilfe.html">Hilfe</a> · <a href="server.html">Eigener Server</a> · <a href="beispiel-ki.html">Beispiel KI</a></p>
+    </div>
+    <div>
+      <h4>Datenschutz dieser Seite</h4>
+      <p>Keine Cookies, keine Inhalte von fremden Servern, keine Zugriffsprotokolle. Das JavaScript dieser Seite läuft nur in deinem Browser und sendet nichts.</p>
+    </div>
+    <div>
+      <h4>Hinweis</h4>
+      <p>Beispielprojekt mit erfundenen Daten. ISO 26262 ist eine Norm der ISO, Automotive SPICE® ist eine eingetragene Marke des VDA QMC. Keine Verbindung zu diesen Organisationen.</p>
+    </div>
+  </div>
+<!--lang--><div class="wrap lang-foot"><a href="beispiel-automotive.html" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/beispiel-automotive.html" hreflang="en" lang="en">EN</a><a href="fr/beispiel-automotive.html" hreflang="fr" lang="fr">FR</a></div><!--/lang-->
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>

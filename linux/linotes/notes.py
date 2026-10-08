@@ -14,6 +14,7 @@ from . import model
 from . import smoothscroll
 from .editor import NoteEditor
 from .icons import Icon, drag_source
+from .i18n import _
 
 
 class NoteRow(Gtk.ListBoxRow):
@@ -22,6 +23,7 @@ class NoteRow(Gtk.ListBoxRow):
         super().__init__()
         self.note_id = note["id"]
         self.group = group
+        self.signature = self.signature_of(note, group, stamp, unread)
         data = note["data"]
         drag_source(self, "note:" + note["id"])
 
@@ -31,7 +33,7 @@ class NoteRow(Gtk.ListBoxRow):
         if unread:
             # Changed by someone else since I looked (like Apple's blue dot).
             dot = Gtk.Box(css_classes=["unread-dot"], valign=Gtk.Align.CENTER)
-            dot.set_tooltip_text("Neu geändert")
+            dot.set_tooltip_text(_("Neu geändert"))
             title_row.append(dot)
         if data.get("enc"):
             title_row.append(Icon("lock", 13))
@@ -40,23 +42,25 @@ class NoteRow(Gtk.ListBoxRow):
         title_row.append(title)
         if note.get("share"):
             shared = Icon("person", 13)
-            shared.set_tooltip_text("Geteilt")
+            shared.set_tooltip_text(_("Geteilt"))
             title_row.append(shared)
         text.append(title_row)
 
         meta = Gtk.Box()
         meta.add_css_class("note-row-meta")
-        date = Gtk.Label(label=model.short_date(stamp or model.modified(note)), xalign=0)
+        # Found by a search although archived: say so.
+        date = Gtk.Label(label=(_("Vorlage · ") if data.get("template") else "") + (_("im Archiv · ") if model.archived(note) else "")
+                         + model.short_date(stamp or model.modified(note)), xalign=0)
         date.add_css_class("note-row-date")
         meta.append(date)
-        preview_text = model.note_preview(note) or ("Gesperrt" if data.get("enc") else "Kein weiterer Text")
+        preview_text = model.note_preview(note) or (_("Gesperrt") if data.get("enc") else _("Kein weiterer Text"))
         preview = Gtk.Label(label=preview_text, xalign=0, ellipsize=3, hexpand=True)
         preview.add_css_class("note-row-preview")
         meta.append(preview)
         text.append(meta)
 
         if note.get("share") and note.get("updated_by") and note.get("updated_by") != sync.user_id:
-            who = Gtk.Label(label=f"Zuletzt bearbeitet von {sync.user_name(note['updated_by'])}", xalign=0, ellipsize=3)
+            who = Gtk.Label(label=_("Zuletzt bearbeitet von {person}", person=sync.user_name(note['updated_by'])), xalign=0, ellipsize=3)
             who.add_css_class("note-row-preview")
             who.add_css_class("caption")
             text.append(who)
@@ -70,6 +74,11 @@ class NoteRow(Gtk.ListBoxRow):
             box.append(thumb)
             load_thumbnail(sync, image, thumb, share=note.get("share"))
         self.set_child(box)
+
+    @staticmethod
+    def signature_of(note, group, stamp, unread):
+        """Everything the row shows comes from these; equal signature, equal row."""
+        return (note["id"], group, stamp, unread, note.get("share"), note.get("updated_by"), note["data"])
 
 
 # Finished thumbnails by (file id, size). The list is rebuilt on every edit; loading them again
@@ -122,7 +131,7 @@ class NoteList(Gtk.Box):
         self.is_unread = lambda _note: False
         self.add_css_class("note-list-pane")
 
-        self.search = Gtk.SearchEntry(placeholder_text="Suchen")
+        self.search = Gtk.SearchEntry(placeholder_text=_("Suchen"))
         self.search.set_margin_start(10)
         self.search.set_margin_end(10)
         self.search.set_margin_top(8)
@@ -179,7 +188,7 @@ class NoteList(Gtk.Box):
         gallery_scroller = Gtk.ScrolledWindow(vexpand=True, child=self.gallery)
         smoothscroll.enable(gallery_scroller)
         gallery_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.empty = Adw.StatusPage(title="Keine Notizen", vexpand=True)
+        self.empty = Adw.StatusPage(title=_("Keine Notizen"), vexpand=True)
         self.empty.add_css_class("compact")
         self.stack.add_named(list_scroller, "list")
         self.stack.add_named(gallery_scroller, "gallery")
@@ -219,12 +228,23 @@ class NoteList(Gtk.Box):
 
     def set_mode(self, mode):
         self.mode = mode
+        if mode == "gallery":
+            self.fill_gallery()
 
-    def show(self, title, notes, selected_id=None, empty_text="Keine Notizen"):
+    def show(self, title, notes, selected_id=None, empty_text=_("Keine Notizen")):
         self.updating = True
         self.heading.set_label(title)
         count = len(notes)
-        self.count.set_label("1 Notiz" if count == 1 else f"{count} Notizen")
+        self.count.set_label(_("1 Notiz") if count == 1 else _("{count} Notizen", count=count))
+        ordered = list(model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")))
+        if self.update_rows(ordered, selected_id):
+            self.stack.set_visible_child_name(self.mode)
+            self.shown_notes = notes
+            self.gallery_dirty = True
+            if self.mode == "gallery":
+                self.fill_gallery()
+            self.updating = False
+            return
         self.list.remove_all()
         child = self.gallery.get_first_child()
         while child is not None:
@@ -233,12 +253,16 @@ class NoteList(Gtk.Box):
             child = following
 
         select_row = None
-        for note, group, stamp in model.sort_notes(notes, self.sync.settings().get("note_sort", "modified")):
+        for note, group, stamp in ordered:
             row = NoteRow(note, group, self.sync, stamp, unread=self.is_unread(note))
             self.list.append(row)
             if note["id"] == selected_id:
                 select_row = row
-            self.gallery.append(self.gallery_card(note))
+        # Gallery cards only when the gallery is shown (building 300 of them on every save was slow).
+        self.shown_notes = notes
+        self.gallery_dirty = True
+        if self.mode == "gallery":
+            self.fill_gallery()
 
         if not notes:
             self.empty.set_title(empty_text)
@@ -249,6 +273,38 @@ class NoteList(Gtk.Box):
             self.list.select_row(select_row)
         self.selected_id = selected_id if select_row is not None else None
         self.updating = False
+
+    def update_rows(self, ordered, selected_id):
+        """Same notes in the same order as shown: rebuild only the rows whose note changed. Saving
+        an edit rebuilt all rows (0.45 s with 300 notes) although only one had changed (b9046682)."""
+        rows = []
+        while (row := self.list.get_row_at_index(len(rows))) is not None:
+            rows.append(row)
+        if not rows or len(rows) != len(ordered) or any(row.note_id != note["id"] or row.group != group
+                                                        for row, (note, group, _stamp) in zip(rows, ordered)):
+            return False
+        for position, (row, (note, group, stamp)) in enumerate(zip(rows, ordered)):
+            unread = self.is_unread(note)
+            if row.signature == NoteRow.signature_of(note, group, stamp, unread):
+                continue
+            fresh = NoteRow(note, group, self.sync, stamp, unread=unread)
+            self.list.remove(row)
+            self.list.insert(fresh, position)
+        wanted = next((self.list.get_row_at_index(index) for index, (note, _g, _s) in enumerate(ordered) if note["id"] == selected_id), None)
+        if wanted is None:
+            self.list.unselect_all()
+        elif self.list.get_selected_row() is not wanted:
+            self.list.select_row(wanted)
+        self.selected_id = selected_id if wanted is not None else None
+        self.list.invalidate_headers()
+        return True
+
+    def fill_gallery(self):
+        if not getattr(self, "gallery_dirty", False):
+            return
+        self.gallery_dirty = False
+        for note, _group, _stamp in model.sort_notes(self.shown_notes, self.sync.settings().get("note_sort", "modified")):
+            self.gallery.append(self.gallery_card(note))
 
     def gallery_card(self, note):
         child = Gtk.FlowBoxChild()
@@ -310,17 +366,17 @@ class NotePane(Gtk.Stack):
         self.add_css_class("note-pane")
         self.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
 
-        empty = Adw.StatusPage(title="Keine Notiz ausgewählt")
+        empty = Adw.StatusPage(title=_("Keine Notiz ausgewählt"))
         empty.add_css_class("note-pane")
         self.add_named(empty, "empty")
 
         locked = Adw.StatusPage(
-            title="Diese Notiz ist gesperrt",
-            description="Gib dein Notizen-Passwort ein, um sie anzusehen.",
+            title=_("Diese Notiz ist gesperrt"),
+            description=_("Gib dein Notizen-Passwort ein, um sie anzusehen."),
         )
         lock_icon = Icon("lock", 64)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, halign=Gtk.Align.CENTER)
-        button = Gtk.Button(label="Notiz anzeigen")
+        button = Gtk.Button(label=_("Notiz anzeigen"))
         button.add_css_class("pill")
         button.add_css_class("suggested-action")
         button.connect("clicked", lambda _button: self.emit("unlock-requested"))
@@ -335,7 +391,7 @@ class NotePane(Gtk.Stack):
         self.add_named(locked_box, "locked")
 
         editing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.banner = Adw.Banner(title="Diese Notiz liegt in „Zuletzt gelöscht“.", button_label="Wiederherstellen")
+        self.banner = Adw.Banner(title=_("Diese Notiz liegt in „Zuletzt gelöscht“."), button_label=_("Wiederherstellen"))
         self.banner.connect("button-clicked", lambda _banner: self.emit("restore-requested"))
         editing.append(self.banner)
         self.image_share = None
@@ -353,6 +409,8 @@ class NotePane(Gtk.Stack):
         self.activity.set_margin_bottom(6)
         column.append(self.activity)
         column.append(self.editor)
+        from .editor import FootnoteList
+        column.append(FootnoteList(self.editor))
         clamp = Adw.Clamp(maximum_size=820, tightening_threshold=600, child=column)
         scroller = Gtk.ScrolledWindow(vexpand=True, child=clamp)
         smoothscroll.enable(scroller)
@@ -383,7 +441,7 @@ class NotePane(Gtk.Stack):
     def show_changes(self, lines, who, when):
         """Mark lines someone else changed and say who and when."""
         self.editor.mark_changed(lines)
-        self.activity.set_label(f"{who} hat geändert · {model.short_date(when)} – die Änderungen sind markiert.")
+        self.activity.set_label(_("{who} hat geändert · {short_date} – die Änderungen sind markiert.", who=who, short_date=model.short_date(when)))
         self.activity.set_visible(True)
 
     def update_date(self, note):

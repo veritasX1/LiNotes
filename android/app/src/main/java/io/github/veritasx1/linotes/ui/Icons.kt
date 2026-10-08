@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 /** LiNotes' own symbols (same shapes as on Linux), drawn on a 16×16 grid. */
 enum class Glyph { Folder, FolderShared, Notes, Lock, LockOpen, Trash, Compose, Checklist, Format, Photo, Share, Cart,
     Board, Tag, Pin, Plus, More, Back, Chevron, Search, Person, Cloud, CloudOff, Close, Gear, Grid, ListLines,
-    FolderPlus, Key, Fingerprint, Password, UpDown, Mic, Table }
+    FolderPlus, Key, Fingerprint, Password, UpDown, Mic, Table, Export, Globe, Archive }
 
 @Composable
 fun GlyphIcon(glyph: Glyph, tint: Color, size: Dp = 22.dp, modifier: Modifier = Modifier) {
@@ -143,6 +143,23 @@ private fun DrawScope.drawGlyph(glyph: Glyph, color: Color, s: Float) {
                 drawLine(color, p(13f, 4f), p(13f, 9f), 1.35f * s, StrokeCap.Round)
                 drawLine(color, p(10.5f, 6.5f), p(15.5f, 6.5f), 1.35f * s, StrokeCap.Round)
             }
+        }
+        Glyph.Archive -> {
+            // Apple's archive box: a lid, the box below it, a handle slot.
+            drawRoundRect(color, p(1.5f, 2.5f), androidx.compose.ui.geometry.Size(13f * s, 3.5f * s), androidx.compose.ui.geometry.CornerRadius(1.2f * s), style = line())
+            drawPath(path { m(2.7f, 6f); l(2.7f, 13.5f); l(13.3f, 13.5f); l(13.3f, 6f) }, color, style = line())
+            drawLine(color, p(6.3f, 8.8f), p(9.7f, 8.8f), 1.35f * s, StrokeCap.Round)
+        }
+        Glyph.Globe -> {
+            // A globe (web pages): circle, a meridian and the equator.
+            drawCircle(color, 6.5f * s, p(8f, 8f), style = line())
+            drawOval(color, p(5.2f, 1.5f), androidx.compose.ui.geometry.Size(5.6f * s, 13f * s), style = line())
+            drawLine(color, p(1.5f, 8f), p(14.5f, 8f), 1.35f * s, StrokeCap.Round)
+        }
+        Glyph.Export -> {
+            // Apple's export symbol: a tray with an arrow leaving upwards.
+            drawPath(path { m(5.5f, 6.5f); l(3.5f, 6.5f); l(3.5f, 14.5f); l(12.5f, 14.5f); l(12.5f, 6.5f); l(10.5f, 6.5f) }, color, style = line())
+            drawPath(path { m(8f, 10f); l(8f, 1.8f); m(5.3f, 4.3f); l(8f, 1.6f); l(10.7f, 4.3f) }, color, style = line())
         }
         Glyph.Cart -> {
             // A receipt (Kassenzettel) – a cart would suggest buying in the app.

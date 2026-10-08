@@ -13,6 +13,7 @@ from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gtk
 from . import model
 from . import smoothscroll
 from .icons import icon_menu_button
+from .i18n import _
 
 
 ACCENT = (0.90, 0.64, 0.0)
@@ -22,11 +23,11 @@ def share_label(sync, obj):
     """"nur für dich" / "geteilt mit Anna" / "von Anna geteilt"."""
     share = obj.get("share")
     if not share:
-        return "nur für dich"
+        return _("nur für dich")
     if obj.get("owner") != sync.user_id:
-        return f"von {sync.user_name(obj.get('owner'))} geteilt"
+        return _("von {person} geteilt", person=sync.user_name(obj.get('owner')))
     others = [sync.user_name(uid) for uid in sync.share_members(share) if uid != sync.user_id]
-    return "geteilt mit " + ", ".join(others) if others else "geteilt"
+    return _("geteilt mit ") + ", ".join(others) if others else "geteilt"
 
 
 class CheckCircle(Gtk.Widget):
@@ -44,7 +45,7 @@ class CheckCircle(Gtk.Widget):
         click.connect("released", self.on_click)
         self.add_controller(click)
         self.set_focusable(True)
-        self.set_tooltip_text("Abhaken")
+        self.set_tooltip_text(_("Abhaken"))
 
     def on_click(self, gesture, n_press, x, y):
         self.active = not self.active
@@ -102,14 +103,14 @@ class ItemRow(Gtk.ListBoxRow):
         if data.get("by") and data.get("by") != view.sync.user_id and view.shared:
             who = Gtk.Label(label=view.sync.user_name(data["by"])[:1])
             who.add_css_class("avatar-chip")
-            who.set_tooltip_text(f"Hinzugefügt von {view.sync.user_name(data['by'])}")
+            who.set_tooltip_text(_("Hinzugefügt von {person}", person=view.sync.user_name(data['by'])))
             box.append(who)
 
         remove = Gtk.Button(icon_name="edit-delete-symbolic", valign=Gtk.Align.CENTER)
         remove.add_css_class("flat")
         remove.add_css_class("circular")
         remove.add_css_class("item-remove")
-        remove.set_tooltip_text("Entfernen")
+        remove.set_tooltip_text(_("Entfernen"))
         remove.connect("clicked", lambda _button: view.remove(self.item_id))
         box.append(remove)
         self.set_child(box)
@@ -163,19 +164,19 @@ class ShoppingListView(Gtk.Box):
         actions.add_action(self.clear_action)
         self.insert_action_group("list", actions)
         menu = Gio.Menu()
-        menu.append("Nach Warengruppen sortieren", "list.grocery")
-        menu.append("Erledigte einblenden", "list.show-done")
+        menu.append(_("Nach Warengruppen sortieren"), "list.grocery")
+        menu.append(_("Erledigte einblenden"), "list.show-done")
         section = Gio.Menu()
-        section.append("Erledigte löschen", "list.clear-done")
+        section.append(_("Erledigte löschen"), "list.clear-done")
         menu.append_section(None, section)
-        options = icon_menu_button("more", "Optionen")
+        options = icon_menu_button("more", _("Optionen"))
         options.set_menu_model(menu)
         options.set_valign(Gtk.Align.CENTER)
         options.add_css_class("circular")
         header.append(options)
         column.append(header)
 
-        self.entry = Gtk.Entry(placeholder_text="Neuer Eintrag – z. B. „2 × Milch“")
+        self.entry = Gtk.Entry(placeholder_text=_("Neuer Eintrag – z. B. „2 × Milch“"))
         self.entry.add_css_class("add-entry")
         self.entry.set_margin_top(14)
         self.entry.set_margin_bottom(6)
@@ -186,7 +187,7 @@ class ShoppingListView(Gtk.Box):
         self.items_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         column.append(self.items_box)
 
-        self.clear_button = Gtk.Button(label="Erledigte löschen", halign=Gtk.Align.START)
+        self.clear_button = Gtk.Button(label=_("Erledigte löschen"), halign=Gtk.Align.START)
         self.clear_button.add_css_class("flat")
         self.clear_button.set_margin_top(12)
         self.clear_button.connect("clicked", lambda _button: self.clear_done())
@@ -223,7 +224,7 @@ class ShoppingListView(Gtk.Box):
         open_items = [item for item in items if not item["data"].get("done")]
         done_items = [item for item in items if item["data"].get("done")]
         where = share_label(self.sync, shopping)
-        self.subtitle.set_label(f"{len(open_items)} offen · {where}")
+        self.subtitle.set_label(_("{count} offen · {where}", count=len(open_items), where=where))
         grouped = bool(data.get("grocery"))
         self.group_action.set_state(GLib.Variant.new_boolean(grouped))
         self.clear_action.set_enabled(bool(done_items))
@@ -244,15 +245,15 @@ class ShoppingListView(Gtk.Box):
                 by_category.setdefault(category, []).append(item)
             for category in model.CATEGORY_ORDER:
                 if category in by_category:
-                    self.add_section(category, sorted(by_category[category], key=order))
+                    self.add_section(model.category_name(category), sorted(by_category[category], key=order))
         else:
             self.add_section(None, sorted(open_items, key=order))
 
         if done_items and self.show_done:
-            self.add_section(f"Erledigt ({len(done_items)})", sorted(done_items, key=lambda i: -i.get("updated", 0)))
+            self.add_section(_("Erledigt ({count})", count=len(done_items)), sorted(done_items, key=lambda i: -i.get("updated", 0)))
         self.clear_button.set_visible(bool(done_items))
         if not items:
-            hint = Gtk.Label(label="Die Liste ist leer. Tippe oben einen Eintrag ein.")
+            hint = Gtk.Label(label=_("Die Liste ist leer. Tippe oben einen Eintrag ein."))
             hint.add_css_class("dim-label")
             hint.set_margin_top(24)
             self.items_box.append(hint)

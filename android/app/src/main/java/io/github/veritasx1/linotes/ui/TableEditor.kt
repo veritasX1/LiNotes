@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +60,7 @@ fun TableEditor(block: JSONObject, onDone: (JSONObject?) -> Unit) {
     Dialog(onDismissRequest = { save() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         UseWholeScreen()
         Column(Modifier.fillMaxSize().background(colors.background).navigationBarsPadding().imePadding()) {
-            NavBar("Tabelle", null, null, actions = { TextButton("Fertig", bold = true) { save() } })
+            NavBar(tr("Tabelle"), null, null, actions = { TextButton(tr("Fertig"), bold = true) { save() } })
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(16.dp)) {
                 rows.forEachIndexed { rowIndex, row ->
                     Row {
@@ -92,22 +94,22 @@ fun TableEditor(block: JSONObject, onDone: (JSONObject?) -> Unit) {
             // Actions for the selected cell.
             Column(Modifier.fillMaxWidth().background(colors.bar).padding(vertical = 4.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TableAction("Zeile darüber") { change(rows.take(r) + listOf(List(rows[0].size) { "" }) + rows.drop(r), r to c) }
-                    TableAction("Zeile darunter") { change(rows.take(r + 1) + listOf(List(rows[0].size) { "" }) + rows.drop(r + 1), r + 1 to c) }
-                    TableAction("Zeile löschen", enabled = rows.size > 1) { change(rows.filterIndexed { i, _ -> i != r }, r to c) }
+                    TableAction(tr("Zeile darüber")) { change(rows.take(r) + listOf(List(rows[0].size) { "" }) + rows.drop(r), r to c) }
+                    TableAction(tr("Zeile darunter")) { change(rows.take(r + 1) + listOf(List(rows[0].size) { "" }) + rows.drop(r + 1), r + 1 to c) }
+                    TableAction(tr("Zeile löschen"), enabled = rows.size > 1) { change(rows.filterIndexed { i, _ -> i != r }, r to c) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TableAction("Spalte links") { change(rows.map { it.take(c) + "" + it.drop(c) }, r to c) }
-                    TableAction("Spalte rechts") { change(rows.map { it.take(c + 1) + "" + it.drop(c + 1) }, r to c + 1) }
-                    TableAction("Spalte löschen", enabled = rows[0].size > 1) { change(rows.map { line -> line.filterIndexed { j, _ -> j != c } }, r to c) }
+                    TableAction(tr("Spalte links")) { change(rows.map { it.take(c) + "" + it.drop(c) }, r to c) }
+                    TableAction(tr("Spalte rechts")) { change(rows.map { it.take(c + 1) + "" + it.drop(c + 1) }, r to c + 1) }
+                    TableAction(tr("Spalte löschen"), enabled = rows[0].size > 1) { change(rows.map { line -> line.filterIndexed { j, _ -> j != c } }, r to c) }
                 }
                 Box(Modifier.fillMaxWidth().clickable { confirmDelete = true }.padding(12.dp)) {
-                    Text("Tabelle löschen", style = Type.body, color = colors.red, modifier = Modifier.align(androidx.compose.ui.Alignment.Center))
+                    Text(tr("Tabelle löschen"), style = Type.body, color = colors.red, modifier = Modifier.align(androidx.compose.ui.Alignment.Center))
                 }
             }
         }
         if (confirmDelete) {
-            AlertDialog("Tabelle löschen?", "Die Tabelle wird aus der Notiz entfernt.", "Löschen", destructive = true,
+            AlertDialog(tr("Tabelle löschen?"), tr("Die Tabelle wird aus der Notiz entfernt."), tr("Löschen"), destructive = true,
                 onDismiss = { confirmDelete = false }) { onDone(null) }
         }
     }

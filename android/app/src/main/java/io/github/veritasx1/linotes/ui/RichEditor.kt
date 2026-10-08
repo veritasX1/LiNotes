@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -28,10 +30,14 @@ import android.text.style.MetricAffectingSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
+import kotlin.math.abs
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.MotionEvent
 import android.widget.EditText
+import io.github.veritasx1.linotes.data.LinkPreview
+import io.github.veritasx1.linotes.data.Syntax
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -44,7 +50,8 @@ val LIST_TYPES = setOf("bullet", "dash", "number", "check")
 const val PLACEHOLDER = '\u200B'
 
 /** Web addresses that become tappable links (trailing punctuation is not part of the address). */
-private val LINK = Regex("""(?:https?://|www\.)[^\s<>"']+[^\s<>"'.,;:!?)\]]""")
+// Web addresses, mail and phone links, and the way back into LiMail/LiCal (Zusammenspiel; Michelle 07.10., card 0cb30240).
+private val LINK = Regex("""(?:https?://|www\.|(?:mailto|tel):|(?:limail|lical|linotes)://)[^\s<>"']+[^\s<>"'.,;:!?)\]]""")
 
 /** How a web address looks: accent color, underlined. Not saved – found again on every change. */
 class LinkSpan(private val color: Int) : android.text.style.CharacterStyle(), android.text.style.UpdateAppearance {
@@ -59,6 +66,15 @@ class MentionSpan(val userId: Int, private val color: Int) : android.text.style.
     override fun updateDrawState(paint: TextPaint) {
         paint.color = color
         paint.isFakeBoldText = true
+    }
+}
+
+/** A footnote number (Profi-Funktion): small, raised, in the accent color; the text rides along. */
+class FootnoteSpan(val note: String, private val color: Int) : MetricAffectingSpan() {
+    override fun updateMeasureState(paint: TextPaint) { paint.textSize *= 0.72f; paint.baselineShift += (paint.ascent() * 0.45f).toInt() }
+    override fun updateDrawState(paint: TextPaint) {
+        paint.textSize *= 0.72f; paint.baselineShift += (paint.ascent() * 0.45f).toInt()
+        paint.color = color; paint.isFakeBoldText = true
     }
 }
 
@@ -78,9 +94,20 @@ class ParaSpan(
     val checked: Boolean,
     private val density: Float,
     private val colors: EditorColors,
-) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan, android.text.style.AlignmentSpan {
+) : MetricAffectingSpan(), LeadingMarginSpan, LineHeightSpan, android.text.style.AlignmentSpan, android.text.style.LineBackgroundSpan {
 
     var number = 1
+    /** Code blocks (Profi-Funktion): the language whose colors the lines get, e.g. "python". */
+    var lang: String? = null
+
+    override fun drawBackground(canvas: Canvas, paint: Paint, left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
+                                text: CharSequence, start: Int, end: Int, lineNumber: Int) {
+        if (type != "code") return
+        val saved = paint.color
+        paint.color = (colors.label and 0x00FFFFFF) or 0x14000000
+        canvas.drawRect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat(), paint)
+        paint.color = saved
+    }
     /** Paragraph alignment like Format → Text in Notes: null (left), "center", "right". */
     var align: String? = null
 
@@ -106,7 +133,7 @@ class ParaSpan(
             "title" -> { paint.textSize *= 1.75f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
             "heading" -> { paint.textSize *= 1.35f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
             "subheading" -> { paint.textSize *= 1.12f; paint.typeface = Typeface.create(paint.typeface, Typeface.BOLD) }
-            "mono" -> { paint.textSize *= 0.92f; paint.typeface = Typeface.MONOSPACE }
+            "mono", "code" -> { paint.textSize *= 0.92f; paint.typeface = Typeface.MONOSPACE }
             "quote" -> { paint.typeface = Typeface.create(paint.typeface, Typeface.ITALIC); paint.color = colors.secondary }
         }
         if (type == "check" && checked) paint.color = colors.secondary
@@ -119,6 +146,7 @@ class ParaSpan(
         fold != 0 -> (20 * density).toInt()
         type in LIST_TYPES -> ((30 + 24 * level) * density).toInt()
         type == "quote" -> (16 * density).toInt()
+        type == "code" -> (8 * density).toInt()
         else -> 0
     }
 
@@ -287,23 +315,23 @@ fun fileDetails(block: JSONObject): String {
     val amount = when {
         size >= 1024 * 1024 -> String.format(java.util.Locale.GERMANY, "%.1f MB", size / 1024.0 / 1024.0)
         size >= 1024 -> "${Math.round(size / 1024.0)} KB"
-        else -> "$size Bytes"
+        else -> tr("{size} Bytes", "size" to size)
     }
     val mime = block.optString("m")
     val name = block.optString("n")
     if (mime.startsWith("audio/") && block.has("d")) return "${AudioNotes.durationText(block.optDouble("d"))} · $amount"
     val kind = when {
-        mime == "application/pdf" -> "PDF-Dokument"
-        mime.startsWith("image/") -> "Bild"
-        mime.startsWith("audio/") -> "Audio"
-        mime.startsWith("video/") -> "Video"
-        mime.startsWith("text/") -> "Textdokument"
-        "wordprocessing" in mime || "msword" in mime || "opendocument.text" in mime -> "Textdokument"
-        "spreadsheet" in mime || "ms-excel" in mime -> "Tabelle"
-        "presentation" in mime || "powerpoint" in mime -> "Präsentation"
-        "zip" in mime -> "ZIP-Archiv"
-        '.' in name -> name.substringAfterLast('.').uppercase() + "-Datei"
-        else -> "Datei"
+        mime == "application/pdf" -> tr("PDF-Dokument")
+        mime.startsWith("image/") -> tr("Bild")
+        mime.startsWith("audio/") -> tr("Audio")
+        mime.startsWith("video/") -> tr("Video")
+        mime.startsWith("text/") -> tr("Textdokument")
+        "wordprocessing" in mime || "msword" in mime || "opendocument.text" in mime -> tr("Textdokument")
+        "spreadsheet" in mime || "ms-excel" in mime -> tr("Tabelle")
+        "presentation" in mime || "powerpoint" in mime -> tr("Präsentation")
+        "zip" in mime -> tr("ZIP-Archiv")
+        '.' in name -> tr("{ext}-Datei", "ext" to name.substringAfterLast('.').uppercase())
+        else -> tr("Datei")
     }
     return "$kind · $amount"
 }
@@ -318,6 +346,19 @@ data class EditorColors(val label: Int, val secondary: Int, val tertiary: Int, v
  * are standard spans, images are [ImageBlockSpan]s on an object character.
  */
 @SuppressLint("ViewConstructor")
+/** A code color (display only – toBlocks ignores it, so it is never stored). */
+class SyntaxSpan(val kind: String, private val dark: Boolean) : android.text.style.CharacterStyle() {
+    override fun updateDrawState(paint: TextPaint) {
+        paint.color = when (kind) {
+            "keyword" -> if (dark) 0xFFC79BFF.toInt() else 0xFF9C52E0.toInt()
+            "string" -> if (dark) 0xFF6FD39A.toInt() else 0xFF1A9452.toInt()
+            "comment" -> if (dark) 0xFF9A9AA2.toInt() else 0xFF85858C.toInt()
+            else -> if (dark) 0xFFFFB45C.toInt() else 0xFFE07A00.toInt()
+        }
+        if (kind == "comment") paint.textSkewX = -0.2f
+    }
+}
+
 class RichEditor(context: Context, private var colors: EditorColors, private val loadImage: (String, (Bitmap?) -> Unit) -> Unit) :
     EditText(context) {
 
@@ -340,6 +381,28 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     var onLinkRequested: (() -> Unit)? = null
     var onOpenNote: ((String) -> Unit)? = null
     var onOpenFile: ((JSONObject) -> Unit)? = null
+    /** A picture was tapped: the screen shows it in the quick look (900036dc). */
+    var onOpenImage: ((String) -> Unit)? = null
+    /** A recording was tapped: "toggle" (play/pause) or "seek" (with the place on the waveform, 0…1). */
+    var onAudio: ((JSONObject, String, Float) -> Unit)? = null
+    /** What the player cards show (file id → state); see [showAudio]. */
+    data class AudioView(val running: Boolean, val position: Long, val length: Long)
+    private val audioViews = HashMap<String, AudioView>()
+    /** Reads a recording's waveform in the background (set by the screen); results by file id. */
+    var loadWaveform: ((String, (FloatArray?) -> Unit) -> Unit)? = null
+    private val waveforms = HashMap<String, FloatArray>()
+    private val waveformsAsked = HashSet<String>()
+    private var objectTouch: Any? = null
+    private var downX = 0f
+    private var downY = 0f
+    /** A footnote number was tapped (edit or remove it). */
+    var onFootnote: ((FootnoteSpan) -> Unit)? = null
+    /** The footnote texts changed (reading order) – the screen lists them under the note. */
+    var onFootnotesChanged: ((List<String>) -> Unit)? = null
+    private var shownFootnotes: List<String>? = null
+
+    /** A web address was finished alone on a line (Enter or pasted): the screen may make a preview. */
+    var onLinkLine: ((String) -> Unit)? = null
     /** First page of an attached PDF for its card (null: no preview). */
     var loadFilePreview: ((JSONObject, (Bitmap?) -> Unit) -> Unit)? = null
     /** Where the pending ">>" starts, or -1. */
@@ -400,9 +463,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 busy = true
                 try {
                     handleEdit(s, insertStart, insertCount)
+                    keepFootnotesClean(s, insertStart, insertCount)
+                    renumberFootnotes(s)
+                    highlightCode(s)
                 } finally {
                     busy = false
                 }
+                checkLinkLines(s, insertStart, insertCount)
                 onEdited?.invoke()
             }
         })
@@ -413,6 +480,73 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         colors = newColors
         setTextColor(colors.label)
         load(toBlocks())
+    }
+
+    // --- link previews (web address alone on a line → card) ------------
+
+    /** After Enter (or pasting a lone address): every finished line that is just a web address. */
+    private fun checkLinkLines(text: Editable, start: Int, count: Int) {
+        val callback = onLinkLine ?: return
+        val end = (start + count).coerceAtMost(text.length)
+        val inserted = text.subSequence(start.coerceAtMost(end), end).toString()
+        val lines = mutableListOf<IntRange>()
+        if ('\n' in inserted) {
+            // Each line that a line break of this edit finished.
+            var at = start
+            while (true) {
+                val brk = text.indexOf('\n', at)
+                if (brk < 0 || brk >= end) break
+                val lineStart = text.lastIndexOf('\n', brk - 1).let { if (it < 0) 0 else it + 1 }
+                lines.add(lineStart until brk)
+                at = brk + 1
+            }
+        } else if (LinkPreview.loneUrl(inserted) != null) {
+            val lineStart = text.lastIndexOf('\n', (start - 1).coerceAtLeast(0)).let { if (it < 0 || start == 0) 0 else it + 1 }
+            lines.add(lineStart until paragraphEnd(text, start))
+        }
+        for (range in lines) {
+            if (range.isEmpty() || text.getSpans(range.first, range.last + 1, FileBlockSpan::class.java).isNotEmpty()) continue
+            LinkPreview.loneUrl(text.substring(range.first, range.last + 1))?.let { url -> post { callback(url) } }
+        }
+    }
+
+    /** The line that still holds only [url] becomes the preview card; the cursor stays where it is. */
+    fun replaceUrlLine(url: String, block: JSONObject): Boolean {
+        val text = text ?: return false
+        var lineStart = 0
+        while (lineStart <= text.length) {
+            val lineEnd = paragraphEnd(text, lineStart)
+            if (text.substring(lineStart, lineEnd).trim() == url && text.getSpans(lineStart, lineEnd, FileBlockSpan::class.java).isEmpty()) {
+                val cursor = selectionStart
+                busy = true
+                text.replace(lineStart, lineEnd, OBJECT.toString())
+                text.setSpan(FileBlockSpan(block, fileCard(block, null)), lineStart, lineStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                normalize(text)
+                busy = false
+                val shift = lineEnd - lineStart - 1
+                setSelection((if (cursor > lineStart) cursor - shift else cursor).coerceIn(0, text.length))
+                text.getSpans(lineStart, lineStart + 1, FileBlockSpan::class.java).firstOrNull()?.let { loadPreview(it) }
+                onEdited?.invoke()
+                return true
+            }
+            lineStart = lineEnd + 1
+        }
+        return false
+    }
+
+    /** Back to the plain address ("Nur als Adresse zeigen"). */
+    fun unlinkPreview(block: JSONObject) {
+        val text = text ?: return
+        val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull {
+            it.block.optString("t") == "link" && it.block.optString("u") == block.optString("u")
+        } ?: return
+        val start = text.getSpanStart(span)
+        busy = true
+        text.removeSpan(span)
+        text.replace(start, start + 1, block.optString("u"))
+        normalize(text)
+        busy = false
+        onEdited?.invoke()
     }
 
     // --- paragraphs ------------------------------------------------
@@ -479,6 +613,13 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 text.replace(paragraphStart, enterAt, OBJECT.toString())
                 text.setSpan(dividerSpan(), paragraphStart, paragraphStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 setSelection((paragraphStart + 2).coerceAtMost(text.length))
+                normalize(text)
+                return
+            }
+            if (style != null && style.type == "code" && content.isBlank()) {
+                // An empty code line ends the code block (like an empty list item ends a list).
+                text.delete(enterAt, enterAt + 1)
+                setPara(text, paragraphStart, makeSpan("body"))
                 normalize(text)
                 return
             }
@@ -562,6 +703,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
     private fun setPara(text: Editable, paragraphStart: Int, span: ParaSpan) {
         spanStartingAt(text, paragraphStart)?.let { old ->
             if (span.align == null) span.align = old.align
+            if (span.lang == null && span.type == "code") span.lang = old.lang
             text.removeSpan(old)
         }
         val end = paragraphEnd(text, paragraphStart)
@@ -599,6 +741,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         // Alignment stays with its paragraph and carries on to the one created by Enter.
         starts.forEachIndexed { index, start ->
             styles[index].align = if (enterAt >= 0 && start == enterAt + 1) enterStyle?.align else spanStartingAt(text, start)?.align
+            // Code blocks keep their language, also on the line created by Enter.
+            if (styles[index].type == "code") styles[index].lang =
+                if (enterAt >= 0 && start == enterAt + 1) enterStyle?.lang else spanStartingAt(text, start)?.lang
         }
         // Empty list items get the placeholder, everything else loses it (back to front: offsets stay valid).
         for (index in starts.indices.reversed()) {
@@ -700,6 +845,90 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         onStyleChanged?.invoke()
     }
 
+    // --- footnotes (Profi-Funktion) ---
+
+    /** Typed text never becomes part of a footnote number. */
+    private fun keepFootnotesClean(text: Editable, start: Int, count: Int) {
+        if (count <= 0) return
+        for (span in text.getSpans(start, start + count, FootnoteSpan::class.java)) {
+            val from = text.getSpanStart(span)
+            val to = text.getSpanEnd(span)
+            if (start <= from && start + count >= to) continue
+            text.removeSpan(span)
+            val number = (from until to).firstOrNull { it !in start until start + count && text[it].isDigit() } ?: continue
+            text.setSpan(span, number, number + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /** Footnote numbers follow the reading order (1, 2, 3 …). */
+    fun renumberFootnotes(text: Editable) {
+        val spans = text.getSpans(0, text.length, FootnoteSpan::class.java).sortedBy { text.getSpanStart(it) }
+        for ((index, span) in spans.withIndex().reversed()) {
+            val from = text.getSpanStart(span)
+            val to = text.getSpanEnd(span)
+            val number = (index + 1).toString()
+            if (text.substring(from, to) == number) continue
+            text.replace(from, to, number)
+            text.removeSpan(span)
+            text.setSpan(span, from, from + number.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val notes = spans.map { it.note }
+        if (notes != shownFootnotes) {
+            shownFootnotes = notes
+            post { onFootnotesChanged?.invoke(notes) }
+        }
+    }
+
+    fun insertFootnote(note: String) {
+        val text = text ?: return
+        val at = selectionStart.coerceAtLeast(0)
+        busy = true
+        text.insert(at, "0")
+        text.setSpan(FootnoteSpan(note.trim(), colors.accent), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        renumberFootnotes(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
+    /** Change the footnote's text (null: remove it). */
+    fun editFootnote(span: FootnoteSpan, note: String?) {
+        val text = text ?: return
+        val from = text.getSpanStart(span)
+        val to = text.getSpanEnd(span)
+        if (from < 0) return
+        busy = true
+        text.removeSpan(span)
+        if (note == null) text.delete(from, to) else text.setSpan(FootnoteSpan(note.trim(), colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        renumberFootnotes(text)
+        busy = false
+        onEdited?.invoke()
+    }
+
+    /** Format → Code (language), a Profi-Funktion: the selected paragraphs become a code block. */
+    fun makeCode(lang: String) {
+        val text = text ?: return
+        busy = true
+        for (start in selectedParagraphs()) setPara(text, start, makeSpan("code").also { it.lang = lang })
+        normalize(text)
+        highlightCode(text)
+        busy = false
+        onEdited?.invoke()
+        onStyleChanged?.invoke()
+    }
+
+    /** Colors keywords, strings, comments, numbers in code paragraphs – display only (SyntaxSpan is never saved). */
+    fun highlightCode(text: Editable) {
+        for (old in text.getSpans(0, text.length, SyntaxSpan::class.java)) text.removeSpan(old)
+        for (start in paragraphStarts(text)) {
+            val span = spanStartingAt(text, start) ?: continue
+            if (span.type != "code") continue
+            val end = paragraphEnd(text, start)
+            for (token in Syntax.tokens(text.substring(start, end), span.lang)) {
+                text.setSpan(SyntaxSpan(token.kind, android.graphics.Color.luminance(colors.label) > 0.5f), start + token.start, start + token.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+    }
+
     fun indent(direction: Int) {
         val text = text ?: return
         busy = true
@@ -784,11 +1013,8 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val text = text ?: return false
         if (event.eventTime - event.downTime > android.view.ViewConfiguration.getLongPressTimeout()) return false
         val offset = getOffsetForPosition(event.x, event.y)
-        text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FileBlockSpan::class.java).firstOrNull {
-            val start = text.getSpanStart(it)
-            val line = layout?.getLineForOffset(start)
-            line != null && line == layout?.getLineForVertical(event.y.toInt() - totalPaddingTop + scrollY)
-        }?.let { onOpenFile?.invoke(JSONObject(it.block.toString())); return true }
+        text.getSpans((offset - 1).coerceAtLeast(0), offset + 1, FootnoteSpan::class.java).firstOrNull()
+            ?.let { onFootnote?.invoke(it); return true }
         text.getSpans(offset, offset, NoteLinkSpan::class.java).firstOrNull {
             offset in text.getSpanStart(it) until text.getSpanEnd(it)
         }?.let { onOpenNote?.invoke(it.noteId); return true }
@@ -796,7 +1022,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val start = text.getSpanStart(link)
         val end = text.getSpanEnd(link)
         if (offset !in start until end) return false
-        val address = text.substring(start, end).let { if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it" }
+        val address = text.substring(start, end).let { if (it.startsWith("www.")) "https://$it" else it }
         return try {
             context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(address))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -806,7 +1032,70 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
     }
 
+    /** The picture or file card under the finger (and where it is drawn, in text coordinates). */
+    private fun objectAt(event: MotionEvent): Pair<ImageSpan, android.graphics.RectF>? {
+        val text = text ?: return null
+        val layout = layout ?: return null
+        val x = event.x - totalPaddingLeft + scrollX
+        val y = event.y - totalPaddingTop + scrollY
+        val line = layout.getLineForVertical(y.toInt())
+        val spans = text.getSpans(layout.getLineStart(line), layout.getLineEnd(line), ImageSpan::class.java)
+            .filter { it is FileBlockSpan || it is ImageBlockSpan }
+        for (span in spans) {
+            val start = text.getSpanStart(span)
+            if (layout.getLineForOffset(start) != line) continue
+            val bounds = span.drawable.bounds
+            val left = layout.getPrimaryHorizontal(start)
+            val bottom = layout.getLineBottom(line).toFloat()
+            val rect = android.graphics.RectF(left, bottom - bounds.height(), left + bounds.width(), bottom)
+            if (rect.contains(x, y)) return span to rect
+        }
+        return null
+    }
+
+    /** Pictures and recordings react to the finger like buttons: a tap opens/plays them, also when
+     *  pressed a little longer – the cursor does not jump in front of them (900036dc). */
+    private fun handleObjectTouch(event: MotionEvent): Boolean? {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                objectTouch = objectAt(event)?.first
+                downX = event.x
+                downY = event.y
+                // EditText gets the touch (scrolling keeps working), but no long press: that would
+                // put the cursor (and the selection handles) in front of the object.
+                if (objectTouch != null) post { cancelLongPress() }
+                return null
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+                if (objectTouch != null && (abs(event.x - downX) > slop || abs(event.y - downY) > slop)) objectTouch = null
+                else if (objectTouch != null) cancelLongPress()
+                return null
+            }
+            MotionEvent.ACTION_CANCEL -> { objectTouch = null; return null }
+            MotionEvent.ACTION_UP -> {
+                val target = objectTouch ?: return null
+                objectTouch = null
+                val (span, rect) = objectAt(event)?.takeIf { it.first === target } ?: return null
+                // Let EditText end its touch without placing the cursor.
+                onTouchEvent(MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL })
+                val x = event.x - totalPaddingLeft + scrollX - rect.left
+                val y = event.y - totalPaddingTop + scrollY - rect.top
+                when (span) {
+                    is ImageBlockSpan -> onOpenImage?.invoke(span.fileId)
+                    is FileBlockSpan -> if (AudioNotes.isAudio(span.block)) {
+                        val (action, fraction) = audioHit(span.block, x, y, rect.width())
+                        onAudio?.invoke(JSONObject(span.block.toString()), action, fraction)
+                    } else onOpenFile?.invoke(JSONObject(span.block.toString()))
+                }
+                return true
+            }
+        }
+        return null
+    }
+
     private fun handleTouch(event: MotionEvent): Boolean {
+        handleObjectTouch(event)?.let { return it }
         if (event.action != MotionEvent.ACTION_UP) return false
         if (openLinkAt(event)) return true
         val layout = layout ?: return false
@@ -917,6 +1206,30 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         return INLINE.filter { hasInline(text, it, probe) }.toSet()
     }
 
+    // --- system selection menu ----------------------------------
+
+    private var floatingMode: ActionMode? = null
+
+    /** While the format panel is open, Android's floating "Cut / Copy / Share" bar would sit on top
+     *  of its buttons. Like Apple's edit menu it stays away then; the selection itself is kept,
+     *  because the panel's styles apply to it. */
+    var selectionMenuSuppressed = false
+        set(value) {
+            field = value
+            if (value) floatingMode?.let { mode ->
+                val start = selectionStart
+                val end = selectionEnd
+                floatingMode = null
+                mode.finish()
+                if (selectionStart != start || selectionEnd != end) setSelection(start, end)
+            }
+        }
+
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
+        if (type == ActionMode.TYPE_FLOATING && selectionMenuSuppressed) return null
+        return super.startActionMode(callback, type).also { if (type == ActionMode.TYPE_FLOATING) floatingMode = it }
+    }
+
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)
         pendingInline = null
@@ -962,10 +1275,10 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (type == "divider") {
                 builder.append(OBJECT)
                 builder.setSpan(dividerSpan(), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (type == "table") {
+            } else if (type == "table" || type == "math") {
                 builder.append(OBJECT)
-                builder.setSpan(FileBlockSpan(JSONObject(block.toString()), tableCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (type == "file") {
+                builder.setSpan(FileBlockSpan(JSONObject(block.toString()), blockCard(block)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            } else if (type == "file" || type == "link") {
                 builder.append(OBJECT)
                 val span = FileBlockSpan(JSONObject(block.toString()), fileCard(block, null))
                 builder.setSpan(span, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -987,19 +1300,22 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                     val name = item.optString(2)
                     val target = io.github.veritasx1.linotes.data.Model.linkTarget(name)
                     val person = io.github.veritasx1.linotes.data.Model.mentionTarget(name)
-                    if (name !in INLINE && target == null && person == null) continue
+                    val footnote = io.github.veritasx1.linotes.data.Model.footnoteText(name)
+                    if (name !in INLINE && target == null && person == null && footnote == null) continue
                     val from = (start + item.optInt(0)).coerceIn(start, start + text.length)
                     val to = (start + item.optInt(1)).coerceIn(from, start + text.length)
                     if (to <= from) continue
-                    if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (footnote != null) builder.setSpan(FootnoteSpan(footnote, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    else if (target != null) builder.setSpan(NoteLinkSpan(target, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     else if (person != null) builder.setSpan(MentionSpan(person, colors.accent), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     else builder.setSpan(inlineSpan(name), from, to, Spanned.SPAN_EXCLUSIVE_INCLUSIVE)
                 }
             }
             if (index < list.size - 1) builder.append('\n')
-            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "table") "body" else type
+            val paraType = if (type == "image" || type == "divider" || type == "file" || type == "link" || type == "table" || type == "math") "body" else type
             val span = makeSpan(paraType, block.optInt("l"), block.optBoolean("c"))
             span.align = block.optString("a").takeIf { it == "center" || it == "right" }
+            if (paraType == "code") span.lang = block.optString("lang").takeIf { it in Syntax.LANGUAGES }
             folds[index]?.let { hidden ->
                 foldSpans.add(Triple(FoldSpan(hidden), start, builder.length))
                 span.fold = 2
@@ -1022,7 +1338,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         for ((span, start, end) in paragraphs) builder.setSpan(span, start, end, Spanned.SPAN_PARAGRAPH)
         for ((span, start, end) in foldSpans) builder.setSpan(span, start, end, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         setText(builder, BufferType.EDITABLE)
-        text?.let { markLinks(it); markFixedSpaces(it) }
+        text?.let { markLinks(it); markFixedSpaces(it); highlightCode(it); renumberFootnotes(it) }
         lineBlocks = origins
         busy = false
     }
@@ -1074,6 +1390,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             if (span != null && span.level > 0) block.put("l", span.level)
             if (span?.type == "check") block.put("c", span.checked)
             span?.align?.let { block.put("a", it) }
+            if (span?.type == "code") span.lang?.let { block.put("lang", it) }
             val fold = foldAt(text, start)?.takeIf { span?.type in FOLDABLE }
             val spans = JSONArray()
             for (name in INLINE) {
@@ -1092,6 +1409,11 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
                 val from = text.getSpanStart(mention).coerceAtLeast(start)
                 val to = text.getSpanEnd(mention).coerceAtMost(end)
                 if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.MENTION + mention.userId))
+            }
+            for (note in text.getSpans(start, end, FootnoteSpan::class.java).sortedBy { text.getSpanStart(it) }) {
+                val from = text.getSpanStart(note).coerceAtLeast(start)
+                val to = text.getSpanEnd(note).coerceAtMost(end)
+                if (to > from) spans.put(JSONArray().put(from - start).put(to - start).put(io.github.veritasx1.linotes.data.Model.FOOTNOTE + note.note))
             }
             for (link in text.getSpans(start, end, NoteLinkSpan::class.java).sortedBy { text.getSpanStart(it) }) {
                 val from = text.getSpanStart(link).coerceAtLeast(start)
@@ -1193,6 +1515,9 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         onEdited?.invoke()
     }
 
+    /** A formula (Profi-Funktion) on a line of its own; tapping it opens its source. */
+    fun insertMath(block: JSONObject) = insertTable(block)
+
     /** A table (like Apple's): shown as a grid, tapping opens the table editor. */
     fun insertTable(block: JSONObject) {
         val text = text ?: return
@@ -1204,15 +1529,17 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
             at += 1
         }
         text.insert(at, "$OBJECT\n")
-        text.setSpan(FileBlockSpan(block, tableCard(block)), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(FileBlockSpan(block, blockCard(block)), at, at + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         normalize(text)
         busy = false
         setSelection((at + 2).coerceAtMost(text.length))
         onEdited?.invoke()
     }
 
-    /** Replace a table after editing it (null: delete it with its line). */
-    fun replaceTable(old: JSONObject, new: JSONObject?) {
+    /** Replace a table or formula after editing it (null: delete it with its line). */
+    fun replaceTable(old: JSONObject, new: JSONObject?) = replaceBlock(old, new)
+
+    fun replaceBlock(old: JSONObject, new: JSONObject?) {
         val text = text ?: return
         val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull { it.block.toString() == old.toString() } ?: return
         val start = text.getSpanStart(span)
@@ -1221,11 +1548,19 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         if (new == null) {
             text.delete(start, (start + 2).coerceAtMost(text.length))
         } else {
-            text.setSpan(FileBlockSpan(new, tableCard(new)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(FileBlockSpan(new, blockCard(new)), start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         normalize(text)
         busy = false
         onEdited?.invoke()
+    }
+
+    private fun blockCard(block: JSONObject): Drawable = if (block.optString("t") == "math") mathCard(block) else tableCard(block)
+
+    /** A formula set by MathTex, a little larger than the text, centered in the line. */
+    private fun mathCard(block: JSONObject): Drawable {
+        val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 } ?: (320 * density).toInt()
+        return MathDraw.FormulaDrawable(block.optString("x"), textSize * 1.15f, colors.label, 6 * density, width)
     }
 
     private fun tableCard(block: JSONObject): Drawable {
@@ -1250,14 +1585,17 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         }
         if (rows.size > shown.size) {
             val more = TextPaint(cell).apply { color = colors.secondary }
-            canvas.drawText("… ${rows.size - shown.size} weitere Zeilen", 6 * density, height - rowHeight / 2f + cell.textSize / 3f, more)
+            canvas.drawText(tr("… {count} weitere Zeilen", "count" to (rows.size - shown.size)), 6 * density, height - rowHeight / 2f + cell.textSize / 3f, more)
         }
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
     }
 
     private fun loadPreview(span: FileBlockSpan) {
-        if (span.block.optString("m") != "application/pdf") return
-        val loader = loadFilePreview ?: return
+        val link = span.block.optString("t") == "link"
+        if (link && span.block.optString("f").isEmpty()) return
+        if (!link && span.block.optString("m") != "application/pdf") return
+        val loader: (JSONObject, (Bitmap?) -> Unit) -> Unit =
+            if (link) { block, done -> loadImage(block.optString("f"), done) } else loadFilePreview ?: return
         loader(span.block) { bitmap ->
             if (bitmap == null) return@loader
             post {
@@ -1275,6 +1613,7 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
 
     /** The card: rounded box, preview or document symbol, name and details. */
     private fun fileCard(block: JSONObject, preview: Bitmap?): Drawable {
+        if (AudioNotes.isAudio(block)) return audioCard(block, audioViews[block.optString("f")])
         val width = (width - totalPaddingLeft - totalPaddingRight).takeIf { it > 0 }?.coerceAtMost((420 * density).toInt()) ?: (320 * density).toInt()
         val height = (76 * density).toInt()
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -1285,7 +1624,24 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         canvas.drawRoundRect(box, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = density; color = (colors.label and 0x00FFFFFF) or 0x26000000 })
         val iconBox = android.graphics.RectF(12 * density, 10 * density, 56 * density, height - 10 * density)
-        if (preview != null) {
+        val link = block.optString("t") == "link"
+        if (link && preview != null) {
+            // The page's picture, cropped to fill the square (like Apple's previews).
+            val side = minOf(preview.width, preview.height)
+            val source = android.graphics.Rect((preview.width - side) / 2, (preview.height - side) / 2, (preview.width + side) / 2, (preview.height + side) / 2)
+            canvas.save()
+            val clip = android.graphics.Path().apply { addRoundRect(iconBox, 6 * density, 6 * density, android.graphics.Path.Direction.CW) }
+            canvas.clipPath(clip)
+            canvas.drawBitmap(preview, source, iconBox, Paint(Paint.FILTER_BITMAP_FLAG))
+            canvas.restore()
+        } else if (link) {
+            // No picture: a globe in the accent color.
+            val globe = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2 * density; color = colors.accent }
+            val r = minOf(iconBox.width(), iconBox.height()) / 2 - 2 * density
+            canvas.drawCircle(iconBox.centerX(), iconBox.centerY(), r, globe)
+            canvas.drawOval(android.graphics.RectF(iconBox.centerX() - r / 2.2f, iconBox.centerY() - r, iconBox.centerX() + r / 2.2f, iconBox.centerY() + r), globe)
+            canvas.drawLine(iconBox.centerX() - r, iconBox.centerY(), iconBox.centerX() + r, iconBox.centerY(), globe)
+        } else if (preview != null) {
             val scale = minOf(iconBox.width() / preview.width, iconBox.height() / preview.height)
             val w = preview.width * scale
             val h = preview.height * scale
@@ -1317,10 +1673,98 @@ class RichEditor(context: Context, private var colors: EditorColors, private val
         val maxText = width - textLeft - 12 * density
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.label; textSize = 16 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD }
         val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.secondary; textSize = 13 * resources.displayMetrics.scaledDensity }
-        val name = android.text.TextUtils.ellipsize(if (AudioNotes.isAudio(block)) "Audioaufnahme" else block.optString("n", "Datei"), title, maxText, android.text.TextUtils.TruncateAt.MIDDLE).toString()
+        val label = when {
+            link -> block.optString("n").ifEmpty { block.optString("dm") }
+            AudioNotes.isAudio(block) -> tr("Audioaufnahme")
+            else -> block.optString("n", tr("Datei"))
+        }
+        val name = android.text.TextUtils.ellipsize(label, title, maxText,
+            if (link) android.text.TextUtils.TruncateAt.END else android.text.TextUtils.TruncateAt.MIDDLE).toString()
         canvas.drawText(name, textLeft, height / 2f - 3 * density, title)
-        canvas.drawText(fileDetails(block), textLeft, height / 2f + 17 * density, sub)
+        val details = if (link) android.text.TextUtils.ellipsize(block.optString("dm"), sub, maxText, android.text.TextUtils.TruncateAt.END).toString()
+            else fileDetails(block)
+        canvas.drawText(details, textLeft, height / 2f + 17 * density, sub)
         return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
+    }
+
+    // --- recordings: a voice message bubble like in Apple's Messages (Olaf's choice of five
+    //     designs, 900036dc; HIG: filled play/pause, a tap target of 44 dp, even digits) ---------
+
+    private val waveLeft get() = 54 * density
+    private val waveWidth get() = AudioNotes.BARS * 5 * density
+
+    /** What a tap at x (bubble coordinates) does: on the waveform jump there, elsewhere play/pause. */
+    private fun audioHit(block: JSONObject, x: Float, y: Float, width: Float): Pair<String, Float> {
+        if (x >= waveLeft - 2 * density && x <= waveLeft + waveWidth + 2 * density)
+            return "seek" to ((x - waveLeft) / waveWidth).coerceIn(0f, 1f)
+        return "toggle" to 0f
+    }
+
+    private fun audioCard(block: JSONObject, view: AudioView?): Drawable {
+        val d = density
+        val fileId = block.optString("f")
+        // Readable on the accent (HIG contrast): white on the darker accent, near black on the bright one (dark mode).
+        val onAccent = if (android.graphics.Color.luminance(colors.accent) > 0.55f) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
+        val time = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = onAccent; textSize = 13 * resources.displayMetrics.scaledDensity; typeface = Typeface.DEFAULT_BOLD
+            fontFeatureSettings = "tnum"; textAlign = Paint.Align.RIGHT
+        }
+        val length = block.optDouble("d", 0.0)
+        val shown = if (view != null) AudioNotes.durationText(maxOf(0L, view.length - view.position) / 1000.0) else AudioNotes.durationText(length)
+        val timeWidth = maxOf(time.measureText("00:00"), time.measureText(shown))
+        val width = (waveLeft + waveWidth + 12 * d + timeWidth + 16 * d).toInt()
+        val height = (46 * d).toInt()
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawRoundRect(android.graphics.RectF(0f, 0f, width.toFloat(), height.toFloat()), height / 2f, height / 2f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent })
+        // Play/pause: a white circle with the symbol in the accent color.
+        val cx = 25 * d
+        val cy = height / 2f
+        canvas.drawCircle(cx, cy, 17 * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = onAccent })
+        val symbol = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.accent }
+        if (view?.running == true) {
+            canvas.drawRoundRect(cx - 5.5f * d, cy - 6.5f * d, cx - 1.8f * d, cy + 6.5f * d, 1.2f * d, 1.2f * d, symbol)
+            canvas.drawRoundRect(cx + 1.8f * d, cy - 6.5f * d, cx + 5.5f * d, cy + 6.5f * d, 1.2f * d, 1.2f * d, symbol)
+        } else {
+            canvas.drawPath(android.graphics.Path().apply {
+                moveTo(cx - 4.5f * d, cy - 7 * d); lineTo(cx + 7.5f * d, cy); lineTo(cx - 4.5f * d, cy + 7 * d); close()
+            }, symbol)
+        }
+        // The waveform, the played part brighter.
+        val peaks = waveforms[fileId] ?: FloatArray(AudioNotes.BARS) { 0.08f }
+        val fraction = if (view != null && view.length > 0) view.position.toFloat() / view.length else 0f
+        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 3 * d; strokeCap = Paint.Cap.ROUND }
+        val step = waveWidth / peaks.size
+        val waveHeight = 28 * d
+        peaks.forEachIndexed { index, value ->
+            bar.color = if ((index + 0.5f) / peaks.size <= fraction) onAccent else (onAccent and 0x00FFFFFF) or 0x73000000
+            val h = maxOf(3 * d, value * waveHeight)
+            val x = waveLeft + index * step + step / 2
+            canvas.drawLine(x, cy - h / 2 + 1.5f * d, x, cy + h / 2 - 1.5f * d, bar)
+        }
+        canvas.drawText(shown, width - 16 * d, cy + 4.5f * d, time)
+        if (fileId.isNotEmpty() && waveformsAsked.add(fileId)) loadWaveform?.invoke(fileId) { peaksRead ->
+            if (peaksRead != null) {
+                waveforms[fileId] = peaksRead
+                post { showAudio(fileId, audioViews[fileId]) }
+            }
+        }
+        return BitmapDrawable(resources, bitmap).apply { setBounds(0, 0, width, height) }
+    }
+
+    /** Show a recording's player state on its card (null: back to the plain card). */
+    fun showAudio(fileId: String, view: AudioView?) {
+        val text = text ?: return
+        if (view == null) audioViews.remove(fileId) else audioViews[fileId] = view
+        val span = text.getSpans(0, text.length, FileBlockSpan::class.java).firstOrNull { it.block.optString("f") == fileId } ?: return
+        val start = text.getSpanStart(span)
+        val end = text.getSpanEnd(span)
+        val wasBusy = busy
+        busy = true
+        text.removeSpan(span)
+        text.setSpan(FileBlockSpan(span.block, audioCard(span.block, view)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        busy = wasBusy
     }
 
     // --- images ------------------------------------------------

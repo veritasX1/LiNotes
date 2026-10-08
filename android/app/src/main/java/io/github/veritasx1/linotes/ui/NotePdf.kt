@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -30,7 +32,7 @@ object NotePdf {
     private val styles = mapOf(
         "title" to Style(20f, true, false, 8f), "heading" to Style(15f, true, false, 5f),
         "subheading" to Style(12.5f, true, false, 4f), "body" to Style(10.5f, false, false, 3f),
-        "mono" to Style(9.5f, false, false, 3f), "quote" to Style(10.5f, false, true, 3f),
+        "mono" to Style(9.5f, false, false, 3f), "quote" to Style(10.5f, false, true, 3f), "code" to Style(9.5f, false, false, 0f),
     )
     private val marks = mapOf("bullet" to "•", "dash" to "–", "number" to "", "check" to "○")
 
@@ -67,7 +69,12 @@ object NotePdf {
                     TEXT_COLORS.getValue(span.optString(2)) shr 8 and 0xFF, TEXT_COLORS.getValue(span.optString(2)) and 0xFF))
                 in FONTS -> android.text.style.TypefaceSpan(FONTS.getValue(span.optString(2)))
                 // Links to other notes look like links (accent color, underlined).
-                else -> if (span.optString(2).startsWith("n:")) {
+                // Footnote numbers: small, raised, accent color (the list follows at the end).
+                else -> if (span.optString(2).startsWith("fn:")) {
+                    result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    result.setSpan(android.text.style.RelativeSizeSpan(0.72f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    android.text.style.SuperscriptSpan()
+                } else if (span.optString(2).startsWith("n:")) {
                     result.setSpan(ForegroundColorSpan(Color.rgb(184, 125, 0)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     UnderlineSpan()
                 } else continue
@@ -93,6 +100,29 @@ object NotePdf {
                 // Attachments are listed with name and size (their content is not part of the PDF).
                 pdf.styled("📎 ${block.optString("n", "Datei")}  (${fileDetails(block)})", 10.5f, false, false, color = pdf.grey,
                     mono = false, indent = 0f, space = 6f, mark = null, markColor = Color.BLACK, bar = false)
+                numbers.clear()
+                continue
+            }
+            if (kind == "link") {
+                // A link preview: its title and the address (the address stays readable on paper).
+                val title = block.optString("n").ifEmpty { block.optString("dm") }
+                pdf.styled("🔗 $title – ${block.optString("u").ifEmpty { block.optString("x") }}", 10.5f, false, false, color = pdf.grey,
+                    mono = false, indent = 0f, space = 6f, mark = null, markColor = Color.BLACK, bar = false)
+                numbers.clear()
+                continue
+            }
+            if (kind == "math") {
+                // A formula, set like in the editor and centered (same as Ubuntu).
+                val formula = MathDraw.layout(block.optString("x"), 13.5f)
+                val available = pdf.width - 2 * pdf.margin
+                val scale = minOf(1f, available / maxOf(1f, formula.width.toFloat()))
+                pdf.need(formula.height.toFloat() * scale + 12f)
+                pdf.canvas.save()
+                pdf.canvas.translate(pdf.margin + (available - formula.width.toFloat() * scale) / 2, pdf.y + 4f)
+                pdf.canvas.scale(scale, scale)
+                MathDraw.draw(pdf.canvas, formula, 0f, 0f, Color.BLACK)
+                pdf.canvas.restore()
+                pdf.y += formula.height.toFloat() * scale + 12f
                 numbers.clear()
                 continue
             }
@@ -135,20 +165,44 @@ object NotePdf {
             val done = kind == "check" && block.optBoolean("c")
             var text = styledText(block)
             if (done) text = SpannableString(text).apply { setSpan(StrikethroughSpan(), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+            if (kind == "code") {
+                // Code with the same colors as on Ubuntu, on a tinted band (consecutive lines join up).
+                val plain = block.optString("x")
+                text = SpannableString(plain).apply {
+                    for (token in io.github.veritasx1.linotes.data.Syntax.tokens(plain, block.optString("lang"))) {
+                        val color = when (token.kind) { "keyword" -> 0xFF9C52E0.toInt(); "string" -> 0xFF1A9452.toInt(); "comment" -> 0xFF85858C.toInt(); else -> 0xFFE07A00.toInt() }
+                        setSpan(android.text.style.ForegroundColorSpan(color), token.start, token.end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                val probe = pdf.layout(if (plain.isEmpty()) " " else plain, pdf.paint(9.5f, mono = true), pdf.width - 2 * pdf.margin)
+                pdf.need(probe.height.toFloat())
+                pdf.canvas.drawRect(pdf.margin - 6, pdf.y - 1, pdf.width - pdf.margin + 6, pdf.y + probe.height + 1,
+                    android.graphics.Paint().apply { color = 0xFFF2F2F5.toInt() })
+            }
             val mark = when {
                 kind == "number" -> "${numbers[level] ?: 1}."
                 done -> "☑"
                 else -> marks[kind]
             }
             pdf.styled(text, style.size, style.bold, style.italic,
-                color = if (kind == "quote" || done) pdf.grey else Color.BLACK, mono = kind == "mono",
+                color = if (kind == "quote" || done) pdf.grey else Color.BLACK, mono = kind == "mono" || kind == "code",
                 indent = 18f * level + (if (kind in marks) 18f else 0f) + (if (kind == "quote") 14f else 0f),
                 space = style.space, mark = mark, markColor = if (kind == "check") pdf.accent else Color.BLACK, bar = kind == "quote")
+        }
+        // Footnotes and sources at the end (numbered like in the text) – the same as Ubuntu.
+        val notes = io.github.veritasx1.linotes.data.Model.footnotes(blocks)
+        if (notes.isNotEmpty()) {
+            pdf.y += 10f
+            pdf.need(30f)
+            pdf.canvas.drawRect(pdf.margin, pdf.y, pdf.margin + 120f, pdf.y + 0.8f, android.graphics.Paint().apply { color = pdf.line })
+            pdf.y += 8f
+            pdf.text(tr("Fußnoten und Quellen"), 10.5f, true, space = 4f)
+            notes.forEachIndexed { index, note -> pdf.text("${index + 1}  $note", 9.5f, space = 3f) }
         }
         pdf.finish(file)
     }
 
-    fun fileName(title: String) = title.replace(Regex("[/\\\\:*?\"<>|]"), "_").take(80).ifBlank { "Notiz" } + ".pdf"
+    fun fileName(title: String) = title.replace(Regex("[/\\\\:*?\"<>|]"), "_").take(80).ifBlank { tr("Notiz") } + ".pdf"
 
     /** The system print dialog for an already written PDF. */
     fun print(context: Context, file: File, title: String) {

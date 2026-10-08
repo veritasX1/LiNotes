@@ -4,16 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LiNotes – Notizen, Pläne und Aufgaben. Nur für dich.</title>
-<meta name="description" content="LiNotes: Notizen, Listen, Aufgaben und Pläne für Android und Ubuntu – Ende-zu-Ende verschlüsselt, auf deinem eigenen Server, ohne Werbung und ohne Tracker.">
+<meta name="description" content="LiNotes: Notizen, Listen, Aufgaben und Pläne für Android und Ubuntu. Ende-zu-Ende verschlüsselt und auf deinem eigenen Server, ohne Werbung und ohne Tracker.">
 <link rel="icon" href="linotes.svg" type="image/svg+xml">
 <link rel="stylesheet" href="site.css">
+<!--lang--><link rel="alternate" hreflang="de" href="https://lisoftware.de/linotes/"><link rel="alternate" hreflang="en" href="https://lisoftware.de/linotes/en/"><link rel="alternate" hreflang="fr" href="https://lisoftware.de/linotes/fr/">
+<style>
+.apps .wrap { position: relative; }
+.lang-switch { position: absolute; right: 22px; display: flex; gap: 12px; }
+.lang-switch a[aria-current], .lang-foot a[aria-current] { color: #fff; opacity: 1; font-weight: 600; }
+.lang-foot { display: flex; gap: 14px; justify-content: center; padding-top: 18px; font-size: 13px; }
+.lang-foot a[aria-current] { color: inherit; }
+@media (max-width: 900px) { .lang-switch { display: none; } }
+</style>
+<script>
+(function () {
+  try {
+    if (document.referrer.indexOf(location.origin) === 0) return;
+    var l = ((navigator.languages && navigator.languages[0]) || navigator.language || "").slice(0, 2).toLowerCase();
+    if (l === "de") return;
+    location.replace((l === "fr" ? "fr/" : "en/") + location.pathname.split("/").pop() + location.hash);
+  } catch (e) {}
+})();
+</script><!--/lang-->
 </head>
 <body>
 
 <div class="apps">
   <div class="wrap">
-    <a href="https://linotes.goip.de/" aria-current="page">LiNotes</a>
-    <a href="https://prevux.goip.de/">Prevux</a>
+    <a href="https://lisoftware.de/linotes/" aria-current="page">LiNotes</a>
+    <a href="https://lisoftware.de/prevux/">Prevux</a>
+    <a href="https://lisoftware.de/liboard/">LiBoard</a>
+    <a href="https://lisoftware.de/licida/">LiCida</a>
+    <a href="https://lisoftware.de/lical/">LiCal</a>
+    <a href="https://lisoftware.de/lidio/">LiDio</a>
+  <!--lang--><span class="lang-switch"><a href="./" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/" hreflang="en" lang="en">EN</a><a href="fr/" hreflang="fr" lang="fr">FR</a></span><!--/lang-->
   </div>
 </div>
 
@@ -25,6 +49,7 @@
       <a href="#plaene">Pläne</a>
       <a href="#aufgaben">Aufgaben</a>
       <a href="#sicherheit">Sicherheit</a>
+      <a href="#beispiele">Beispiele</a>
       <a href="hilfe.html">Hilfe</a>
       <a href="server.html">Eigener Server</a>
     </nav>
@@ -41,8 +66,8 @@
     <h1 class="display reveal d1">Alles, was zählt.<br><span class="gradient-text">Nur für dich.</span></h1>
     <p class="lead reveal d2">Notizen, Listen, Aufgaben und Pläne für Android und Ubuntu.<br>Ende-zu-Ende verschlüsselt. Auf deinem eigenen Server.</p>
     <div class="actions reveal d3">
-      <a class="btn" href="#laden">Kostenlos laden</a>
-      <a class="btn ghost" href="#neu">Was ist neu in 2.1</a>
+      <a class="btn" href="#laden">Laden</a>
+      <a class="btn ghost" href="#neu">Was ist neu</a>
     </div>
     <div class="hero-stage reveal">
       <div class="window"><img class="zoomable" src="img/ubuntu-01-notiz.webp" data-light="img/ubuntu-01-notiz.webp" data-dark="img/ubuntu-dark-01-notiz.webp" alt="LiNotes unter Ubuntu: Notiz „Wochenende an der Ostsee“ mit Checkliste, Tabelle und Rechnung" width="2000" height="1250"></div>
@@ -52,8 +77,8 @@
 </section>
 
 <section class="wrap center" style="padding-top: 60px; max-width: 1000px">
-  <p class="headline reveal">Schreib es auf. Plan es durch.<br><span style="color: var(--muted)">Teil es mit den Richtigen.</span></p>
-  <p class="lead reveal d1">LiNotes bringt die Einfachheit von Apples Notizen auf Android und Ubuntu – und legt deine Daten dorthin, wo sie hingehören: zu dir.</p>
+  <p class="headline reveal">Notizen wie bei Apple, auf deinem eigenen Server</p>
+  <p class="lead reveal d1">LiNotes bringt die Einfachheit von Apples Notizen auf Android und Ubuntu und speichert deine Daten verschlüsselt auf deinem eigenen Server.</p>
 </section>
 
 <!-- NOTES STORY -->
@@ -61,39 +86,39 @@
   <div class="wrap">
     <div class="section-head reveal">
       <p class="eyebrow">Notizen</p>
-      <h2 class="headline">Notizen, die mitdenken.</h2>
-      <p class="lead">Von der schnellen Idee bis zur Reiseplanung mit Budget – alles in einer Notiz.</p>
+      <h2 class="headline">Alles in einer Notiz</h2>
+      <p class="lead">Von der schnellen Idee bis zur Reiseplanung mit Budget.</p>
     </div>
     <div class="story">
       <div class="steps">
         <div class="step">
-          <h3>Schreiben wie auf Papier.<br>Nur ordentlicher.</h3>
-          <p>Titel, Überschriften, Aufzählungen, nummerierte Listen, Zitate und Checklisten mit runden Haken. Ein Fingertipp genügt – und alles sieht aus wie gesetzt.</p>
+          <h3>Formatieren</h3>
+          <p>Titel, Überschriften, Aufzählungen, nummerierte Listen, Zitate und Checklisten mit runden Haken, jeweils mit einem Fingertipp.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-02-rezept.webp" data-light="img/ubuntu-02-rezept.webp" data-dark="img/ubuntu-dark-02-rezept.webp" alt="Rezept mit Zutatenliste und Zubereitungsschritten" loading="lazy"></div>
         </div>
         <div class="step">
-          <h3>Tabellen. Direkt in der Notiz.</h3>
+          <h3>Tabellen in der Notiz</h3>
           <p>Budget, Packliste, Vergleich: Tabelle einfügen, losschreiben, mit Tab zur nächsten Zelle. Am Ende der Tabelle entsteht die neue Zeile von selbst.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-01-notiz.webp" data-light="img/ubuntu-01-notiz.webp" data-dark="img/ubuntu-dark-01-notiz.webp" alt="Notiz mit Tabelle" loading="lazy"></div>
         </div>
         <div class="step">
           <h3>Rechnen mit <code class="inline">=</code></h3>
-          <p>Tipp eine Rechnung und ein Gleichheitszeichen – LiNotes schreibt das Ergebnis dahinter. Mit Komma und Klammern, Punkt vor Strich. Ganz ohne Taschenrechner.</p>
+          <p>Tipp eine Rechnung und ein Gleichheitszeichen, und LiNotes schreibt das Ergebnis dahinter. Komma, Klammern und Punkt vor Strich werden beachtet.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-03-rechnen.webp" data-light="img/ubuntu-03-rechnen.webp" data-dark="img/ubuntu-dark-03-rechnen.webp" alt="Haushaltsbuch mit Rechnungen" loading="lazy"></div>
         </div>
         <div class="step">
-          <h3>Sprache aufnehmen.<br>PDFs anheften.</h3>
-          <p>Ein Tipp aufs Mikrofon und das Gespräch landet in der Notiz – abspielbar auf jedem Gerät. Elternbriefe, Rechnungen und Pläne hängen als PDF gleich daneben.</p>
+          <h3>Sprachaufnahmen und PDFs</h3>
+          <p>Ein Tipp aufs Mikrofon nimmt das Gespräch in der Notiz auf, abspielbar auf jedem Gerät. Elternbriefe, Rechnungen und Pläne hängen als PDF gleich daneben.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-04-audio-pdf.webp" data-light="img/ubuntu-04-audio-pdf.webp" data-dark="img/ubuntu-dark-04-audio-pdf.webp" alt="Notiz mit Audioaufnahme und PDF-Anhang" loading="lazy"></div>
         </div>
         <div class="step">
-          <h3>Aufklappen, was du brauchst.</h3>
-          <p>Lange Notizen bleiben übersichtlich: Ein Pfeil vor der Überschrift klappt den ganzen Abschnitt ein – auf dem Handy und am Rechner gleich.</p>
+          <h3>Abschnitte einklappen</h3>
+          <p>Lange Notizen bleiben übersichtlich: Ein Pfeil vor der Überschrift klappt den ganzen Abschnitt ein, auf dem Handy wie am Rechner.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-05-abschnitte.webp" data-light="img/ubuntu-05-abschnitte.webp" data-dark="img/ubuntu-dark-05-abschnitte.webp" alt="Eingeklappte Abschnitte" loading="lazy"></div>
         </div>
         <div class="step">
-          <h3>Alles auf einen Blick.</h3>
-          <p>Als Liste oder als Galerie, nach Datum oder Titel sortiert, in Ordnern und Unterordnern. Angeheftetes bleibt oben – wie du es kennst.</p>
+          <h3>Liste oder Galerie</h3>
+          <p>Als Liste oder als Galerie, nach Datum oder Titel sortiert, in Ordnern und Unterordnern. Angeheftetes bleibt oben.</p>
           <div class="mobile-shot window"><img src="img/ubuntu-06-galerie.webp" data-light="img/ubuntu-06-galerie.webp" data-dark="img/ubuntu-dark-06-galerie.webp" alt="Galerieansicht der Notizen" loading="lazy"></div>
         </div>
       </div>
@@ -115,25 +140,24 @@
 <section id="neu">
   <div class="wrap">
     <div class="section-head reveal">
-      <p class="eyebrow">Neu in 2.1</p>
-      <h2 class="headline">Und so viel mehr.</h2>
-      <p class="lead">Über zwanzig neue Funktionen – jede einzelne gemacht, damit du weniger suchst und mehr erledigst.</p>
+      <p class="eyebrow">Neu in 2.1 und 2.2</p>
+      <h2 class="headline">Weitere Funktionen</h2>
     </div>
     <div class="tiles">
-      <div class="tile reveal"><div class="icon">🔗</div><h3>Notizen verlinken</h3><p>Tipp <code class="inline">&gt;&gt;</code> und wähle eine Notiz. Der Link bleibt aktuell, auch wenn du sie umbenennst.</p></div>
-      <div class="tile reveal d1"><div class="icon">@</div><h3>Erwähnungen</h3><p>Mit <code class="inline">@Name</code> in geteilten Notizen jemanden ansprechen – die Person bekommt eine Benachrichtigung.</p></div>
-      <div class="tile reveal d2"><div class="icon">✨</div><h3>Was ist neu?</h3><p>Hat jemand eine geteilte Notiz geändert, siehst du einen Punkt und die geänderten Zeilen sind markiert.</p></div>
-      <div class="tile reveal"><div class="icon">🖍️</div><h3>Markieren in sechs Farben</h3><p>Gelb, Orange, Rosa, Lila, Mint, Blau – dazu Textfarbe, Schriftart und Ausrichtung.</p></div>
-      <div class="tile reveal d1"><div class="icon">📐</div><h3>Blocksatz und Silbentrennung</h3><p>Sauberer Satz auf dem Handy – Titel und Überschriften bleiben trotzdem ruhig.</p></div>
-      <div class="tile reveal d2"><div class="icon">🔒</div><h3>Gesperrte Notizen</h3><p>Geheimes zusätzlich verschlüsseln. Am Handy mit Fingerabdruck entsperren.</p></div>
-      <div class="tile reveal"><div class="icon">⚡</div><h3>Schnelle Notiz</h3><p>Aus der Schnelleinstellung des Handys oder per Tastenkürzel am Rechner – sofort losschreiben.</p></div>
-      <div class="tile reveal d1"><div class="icon">🖨️</div><h3>PDF und Drucken</h3><p>Jede Notiz und jeder Plan als schön gesetztes PDF – zum Teilen, Drucken oder Aushängen.</p></div>
-      <div class="tile reveal d2"><div class="icon">🪟</div><h3>Eigenes Fenster</h3><p>Notizen am Rechner per Doppelklick in einem eigenen Fenster öffnen – nebeneinander arbeiten.</p></div>
-      <div class="tile reveal wide"><div class="icon">✋</div><h3>Ziehen und Ablegen</h3><p>Notizen, Listen, Boards und Pläne einfach auf einen Ordner ziehen – am Rechner mit der Maus, am Handy mit dem Finger. Ordner lassen sich beliebig tief verschachteln.</p></div>
-      <div class="tile reveal d1"><div class="icon">⌨️</div><h3>Tastenkürzel</h3><p>Alle Kürzel auf einen Blick mit <kbd>Strg</kbd> + <kbd>?</kbd>.</p></div>
-      <div class="tile reveal"><div class="icon">📷</div><h3>Kamera</h3><p>Foto direkt in die Notiz – richtig herum, auch im Hochformat.</p></div>
-      <div class="tile reveal d1"><div class="icon">🔤</div><h3>Textgröße</h3><p>Pro Gerät einstellbar – groß am Handy, kompakt am Laptop.</p></div>
-      <div class="tile reveal d2"><div class="icon">🌐</div><h3>Links antippen</h3><p>Webadressen in Notizen sind sofort anklickbar.</p></div>
+      <div class="tile reveal"><h3>Notizen verlinken</h3><p>Tipp <code class="inline">&gt;&gt;</code> und wähle eine Notiz. Der Link bleibt aktuell, auch wenn du sie umbenennst.</p></div>
+      <div class="tile reveal d1"><h3>Erwähnungen</h3><p>Mit <code class="inline">@Name</code> sprichst du in geteilten Notizen jemanden an. Die Person bekommt eine Mitteilung.</p></div>
+      <div class="tile reveal d2"><h3>Was ist neu?</h3><p>Hat jemand eine geteilte Notiz geändert, siehst du einen Punkt und die geänderten Zeilen sind markiert.</p></div>
+      <div class="tile reveal"><h3>Markieren in sechs Farben</h3><p>Gelb, Orange, Rosa, Lila, Mint und Blau, dazu Textfarbe, Schriftart und Ausrichtung.</p></div>
+      <div class="tile reveal d1"><h3>Blocksatz und Silbentrennung</h3><p>Sauberer Satz auf dem Handy. Titel und Überschriften bleiben davon ausgenommen.</p></div>
+      <div class="tile reveal d2"><h3>Gesperrte Notizen</h3><p>Geheimes zusätzlich verschlüsseln. Am Handy mit Fingerabdruck entsperren.</p></div>
+      <div class="tile reveal"><h3>Schnelle Notiz</h3><p>Aus der Schnelleinstellung des Handys oder per Tastenkürzel am Rechner, und du schreibst sofort los.</p></div>
+      <div class="tile reveal d1"><h3>PDF und Drucken</h3><p>Jede Notiz und jeder Plan als gesetztes PDF zum Teilen, Drucken oder Aushängen.</p></div>
+      <div class="tile reveal d2"><h3>Eigenes Fenster</h3><p>Am Rechner öffnet ein Doppelklick eine Notiz in einem eigenen Fenster, so arbeitest du nebeneinander.</p></div>
+      <div class="tile reveal wide"><h3>Ziehen und Ablegen</h3><p>Notizen, Listen, Boards und Pläne ziehst du auf einen Ordner, am Rechner mit der Maus, am Handy mit dem Finger. Ordner lassen sich beliebig tief verschachteln.</p></div>
+      <div class="tile reveal d1"><h3>Tastenkürzel</h3><p>Alle Kürzel auf einen Blick mit <kbd>Strg</kbd> + <kbd>?</kbd>.</p></div>
+      <div class="tile reveal"><h3>Kamera</h3><p>Fotos landen direkt und richtig herum in der Notiz, auch im Hochformat.</p></div>
+      <div class="tile reveal d1"><h3>Textgröße</h3><p>Pro Gerät einstellbar, etwa groß am Handy und kompakt am Laptop.</p></div>
+      <div class="tile reveal d2"><h3>Links antippen</h3><p>Webadressen in Notizen lassen sich direkt öffnen.</p></div>
     </div>
   </div>
 </section>
@@ -143,14 +167,14 @@
   <div class="wrap">
     <div class="section-head reveal">
       <p class="eyebrow">Neu: Pläne</p>
-      <h2 class="headline">Ein Plan für alles.</h2>
-      <p class="lead">Putzplan, Stundenplan, Dienstplan oder Projekt – wähle eine Vorlage und leg los. Heute ist immer markiert.</p>
+      <h2 class="headline">Vorlagen für Pläne</h2>
+      <p class="lead">Für Putzplan, Stundenplan, Dienstplan oder Projekt gibt es eine Vorlage. Der heutige Tag ist immer markiert.</p>
     </div>
     <div class="center reveal">
       <div class="segmented" data-showcase="#plan-showcase">
         <button class="on" data-win="img/ubuntu-09-putzplan.webp|img/ubuntu-dark-09-putzplan.webp" data-phone="img/android-i-putzplan.webp|img/android-dark-i-putzplan.webp" data-caption="Putzplan mit Rotation: Die Namen rücken jede Woche eine Zeile weiter. Wer im Urlaub ist, bekommt einfach einen eigenen Eintrag.">Putzplan</button>
-        <button data-win="img/ubuntu-10-stundenplan.webp|img/ubuntu-dark-10-stundenplan.webp" data-phone="img/android-h-plaene.webp|img/android-dark-h-plaene.webp" data-caption="Stundenplan Mo–Fr mit farbigen Fächern – heute ist hervorgehoben.">Stundenplan</button>
-        <button data-win="img/ubuntu-12-dienstplan.webp|img/ubuntu-dark-12-dienstplan.webp" data-phone="img/android-k-dienstplan.webp|img/android-dark-k-dienstplan.webp" data-caption="Dienstplan mit Früh-, Spät- und Nachtschicht in Farbe – auf einen Blick, wer wann dran ist.">Dienstplan</button>
+        <button data-win="img/ubuntu-10-stundenplan.webp|img/ubuntu-dark-10-stundenplan.webp" data-phone="img/android-h-plaene.webp|img/android-dark-h-plaene.webp" data-caption="Stundenplan Mo–Fr mit farbigen Fächern, der heutige Tag ist hervorgehoben.">Stundenplan</button>
+        <button data-win="img/ubuntu-12-dienstplan.webp|img/ubuntu-dark-12-dienstplan.webp" data-phone="img/android-k-dienstplan.webp|img/android-dark-k-dienstplan.webp" data-caption="Dienstplan mit Früh-, Spät- und Nachtschicht in Farbe. Man sieht sofort, wer wann dran ist.">Dienstplan</button>
         <button data-win="img/ubuntu-11-projektplan.webp|img/ubuntu-dark-11-projektplan.webp" data-phone="img/android-j-projektplan.webp|img/android-dark-j-projektplan.webp" data-caption="Projektplan als Zeitstrahl: Aufgaben als Balken, Meilensteine als Raute, die rote Linie ist heute.">Projektplan</button>
       </div>
     </div>
@@ -162,9 +186,9 @@
       <p class="caption" data-slot="caption">Putzplan mit Rotation: Die Namen rücken jede Woche eine Zeile weiter. Wer im Urlaub ist, bekommt einfach einen eigenen Eintrag.</p>
     </div>
     <div class="tiles" style="margin-top: 40px">
-      <div class="tile reveal"><div class="icon">🔁</div><h3>Rotation</h3><p>Für Putz- und Dienstpläne: einmal Namen eintragen, LiNotes verteilt Woche für Woche neu.</p></div>
-      <div class="tile reveal d1"><div class="icon">🗓️</div><h3>Spalten nach Wunsch</h3><p>Freie Spalten, Wochentage, einzelne Tage oder Kalenderwochen.</p></div>
-      <div class="tile reveal d2"><div class="icon">📄</div><h3>Zum Aushängen</h3><p>Als PDF im Querformat – für Kühlschrank, Stationszimmer oder Vereinsheim.</p></div>
+      <div class="tile reveal"><h3>Rotation</h3><p>Für Putz- und Dienstpläne: einmal Namen eintragen, LiNotes verteilt Woche für Woche neu.</p></div>
+      <div class="tile reveal d1"><h3>Spalten nach Wunsch</h3><p>Freie Spalten, Wochentage, einzelne Tage oder Kalenderwochen.</p></div>
+      <div class="tile reveal d2"><h3>Zum Aushängen</h3><p>Als PDF im Querformat, etwa für Kühlschrank, Stationszimmer oder Vereinsheim.</p></div>
     </div>
   </div>
 </section>
@@ -175,12 +199,12 @@
     <div class="split">
       <div class="reveal">
         <p class="eyebrow">Aufgaben</p>
-        <h2 class="headline">Was ansteht.<br>Was erledigt ist.</h2>
-        <p class="lead">Boards mit Spalten, Farben, Prioritäten und Fälligkeit. Gemeinsam mit Familie oder Team – was einer verschiebt, sehen alle sofort.</p>
+        <h2 class="headline">Aufgaben im Board</h2>
+        <p class="lead">Boards mit Spalten, Farben, Prioritäten und Fälligkeit. Gemeinsam mit Familie oder Team: Was einer verschiebt, sehen alle sofort.</p>
         <ul class="checks">
           <li><b>Karten ziehen</b> von „Offen“ über „In Arbeit“ nach „Erledigt“.</li>
           <li><b>Priorität</b> mit einem, zwei oder drei Ausrufezeichen.</li>
-          <li><b>Bericht als PDF oder CSV</b> – für die Ablage oder die Tabellenkalkulation.</li>
+          <li><b>Bericht als PDF oder CSV</b> für die Ablage oder die Tabellenkalkulation.</li>
         </ul>
       </div>
       <div class="window reveal d1"><img class="zoomable" src="img/ubuntu-08-board.webp" data-light="img/ubuntu-08-board.webp" data-dark="img/ubuntu-dark-08-board.webp" alt="Aufgaben-Board unter Ubuntu" loading="lazy"></div>
@@ -192,29 +216,56 @@
   <div class="wrap">
     <div class="section-head reveal">
       <p class="eyebrow">Entwicklungsprojekte</p>
-      <h2 class="headline">Bereit für die Serie.</h2>
-      <p class="lead">Ein Board wird mit einem Klick zum Entwicklungsprojekt: Karten-IDs, Statusverlauf, Auswirkungsanalyse, Verifikation, Version und verknüpfte Commits – bis zur Traceability-Matrix auf Knopfdruck.</p>
+      <h2 class="headline">Vom Change Request bis zur Freigabe</h2>
+      <p class="lead">Ein Board wird mit einem Klick zum Entwicklungsprojekt: Karten-IDs, Statusverlauf, Auswirkungsanalyse, Verifikation, Version und verknüpfte Commits. Die Traceability-Matrix entsteht auf Knopfdruck.</p>
     </div>
     <div class="window reveal"><img class="zoomable" src="img/ubuntu-13-entwicklung.webp" alt="Entwicklungsprojekt „Spurhalteassistent LKA – Steuergerät“ mit den Spalten CR, Analyse, Umsetzung, Verifikation und Freigegeben" loading="lazy"></div>
     <p class="center" style="color: var(--muted); font-size: 14px; margin-top: 14px">Beispiel: ein fiktives Automotive-Projekt (Spurhalteassistent) mit ASPICE-artigem Ablauf.</p>
     <div class="split" style="margin-top: 70px">
       <div class="window reveal"><img class="zoomable" src="img/ubuntu-14-karte.webp" alt="Change Request mit Auswirkungsanalyse nach ISO 26262" loading="lazy"></div>
       <div class="reveal d1">
-        <h3 class="title">Jeder Change Request.<br>Lückenlos nachvollziehbar.</h3>
+        <h3 class="title">Jeder Change Request nachvollziehbar</h3>
         <ul class="checks">
-          <li><b>Auswirkungsanalyse</b> – was ist betroffen, welches Sicherheitsziel, welche ASIL-Einstufung.</li>
-          <li><b>Verifikation</b> – SIL-, HIL- und Fahrversuch-Nachweise als Dateien direkt an der Karte, mit Prüfsumme im Bericht.</li>
-          <li><b>Commits automatisch</b> – Karten-ID in die Commit-Nachricht, und LiNotes verknüpft.</li>
-          <li><b>Statusverlauf</b> – wann ging die Karte von der Analyse in die Umsetzung, und durch wen.</li>
+          <li><b>Auswirkungsanalyse:</b> was ist betroffen, welches Sicherheitsziel, welche ASIL-Einstufung.</li>
+          <li><b>Verifikation:</b> SIL-, HIL- und Fahrversuch-Nachweise als Dateien direkt an der Karte, mit Prüfsumme im Bericht.</li>
+          <li><b>Commits automatisch:</b> Steht die Karten-ID in der Commit-Nachricht, verknüpft LiNotes beides.</li>
+          <li><b>Statusverlauf:</b> wann die Karte von der Analyse in die Umsetzung ging, und durch wen.</li>
         </ul>
       </div>
     </div>
     <div class="split reverse" style="margin-top: 70px">
       <div class="window reveal" style="background: #fff"><img class="zoomable" src="img/ubuntu-15-bericht-seite-1.webp" alt="Traceability-Matrix als PDF-Bericht" loading="lazy"></div>
       <div class="reveal d1">
-        <h3 class="title">Die Traceability-Matrix.<br>In einer Sekunde.</h3>
-        <p class="lead">Rechtsklick auf das Board, „Bericht exportieren“ – fertig ist der Nachweis mit Matrix und Detailseiten für jede Karte. Als PDF fürs Audit oder als CSV für die Weiterverarbeitung.</p>
+        <h3 class="title">Die Traceability-Matrix</h3>
+        <p class="lead">Ein Rechtsklick auf das Board und „Bericht exportieren“ erzeugen den Nachweis mit Matrix und Detailseiten für jede Karte, als PDF fürs Audit oder als CSV für die Weiterverarbeitung.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- EXAMPLES -->
+<section id="beispiele">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">Beispiele</p>
+      <h2 class="headline">Zwei Beispielprojekte</h2>
+      <p class="lead">Zwei durchgespielte Beispiele mit Bildern aus der App.</p>
+    </div>
+    <div class="downloads two">
+      <a class="download reveal" href="beispiel-automotive.html" style="color: inherit; text-decoration: none">
+        <div class="window" style="margin-bottom: 20px"><img src="img/beispiele/a4-systemboard.webp" data-light="img/beispiele/a4-systemboard.webp" data-dark="img/beispiele/dark-a4-systemboard.webp" alt="" loading="lazy"></div>
+        <h3>ASIL-D-Projekt</h3>
+        <div class="meta">Automotive · ISO 26262 · Automotive SPICE</div>
+        <p class="grow" style="color: var(--muted)">Elektromechanische Bremse mit Hauptrechner ASIL C(D) und Safety-Monitor ASIL A(D): aufbauen, steuern, nachweisen, freigeben. Dazu, was LiNotes von den Normen abdeckt.</p>
+        <span class="btn" style="align-self: flex-start">Ansehen</span>
+      </a>
+      <a class="download reveal d1" href="beispiel-ki.html" style="color: inherit; text-decoration: none">
+        <div class="window" style="margin-bottom: 20px"><img src="img/beispiele/k2-board.webp" data-light="img/beispiele/k2-board.webp" data-dark="img/beispiele/dark-k2-board.webp" alt="" loading="lazy"></div>
+        <h3>Entwickeln mit KI</h3>
+        <div class="meta">Kanban · Teams · Anleitung</div>
+        <p class="grow" style="color: var(--muted)">Die KI als eingeladenes Teammitglied am Board, allein, als Entwickler oder als Tester. In LiNotes selbst steckt keine KI.</p>
+        <span class="btn" style="align-self: flex-start">Ansehen</span>
+      </a>
     </div>
   </div>
 </section>
@@ -225,8 +276,8 @@
     <div class="split reverse">
       <div class="reveal">
         <p class="eyebrow">Listen</p>
-        <h2 class="headline">Einkaufen,<br>ohne zu suchen.</h2>
-        <p class="lead">Einträge sortieren sich von selbst nach Warengruppe. Wer etwas in den Wagen legt, hakt es ab – und alle anderen sehen es sofort.</p>
+        <h2 class="headline">Einkaufslisten nach Warengruppe</h2>
+        <p class="lead">Einträge sortieren sich von selbst nach Warengruppe. Wer etwas in den Wagen legt, hakt es ab, und alle anderen sehen es sofort.</p>
       </div>
       <div class="duo reveal d1">
         <div class="window"><img class="zoomable" src="img/ubuntu-07-liste.webp" data-light="img/ubuntu-07-liste.webp" data-dark="img/ubuntu-dark-07-liste.webp" alt="Einkaufsliste unter Ubuntu" loading="lazy"></div>
@@ -240,11 +291,11 @@
 <section class="alt">
   <div class="wrap section-head reveal" style="margin-bottom: 30px">
     <p class="eyebrow">Android</p>
-    <h2 class="headline">Fühlt sich an wie zu Hause.</h2>
-    <p class="lead">Gestaltet nach Apples Richtlinien: große Titel, klare Listen, Tab-Leiste unten – mit hellem und dunklem Design.</p>
+    <h2 class="headline">Auf dem Handy</h2>
+    <p class="lead">Gestaltet nach Apples Richtlinien, mit großen Titeln, klaren Listen und der Tab-Leiste unten, hell und dunkel.</p>
   </div>
   <div class="carousel" id="phones">
-    <figure><div class="phone"><img src="img/android-a-ordner.webp" data-light="img/android-a-ordner.webp" data-dark="img/android-dark-a-ordner.webp" alt="" loading="lazy"></div><figcaption>Ordner<span>Alles an seinem Platz</span></figcaption></figure>
+    <figure><div class="phone"><img src="img/android-a-ordner.webp" data-light="img/android-a-ordner.webp" data-dark="img/android-dark-a-ordner.webp" alt="" loading="lazy"></div><figcaption>Ordner<span>Ordner und Unterordner</span></figcaption></figure>
     <figure><div class="phone"><img src="img/android-c-notiz.webp" data-light="img/android-c-notiz.webp" data-dark="img/android-dark-c-notiz.webp" alt="" loading="lazy"></div><figcaption>Notiz<span>Mit Tabelle und Rechnung</span></figcaption></figure>
     <figure><div class="phone"><img src="img/android-d-rezept.webp" data-light="img/android-d-rezept.webp" data-dark="img/android-dark-d-rezept.webp" alt="" loading="lazy"></div><figcaption>Rezept<span>Abschnitte einklappen</span></figcaption></figure>
     <figure><div class="phone"><img src="img/android-e-audio.webp" data-light="img/android-e-audio.webp" data-dark="img/android-dark-e-audio.webp" alt="" loading="lazy"></div><figcaption>Audio<span>Aufnehmen und abspielen</span></figcaption></figure>
@@ -261,19 +312,19 @@
   <div class="wrap">
     <div class="section-head reveal">
       <p class="eyebrow">Sicherheit</p>
-      <h2 class="headline">Deine Notizen<br>bleiben bei dir.</h2>
-      <p class="lead">Niemand liest mit – kein Konzern und auch nicht, wer den Server betreibt.</p>
+      <h2 class="headline">Ende-zu-Ende verschlüsselt</h2>
+      <p class="lead">Lesen können nur du und die Personen, mit denen du teilst. Auch wer den Server betreibt, kann es nicht.</p>
     </div>
     <div class="facts">
       <div class="reveal"><div class="num gradient-text">AES-256</div><div class="lbl">Ende-zu-Ende-Verschlüsselung auf deinem Gerät</div></div>
       <div class="reveal d1"><div class="num gradient-text">0</div><div class="lbl">Tracker, Werbung, Statistik-Dienste</div></div>
-      <div class="reveal d2"><div class="num gradient-text">0</div><div class="lbl">Passwörter, die jemand erraten könnte</div></div>
-      <div class="reveal d3"><div class="num gradient-text">100 %</div><div class="lbl">dein eigener Server – oder ganz ohne</div></div>
+      <div class="reveal d2"><div class="num gradient-text">0</div><div class="lbl">Passwörter für deinen Account</div></div>
+      <div class="reveal d3"><div class="num gradient-text">100 %</div><div class="lbl">dein eigener Server oder ganz ohne</div></div>
     </div>
     <div class="tiles" style="margin-top: 60px">
-      <div class="tile reveal"><div class="icon">🔐</div><h3>Auch der Betreiber nicht</h3><p>Notizen, Listen, Pläne, Ordnernamen, Bilder und Audio werden verschlüsselt, bevor sie dein Gerät verlassen. Der Server sieht nur unlesbare Daten.</p></div>
-      <div class="tile reveal d1"><div class="icon">🤝</div><h3>Verifizierte Personen</h3><p>Bevor ihr teilt, bestätigt ihr euch einmal per Code oder QR-Code. So kann niemand einen falschen Schlüssel unterschieben.</p></div>
-      <div class="tile reveal d2"><div class="icon">📱</div><h3>Geräte wie bei Signal</h3><p>Neues Gerät? Sechsstelligen Code eintippen oder QR-Code scannen – fertig.</p></div>
+      <div class="tile reveal"><h3>Auch der Betreiber nicht</h3><p>Notizen, Listen, Pläne, Ordnernamen, Bilder und Audio werden verschlüsselt, bevor sie dein Gerät verlassen. Der Server sieht nur unlesbare Daten.</p></div>
+      <div class="tile reveal d1"><h3>Verifizierte Personen</h3><p>Bevor ihr teilt, bestätigt ihr euch einmal per Code oder QR-Code. So kann niemand einen falschen Schlüssel unterschieben.</p></div>
+      <div class="tile reveal d2"><h3>Geräte wie bei Signal</h3><p>Ein neues Gerät meldest du mit einem sechsstelligen Code oder einem QR-Code an.</p></div>
     </div>
   </div>
 </section>
@@ -283,19 +334,19 @@
   <div class="wrap">
     <div class="section-head reveal">
       <p class="eyebrow">Laden</p>
-      <h2 class="headline">Leg los. Kostenlos.</h2>
-      <p class="lead">Version 2.2.0 für Android und Ubuntu – mit oder ohne eigenen Server.</p>
+      <h2 class="headline">Herunterladen</h2>
+      <p class="lead">Kostenlos, Version 2.2.1 für Android und Ubuntu, mit oder ohne eigenen Server.</p>
     </div>
     <div class="downloads">
       <div class="download reveal">
         <h3>Android</h3>
         <div class="meta">Ab Android 8 · rund 10 MB</div>
         <div class="grow">
-          <p>Am bequemsten über F-Droid – dann kommen Updates automatisch.</p>
+          <p>Am bequemsten über F-Droid, dann kommen Updates automatisch.</p>
           <a href="fdroidrepos://volkskamera.goip.de/fdroid/repo?fingerprint=8DA9DEF44C65856A1B098DB7BF876D48514997EF17C7256E23E91EAC6C486500">Quelle in F-Droid hinzufügen ›</a>
           <img class="qr" src="fdroid-qr.svg" alt="QR-Code der F-Droid-Paketquelle">
         </div>
-        <a class="btn" href="download/LiNotes-2.2.0.apk">APK laden</a>
+        <a class="btn" href="download/LiNotes-2.2.1.apk">APK laden</a>
         <details><summary>Fingerabdrücke</summary>
           <p>Paketquelle: <code style="word-break: break-all">8DA9DEF44C65856A1B098DB7BF876D48514997EF17C7256E23E91EAC6C486500</code></p>
           <p>App-Signatur (SHA-256): <code style="word-break: break-all">4673c3322dbd4ebbde9746b3f3fe5ccbb06414147797089a394c417b1f0f0819</code></p>
@@ -303,31 +354,30 @@
       </div>
       <div class="download reveal d1">
         <h3>Ubuntu</h3>
-        <div class="meta">Ubuntu 26.04 und andere Systeme mit GTK 4 und libadwaita</div>
+        <div class="meta">Ubuntu 26.04 und neuer, andere Systeme mit GTK 4 und libadwaita 1.8</div>
         <div class="grow">
           <div class="terminal" data-copy="sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 python3-cryptography gir1.2-gstreamer-1.0 gstreamer1.0-plugins-good poppler-utils
-wget https://linotes.goip.de/download/linotes-ubuntu-2.2.0.tar.gz
-tar xzf linotes-ubuntu-2.2.0.tar.gz -C ~/.local/share
+wget https://lisoftware.de/linotes/download/linotes-ubuntu-2.2.1.tar.gz
+tar xzf linotes-ubuntu-2.2.1.tar.gz -C ~/.local/share
 ~/.local/share/linotes/install.sh"><div class="bar"><i></i><i></i><i></i><span>Terminal</span></div><pre><span class="p">$</span> sudo apt install python3-gi gir1.2-gtk-4.0 \
     gir1.2-adw-1 gir1.2-secret-1 python3-cryptography \
     gir1.2-gstreamer-1.0 gstreamer1.0-plugins-good poppler-utils
-<span class="p">$</span> wget https://linotes.goip.de/download/linotes-ubuntu-2.2.0.tar.gz
-<span class="p">$</span> tar xzf linotes-ubuntu-2.2.0.tar.gz -C ~/.local/share
+<span class="p">$</span> wget https://lisoftware.de/linotes/download/linotes-ubuntu-2.2.1.tar.gz
+<span class="p">$</span> tar xzf linotes-ubuntu-2.2.1.tar.gz -C ~/.local/share
 <span class="p">$</span> ~/.local/share/linotes/install.sh</pre></div>
         </div>
-        <a class="btn" href="download/linotes-ubuntu-2.2.0.tar.gz">Paket laden</a>
+        <a class="btn" href="download/linotes-ubuntu-2.2.1.tar.gz">Paket laden</a>
       </div>
       <div class="download reveal d2">
         <h3>Eigener Server</h3>
         <div class="meta">Raspberry Pi, Debian, Ubuntu</div>
         <div class="grow">
           <p>Ein Befehl richtet alles ein: Dienst, HTTPS-Zertifikat, nächtliche Sicherung und deinen ersten Einladungscode.</p>
-          <p>Ohne Server? Wähle beim ersten Start „Ohne Server nutzen“ – einen Server kannst du später jederzeit eintragen.</p>
+          <p>Ohne Server wählst du beim ersten Start „Ohne Server nutzen“. Einen Server kannst du später jederzeit eintragen.</p>
         </div>
         <a class="btn" href="server.html">Zur Anleitung</a>
       </div>
     </div>
-    <p class="center reveal" style="margin-top: 50px; font-size: 19px; font-weight: 600">Entwickelt von Olaf Winkler in Schleswig-Holstein.</p>
     <p class="center" style="margin-top: 10px; color: var(--muted); font-size: 15px">Prüfsummen: <a href="download/SHA256SUMS">SHA256SUMS</a> · Quelltext und alle Versionen auf <a href="https://github.com/veritasX1/LiNotes">GitHub</a> · Fragen? Die <a href="hilfe.html">Hilfe</a> zeigt jede Funktion Schritt für Schritt.</p>
   </div>
 </section>
@@ -337,16 +387,16 @@ tar xzf linotes-ubuntu-2.2.0.tar.gz -C ~/.local/share
 <footer>
   <div class="wrap made">
     <img src="linotes.svg" alt="" width="34" height="34">
-    <p><b>Entwickelt in Schleswig-Holstein.</b><br>Von Olaf Winkler – zwischen Nord- und Ostsee.</p>
+    <p>Ein privates, nichtkommerzielles Projekt von Olaf Winkler aus Schleswig-Holstein.</p>
   </div>
   <div class="wrap cols">
     <div>
       <h4>LiNotes</h4>
-      <p>Ein privates, nichtkommerzielles Projekt von Olaf Winkler aus Schleswig-Holstein – entstanden für die eigene Familie.</p>
+      <p>Notizen, Listen, Aufgaben und Pläne, zuerst für eine Familie entstanden.</p>
       <p><a href="hilfe.html">Hilfe</a> · <a href="server.html">Eigener Server</a></p>
     </div>
     <div>
-      <h4>Offener Quelltext</h4><p>Jede Zeile von LiNotes ist einsehbar: <a href="https://github.com/veritasX1/LiNotes">github.com/veritasX1/LiNotes</a> – mit allen Versionen zum Herunterladen. Freie Software unter der <a href="https://github.com/veritasX1/LiNotes/blob/main/LICENSE">GPL-3.0</a>.</p>
+      <h4>Offener Quelltext</h4><p>Der vollständige Quelltext von LiNotes liegt auf <a href="https://github.com/veritasX1/LiNotes">github.com/veritasX1/LiNotes</a>, mit allen Versionen zum Herunterladen. Freie Software unter der <a href="https://github.com/veritasX1/LiNotes/blob/main/LICENSE">GPL-3.0</a>.</p>
       <h4 style="margin-top: 14px">Datenschutz dieser Seite</h4>
       <p>Keine Cookies, keine Inhalte von fremden Servern, keine Zugriffsprotokolle. Das JavaScript dieser Seite läuft nur in deinem Browser und sendet nichts.</p>
     </div>
@@ -355,6 +405,7 @@ tar xzf linotes-ubuntu-2.2.0.tar.gz -C ~/.local/share
       <p>LiNotes ist ein unabhängiges Projekt und steht in keiner Verbindung zu Apple Inc. „Notizen“ ist eine Bezeichnung von Apple Inc. Die gezeigten Inhalte sind Beispiele.</p>
     </div>
   </div>
+<!--lang--><div class="wrap lang-foot"><a href="./" hreflang="de" lang="de" aria-current="true">DE</a><a href="en/" hreflang="en" lang="en">EN</a><a href="fr/" hreflang="fr" lang="fr">FR</a></div><!--/lang-->
 </footer>
 
 <script src="site.js"></script>
