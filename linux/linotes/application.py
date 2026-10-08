@@ -119,9 +119,9 @@ class LiNotesApplication(Adw.Application):
             texts = data["texts"]
             for lib in data["ubuntu"]:
                 if lib["text"] and texts.get(lib["text"], "").strip():
-                    dialog.add_legal_section(lib["name"], f"{lib['version']} · {lib['license']}", Gtk.License.CUSTOM, GLib.markup_escape_text(texts[lib["text"]]))
+                    dialog.add_legal_section(lib["name"], " · ".join(part for part in (lib["version"], lib["license"]) if part), Gtk.License.CUSTOM, GLib.markup_escape_text(texts[lib["text"]]))
                 else:
-                    dialog.add_legal_section(lib["name"], f"{lib['version']} · {lib['license']}", Gtk.License.UNKNOWN, None)
+                    dialog.add_legal_section(lib["name"], " · ".join(part for part in (lib["version"], lib["license"]) if part), Gtk.License.UNKNOWN, None)
         dialog.present(self.get_active_window())
 
 

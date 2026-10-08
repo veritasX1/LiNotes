@@ -8,7 +8,7 @@
  "ubuntu": [
   {
    "name": "QR Code generator library (Project Nayuki)",
-   "version": "–",
+   "version": "",
    "license": "MIT",
    "text": "qrcodegen",
    "use": "QR-Codes zum Teilen und Anmelden (mitgeliefert)"
