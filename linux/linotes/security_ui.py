@@ -764,17 +764,17 @@ def help_pictures(title):
 
 
 def show_help(parent):
-    dialog = Adw.Dialog(title=_("Hilfe"))
+    # Wie in LiMail und LiCal (card 0c038014): Lupe oben links durchsucht die Einträge, geschlossene Einträge mit „›“
+    dialog = Adw.PreferencesDialog(title=_("Hilfe"), search_enabled=True)
     dialog.set_content_width(680)  # room for the screenshots
     dialog.set_content_height(760)
-    view = Adw.ToolbarView()
-    view.add_top_bar(Adw.HeaderBar())
-    page_widget = Adw.PreferencesPage()
+    page_widget = Adw.PreferencesPage(title=_("Hilfe"), icon_name="help-browser-symbolic")
     for section, entries in HELP:
         group = Adw.PreferencesGroup(title=section)
         for title, text in entries:
             row = Adw.ExpanderRow(title=title)
-            label = Gtk.Label(label=text, wrap=True, xalign=0)
+            row.add_css_class("linotes-help-entry")  # css_classes= würde „expander“/„empty“ von libadwaita löschen
+            label = Gtk.Label(label=text, wrap=True, xalign=0, selectable=True)
             label.set_margin_top(10)
             label.set_margin_bottom(10)
             label.set_margin_start(12)
@@ -799,6 +799,6 @@ def show_help(parent):
             row.add_row(Adw.PreferencesRow(child=box, activatable=False))
             group.add(row)
         page_widget.add(group)
-    view.set_content(page_widget)
-    dialog.set_child(view)
+    dialog.add(page_widget)
     dialog.present(parent)
+    return dialog
