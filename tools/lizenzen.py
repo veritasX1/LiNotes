@@ -18,7 +18,7 @@ LINOTES = ROOT / "linux" / "linotes"
 
 # Name, Version, Lizenz (SPDX), Text-Schlüssel ("" = kein Text, Systempaket), Verwendung
 SHIPPED = [
-    ("QR Code generator library (Project Nayuki)", "–", "MIT", "qrcodegen", "QR-Codes zum Teilen und Anmelden (mitgeliefert)"),
+    ("QR Code generator library (Project Nayuki)", "", "MIT", "qrcodegen", "QR-Codes zum Teilen und Anmelden (mitgeliefert)"),
 ]
 UBUNTU = [
     ("GTK 4, libadwaita, GLib, Pango, GdkPixbuf", "Ubuntu", "LGPL-2.1-or-later", "", "Oberfläche (Ubuntu-Pakete, nicht mitgeliefert)"),
