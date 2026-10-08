@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -110,9 +111,27 @@ class LiNotesApplication(Adw.Application):
             developer_name="Olaf Winkler",
             comments=_("Notizen, Listen, Aufgaben und Pläne – auf deinem eigenen Server.\nEntwickelt in Schleswig-Holstein."),
             copyright="© 2026 Olaf Winkler", license_type=Gtk.License.GPL_3_0,
-            website="https://lisoft.goip.de/linotes/", issue_url="https://github.com/veritasX1/LiNotes/issues",
+            website="https://lisoftware.de/linotes/", issue_url="https://github.com/veritasX1/LiNotes/issues",
         )
+        # Rechtliches (card 5f4aee29, wie LiMail): was LiNotes mitliefert und unter Ubuntu nutzt – aus shared/lizenzen
+        data = load_licenses()
+        if data:
+            texts = data["texts"]
+            for lib in data["ubuntu"]:
+                if lib["text"] and texts.get(lib["text"], "").strip():
+                    dialog.add_legal_section(lib["name"], f"{lib['version']} · {lib['license']}", Gtk.License.CUSTOM, GLib.markup_escape_text(texts[lib["text"]]))
+                else:
+                    dialog.add_legal_section(lib["name"], f"{lib['version']} · {lib['license']}", Gtk.License.UNKNOWN, None)
         dialog.present(self.get_active_window())
+
+
+def load_licenses():
+    """shared/lizenzen/lizenzen.json (tools/lizenzen.py), next to the code when installed."""
+    here = Path(__file__).resolve().parent
+    for path in (here.parents[1] / "shared" / "lizenzen" / "lizenzen.json", here / "lizenzen.json"):
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    return None
 
 
 def main():

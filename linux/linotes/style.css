@@ -475,3 +475,8 @@ button.font-serif { font-family: Serif; }
   font-weight: 600;
   font-size: 10pt;
 }
+
+/* Hilfe wie LiMail/LiCal (card 0c038014): geschlossen „›“, geöffnet „⌄“, grau wie am Mac */
+row.linotes-help-entry image.expander-row-arrow { -gtk-icon-transform: rotate(-90deg); }
+row.linotes-help-entry:checked image.expander-row-arrow { -gtk-icon-transform: none; }
+row.linotes-help-entry:checked image.expander-row-arrow:not(:disabled) { color: inherit; opacity: var(--dim-opacity); }
