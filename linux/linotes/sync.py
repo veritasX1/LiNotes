@@ -568,7 +568,8 @@ class SyncEngine:
     def set_sharing(self, object_id, member_ids):
         """Share a container (or single note) with exactly `member_ids`
         (besides the owner). An empty list makes it private again.
-        Removing someone rotates the key."""
+        Removing someone rotates the key – unless the container holds objects of
+        other people: only their owners may re-encrypt those (card fc38cfad)."""
         obj = self.get(object_id)
         if obj is None:
             return
@@ -576,6 +577,19 @@ class SyncEngine:
         current = obj.get("share")
         current_members = [uid for uid in self.share_members(current) if uid != self.user_id]
         if current and set(member_ids) == set(current_members):
+            return current
+        old = self.get(current) if current else None
+        own_share = old is not None and old["owner"] == self.user_id and old["data"].get("target") == object_id
+        foreign = [item for item in self.container_members(obj) if item["owner"] != self.user_id]
+        # Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
+        # other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
+        # share and wraps its key for them; so does removing them while others' objects are inside (the server stops
+        # serving the share to whoever left).
+        if own_share and (set(current_members) <= set(member_ids) or foreign):
+            if foreign and not set(current_members) <= set(member_ids):
+                print("LiNotes: Freigabe ohne Schlüsselwechsel – enthält Objekte anderer Personen:", object_id, len(foreign))
+            self.rewrap_share(current, member_ids)
+            self.emit_from_thread({object_id})
             return current
 
         new_share = None
@@ -595,15 +609,33 @@ class SyncEngine:
         # Re-encrypt the container and its content with the new key
         # (attachments are uploaded again, encrypted with the new key).
         for item in self.container_members(obj):
+            if item["owner"] != self.user_id:
+                continue   # the server would refuse it; it stays readable in the share it is in (card fc38cfad)
             data = self.rekey_files(item, new_share)
             self.put(item["kind"], data, new_share, item["id"], notify=False)
-        if current and current != new_share:
-            old = self.get(current)
-            if old is not None and old["owner"] == self.user_id:
-                self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
+        # The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
+        # folder's share stays for the folder (card fc38cfad).
+        if current and current != new_share and own_share and not foreign:
+            self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
         # Called from a worker thread (run_async): tell the window on the main loop.
         self.emit_from_thread({object_id})
         return new_share
+
+    def rewrap_share(self, share_id, member_ids):
+        """The share's key, wrapped for exactly the owner and `member_ids`: those who stay keep their entry, new
+        ones get the same key – nothing is re-encrypted, nobody's objects move (card fc38cfad)."""
+        old = self.get(share_id)
+        key = self.share_keys[share_id]
+        keys = {}
+        for uid in [self.user_id] + member_ids:
+            wrapped = old["data"].get("keys", {}).get(str(uid))
+            if wrapped is None:
+                user = self.user_by_id(uid)
+                if user is None or not user.get("identity"):
+                    raise ValueError(_("Unbekannter Account {uid}", uid=uid))
+                wrapped = e2e.wrap_key(key, user["identity"], share_id)
+            keys[str(uid)] = wrapped
+        self.put("share", dict(old["data"], keys=keys), share_id, share_id, notify=False, members=member_ids)
 
     def rekey_files(self, item, new_share):
         data = copy.deepcopy(item["data"])

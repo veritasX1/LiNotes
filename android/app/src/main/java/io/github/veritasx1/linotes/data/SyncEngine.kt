@@ -558,12 +558,26 @@ class SyncEngine(private val context: Context) {
         return share.data.optJSONObject("keys")?.keys()?.asSequence()?.map { it.toInt() }?.sorted()?.toList() ?: emptyList()
     }
 
-    /** Share `objectId` with exactly `memberIds`; empty = private again. Blocking (network for pictures). */
+    /** Share `objectId` with exactly `memberIds`; empty = private again. Blocking (network for pictures).
+     *  Removing someone rotates the key – unless the container holds objects of other people: only their owners may
+     *  re-encrypt those (card fc38cfad, twin of sync.py). */
     fun setSharing(objectId: String, memberIds: List<Int>): String? {
         val obj = get(objectId) ?: return null
         val members = memberIds.toSet().minus(userId).sorted()
         val current = obj.share
-        if (current != null && members.toSet() == shareMembers(current).toSet().minus(userId)) return current
+        val currentMembers = shareMembers(current).toSet().minus(userId)
+        if (current != null && members.toSet() == currentMembers) return current
+        val old = current?.let { get(it) }
+        val ownShare = old != null && old.owner == userId && old.data.optString("target") == objectId
+        val foreign = containerMembers(obj).filter { it.owner != userId }
+        // Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
+        // other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
+        // share and wraps its key for them; so does removing them while others' objects are inside (the server stops
+        // serving the share to whoever left).
+        if (ownShare && (members.containsAll(currentMembers) || foreign.isNotEmpty())) {
+            rewrapShare(current!!, members)
+            return current
+        }
         var newShare: String? = null
         if (members.isNotEmpty()) {
             newShare = "share-" + UUID.randomUUID().toString().replace("-", "")
@@ -578,15 +592,33 @@ class SyncEngine(private val context: Context) {
                 .put("name", obj.data.optString("name").ifEmpty { obj.kind }), newShare, newShare, members)
         }
         for (item in containerMembers(obj)) {
+            if (item.owner != userId) continue   // the server would refuse it; it stays readable where it is (card fc38cfad)
             val full = if (item.evicted) fetchNote(item.id) ?: item else item
             put(full.kind, rekeyFiles(full, newShare), newShare, full.id)
         }
-        if (current != null && current != newShare) {
-            get(current)?.takeIf { it.owner == userId }?.let { old ->
-                put("share", JSONObject(old.data.toString()).put("keys", JSONObject()), current, current, emptyList())
-            }
+        // The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
+        // folder's share stays for the folder (card fc38cfad).
+        if (current != null && current != newShare && ownShare && foreign.isEmpty()) {
+            put("share", JSONObject(old!!.data.toString()).put("keys", JSONObject()), current, current, emptyList())
         }
         return newShare
+    }
+
+    /** The share's key, wrapped for exactly the owner and `members`: those who stay keep their entry, new ones get the
+     *  same key – nothing is re-encrypted, nobody's objects move (card fc38cfad). */
+    private fun rewrapShare(shareId: String, members: List<Int>) {
+        val old = get(shareId) ?: return
+        val key = shareKeys[shareId] ?: throw IllegalStateException(tr("Unbekannter Account"))
+        val had = old.data.optJSONObject("keys") ?: JSONObject()
+        val keys = JSONObject()
+        for (uid in listOf(userId) + members) {
+            val wrapped = had.optJSONObject(uid.toString()) ?: run {
+                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekannter Account"))
+                E2E.wrapKey(key, target.identity, shareId)
+            }
+            keys.put(uid.toString(), wrapped)
+        }
+        put("share", JSONObject(old.data.toString()).put("keys", keys), shareId, shareId, members)
     }
 
     fun rekeyFiles(item: SyncObject, newShare: String?): JSONObject {
