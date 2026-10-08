@@ -36,11 +36,11 @@ fun SettingsScreen(state: AppState, revision: Long) {
     val online by sync.online.collectAsStateCompat()
 
     LargeTitleScreen(title = tr("Einstellungen"), backLabel = tr("Ordner"), onBack = { state.pop() }) {
-        if (sync.isLocal) section("account", header = tr("Konto"), compact = true, footer = tr("Deine Notizen liegen verschlüsselt nur auf diesem Gerät. ") +
+        if (sync.isLocal) section("account", header = tr("Account"), compact = true, footer = tr("Deine Notizen liegen verschlüsselt nur auf diesem Gerät. ") +
             tr("Mit einem Server werden sie gesichert, auf deinen anderen Geräten abgeglichen und lassen sich teilen.")) {
             GroupRow(tr("Nur auf diesem Gerät"), Glyph.CloudOff, tint = colors.secondary, chevron = false)
             GroupRow(tr("Mit Server verbinden …"), Glyph.Cloud, divider = false) { state.push(Route.Connect) }
-        } else section("account", header = tr("Konto"), compact = true) {
+        } else section("account", header = tr("Account"), compact = true) {
             GroupRow(sync.user?.name ?: "", Glyph.Person, subtitle = "@${sync.user?.username}", chevron = false)
             GroupRow(if (online) tr("Verbunden mit {removePrefix}", "removePrefix" to (sync.server.removePrefix("https://"))) else tr("Offline – Änderungen werden später übertragen"),
                 if (online) Glyph.Cloud else Glyph.CloudOff, tint = if (online) colors.accent else colors.red, chevron = false)
@@ -66,7 +66,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 trailing = { IosSwitch(hyphenate, tr("Silbentrennung")) { toggleHyphenate() } }) { toggleHyphenate() }
         }
         section("pro", header = tr("Profi-Funktionen"), compact = true, footer = tr("Zusätzliche Werkzeuge für Fortgeschrittene, z. B. Code mit Syntaxfarben, ") +
-            tr("Fußnoten und Literaturverzeichnis sowie Formeln (LaTeX). Ab Werk aus, damit LiNotes einfach bleibt. Gilt für dein Konto auf allen Geräten; ") +
+            tr("Fußnoten und Literaturverzeichnis sowie Formeln (LaTeX). Ab Werk aus, damit LiNotes einfach bleibt. Gilt für deinen Account auf allen Geräten; ") +
             tr("Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt.")) {
             fun togglePro() { pro = !pro; sync.proFeatures = pro }
             GroupRow(tr("Profi-Funktionen"), Glyph.Gear, chevron = false, divider = false,
@@ -104,7 +104,7 @@ fun SettingsScreen(state: AppState, revision: Long) {
                 state.toastLater(tr("Gesperrte Notizen sind wieder gesperrt."))
             }
         }
-        section("about", header = tr("Über"), compact = true, footer = tr("LiNotes 2.0.2 · Ende-zu-Ende verschlüsselt – auf diesem Gerät oder deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.")) {
+        section("about", header = tr("Über LiNotes"), compact = true, footer = tr("LiNotes 2.0.2 · Ende-zu-Ende verschlüsselt – auf diesem Gerät oder deinem eigenen Server. Keine Werbung, keine Tracker, keine Cloud eines Konzerns.")) {
             GroupRow(tr("Hilfe"), Glyph.Notes) { state.push(Route.Help) }
             GroupRow(if (sync.isLocal) tr("Alle Daten löschen") else tr("Abmelden"), divider = false, chevron = false, titleColor = colors.red) { signOut = true }
         }

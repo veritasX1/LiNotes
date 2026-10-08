@@ -101,7 +101,7 @@ object Pairing {
 
     // --- verifying a person ---------------------------------------------
 
-    private fun peerPublic(users: List<User>, id: Int) = users.firstOrNull { it.id == id }?.identity ?: throw PairingError(tr("Unbekanntes Konto"))
+    private fun peerPublic(users: List<User>, id: Int) = users.firstOrNull { it.id == id }?.identity ?: throw PairingError(tr("Unbekannter Account"))
 
     /** Shows the code (role A). */
     class VerifyShow(private val api: Api, private val otherId: Int) {
@@ -119,7 +119,7 @@ object Pairing {
             val result = spake.finish(E2E.hex(reply.getString("p")))
             if (!equal(reply.optString("c"), E2E.toHex(result.expected))) throw PairingError(tr("Der eingegebene Code war falsch."))
             val peer = peerPublic(users, otherId)
-            if (!equal(reply.optString("m"), mac(result.ke, VERIFY_B, peer))) throw PairingError(tr("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!"))
+            if (!equal(reply.optString("m"), mac(result.ke, VERIFY_B, peer))) throw PairingError(tr("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
             api.relayPost(channel, "A", JSONObject().put("c", E2E.toHex(result.confirmation)).put("m", mac(result.ke, VERIFY_A, myPublic)).toString())
             return E2E.fingerprint(peer)
         }
@@ -135,7 +135,7 @@ object Pairing {
         val done = JSONObject(waitMessage(api, channel, first.getInt("seq"), "A", 60).getString("body"))
         if (!equal(done.optString("c"), E2E.toHex(result.expected))) throw PairingError(tr("Der Code war falsch."))
         val peer = peerPublic(users, otherId)
-        if (!equal(done.optString("m"), mac(result.ke, VERIFY_A, peer))) throw PairingError(tr("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!"))
+        if (!equal(done.optString("m"), mac(result.ke, VERIFY_A, peer))) throw PairingError(tr("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
         return E2E.fingerprint(peer)
     }
 

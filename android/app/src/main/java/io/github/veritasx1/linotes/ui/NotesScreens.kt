@@ -96,7 +96,7 @@ fun FoldersScreen(state: AppState, revision: Long) {
         if (keyfileHint) item(key = "keyfile-hint") {
             // A friendly reminder after a few days of use – not at the first start (Tante Erna).
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(colors.surface).padding(16.dp)) {
-                Text(tr("Sichere dein Konto"), style = Type.headline, color = colors.label)
+                Text(tr("Sichere deinen Account"), style = Type.headline, color = colors.label)
                 Text(tr("Mit einer Schlüsseldatei kommst du an deine Notizen, auch wenn dein Handy einmal verloren geht."),
                     style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
                 Row {
