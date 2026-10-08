@@ -20,8 +20,8 @@ android {
         applicationId = "io.github.veritasx1.linotes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.2.0"
+        versionCode = 9
+        versionName = "2.3.0"
     }
 
     signingConfigs {
