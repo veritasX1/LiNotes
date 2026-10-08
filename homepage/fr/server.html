@@ -125,13 +125,13 @@
       <h2>3 · Installer en une commande</h2>
       <p>Connectez-vous au Raspberry Pi (directement ou par SSH) et saisissez cette commande. Remplacez le domaine par le vôtre :</p>
       <div class="terminal" data-copy="curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
-        <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi: ~</span></div>
+        <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi : ~</span></div>
         <pre><span class="p">$</span> curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s <span class="b">familie-notizen.goip.de</span></pre>
       </div>
       <p>Données sur un disque dur USB ? Ajoutez le chemin : <code class="inline">… | sudo bash -s familie-notizen.goip.de /media/usb/linotes</code></p>
       <p>Le script télécharge le serveur, vérifie la somme de contrôle et installe tout. Au bout de quelques minutes, vous voyez :</p>
       <div class="terminal">
-        <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi: ~</span></div>
+        <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi : ~</span></div>
         <pre>LiNotes-Server 2.1.0 wird geladen …
 
 <span class="b">1/6 Pakete</span>
@@ -201,7 +201,7 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
       <h3>« HTTPS konnte nicht eingerichtet werden » (HTTPS n’a pas pu être configuré)</h3>
       <p>Le domaine pointe-t-il vraiment vers votre connexion (étape 1), et les ports 80 et 443 sont-ils ouverts (étape 2) ? Exécutez ensuite simplement <code class="inline">sudo certbot --nginx -d votre-domaine</code>.</p>
       <h3>L’app ne trouve pas le serveur</h3>
-      <p>Ouvrez <code class="inline">https://deine-domain/api/health</code> dans le navigateur. S’il affiche <code class="inline">"ok": true</code>, tout fonctionne. Saisissez alors l’adresse dans l’app sans <code class="inline">https://</code> et sans barre oblique.</p>
+      <p>Ouvrez <code class="inline">https://deine-domain/api/health</code> dans le navigateur. S’il affiche <code class="inline">"ok" : true</code>, tout fonctionne. Saisissez alors l’adresse dans l’app sans <code class="inline">https://</code> et sans barre oblique.</p>
       <h3>Le service ne démarre pas</h3>
       <div class="terminal" data-copy="sudo systemctl status linotes; sudo journalctl -u linotes -n 50">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
