@@ -363,7 +363,6 @@
  "LiNotes – Notizen, Pläne und Aufgaben. Nur für dich.": "LiNotes – Notes, plans and tasks. Just for you.",
  "Sicherheit": "Security",
  "Beispiele": "Examples",
- "Neu in 2.2: Nachweise mit Prüfsumme für Entwicklungsprojekte": "New in 2.2: evidence with checksums for development projects",
  "Alles, was zählt.<br><span class=\"gradient-text\">Nur für dich.": "Everything that matters.<br><span class=\"gradient-text\">Just for you.",
  "Notizen, Listen, Aufgaben und Pläne für Android und Ubuntu.<br>Ende-zu-Ende verschlüsselt. Auf deinem eigenen Server.": "Notes, lists, tasks and plans for Android and Ubuntu.<br>End-to-end encrypted. On your own server.",
  "Budget, Packliste, Vergleich: Tabelle einfügen, losschreiben, mit Tab zur nächsten Zelle. Am Ende der Tabelle entsteht die neue Zeile von selbst.": "Budget, packing list, comparison: insert a table, start writing, Tab to the next cell. At the end of the table the new row appears by itself.",
@@ -414,7 +413,6 @@
  "Verifizierte Personen": "Verified People",
  "Bevor ihr teilt, bestätigt ihr euch einmal per Code oder QR-Code. So kann niemand einen falschen Schlüssel unterschieben.": "Before you share, you confirm each other once by code or QR code. That way nobody can slip in a false key.",
  "Geräte wie bei Signal": "Devices Like Signal",
- "Ab Android 8 · rund 10 MB": "Android 8 and later · about 10 MB",
  "Quelle in F-Droid hinzufügen ›": "Add repository in F-Droid ›",
  "APK laden": "Download APK",
  "Fingerabdrücke": "Fingerprints",
@@ -502,7 +500,6 @@
  "Ein Tipp aufs Mikrofon nimmt das Gespräch in der Notiz auf, abspielbar auf jedem Gerät. Elternbriefe, Rechnungen und Pläne hängen als PDF gleich daneben.": "One tap on the microphone records the conversation into the note, playable on every device. Letters from school, invoices and plans sit right next to it as PDFs.",
  "Lange Notizen bleiben übersichtlich: Ein Pfeil vor der Überschrift klappt den ganzen Abschnitt ein, auf dem Handy wie am Rechner.": "Long notes stay clear: an arrow before the heading collapses the whole section, on the phone as on the computer.",
  "Als Liste oder als Galerie, nach Datum oder Titel sortiert, in Ordnern und Unterordnern. Angeheftetes bleibt oben.": "As a list or a gallery, sorted by date or title, in folders and subfolders. Pinned notes stay at the top.",
- "Neu in 2.1 und 2.2": "New in 2.1 and 2.2",
  "Weitere Funktionen": "More Features",
  "Mit <code class=\"inline\">@Name</code> sprichst du in geteilten Notizen jemanden an. Die Person bekommt eine Mitteilung.": "Address someone in shared notes with <code class=\"inline\">@Name</code>. They get a notification.",
  "Gelb, Orange, Rosa, Lila, Mint und Blau, dazu Textfarbe, Schriftart und Ausrichtung.": "Yellow, orange, pink, purple, mint and blue, plus text color, font and alignment.",
@@ -538,7 +535,6 @@
  "dein eigener Server oder ganz ohne": "Your own server or none at all",
  "Ein neues Gerät meldest du mit einem sechsstelligen Code oder einem QR-Code an.": "You add a new device with a six-digit code or a QR code.",
  "Herunterladen": "Download",
- "Kostenlos, Version 2.2.1 für Android und Ubuntu, mit oder ohne eigenen Server.": "Free, version 2.2.1 for Android and Ubuntu, with or without your own server.",
  "Am bequemsten über F-Droid, dann kommen Updates automatisch.": "Easiest via F-Droid, then updates arrive automatically.",
  "Ohne Server wählst du beim ersten Start „Ohne Server nutzen“. Einen Server kannst du später jederzeit eintragen.": "Without a server, choose “Use without server” on first launch. You can add a server any time later.",
  "Notizen, Listen, Aufgaben und Pläne, zuerst für eine Familie entstanden.": "Notes, lists, tasks and plans, first made for one family.",
@@ -663,5 +659,9 @@
  "Verschieben:</b> Notizen, Listen, Boards und Pläne auf einen Ordner ziehen, <span class=\"tag\">Android</span> gedrückt halten und ziehen, <span class=\"tag\">Ubuntu</span> mit der Maus. Oder lange drücken / Rechtsklick → „Verschieben nach …“.": "Moving:</b> drag notes, lists, boards and plans onto a folder, <span class=\"tag\">Android</span> press, hold and drag, <span class=\"tag\">Ubuntu</span> with the mouse. Or long-press / right-click → “Move to …”.",
  "Zusammenarbeit mit dem Kunden:</b> Auftraggeber ins Board einladen. Sie schreiben Wünsche als Karten und nehmen selbst ab, z. B. so vereinbart, dass nur sie nach „Erledigt“ schieben.": "Customer collaboration:</b> invite the client to the board. They write wishes as cards and accept them themselves, for example with the rule that only they move cards to “Done”.",
  "Regelmäßig reflektieren: den Bericht als PDF erzeugen und gemeinsam durchgehen. Was lief gut, was ändern wir? Dokumentation nur so viel wie nötig: Auswirkungsanalyse, Verifikation und Nachweise sind für Projekte gedacht, die sie brauchen (z. B. nach ISO 26262 oder Automotive SPICE). Einfache Boards bleiben schlank.": "Reflect regularly: create the report as a PDF and go through it together. What went well, what do we change? Documentation only as much as needed: impact analysis, verification and evidence are meant for projects that need them (e.g. under ISO 26262 or Automotive SPICE). Simple boards stay lean.",
- "Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel. Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer. Bis dahin liefert der Server sie nur noch an die Verbliebenen aus. Geteiltes erkennst du am Personen-Symbol.": "Long-press / right-click a note, folder, list, board or plan → <b>“Share…”</b> and choose people. A shared folder shares everything in it. If you remove someone, the share gets a new key. Your content is re-encrypted right away, other people’s content the next time its owners sync. Until then the server only delivers it to the people who remain. You can recognize shared items by the people icon."
+ "Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel. Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer. Bis dahin liefert der Server sie nur noch an die Verbliebenen aus. Geteiltes erkennst du am Personen-Symbol.": "Long-press / right-click a note, folder, list, board or plan → <b>“Share…”</b> and choose people. A shared folder shares everything in it. If you remove someone, the share gets a new key. Your content is re-encrypted right away, other people’s content the next time its owners sync. Until then the server only delivers it to the people who remain. You can recognize shared items by the people icon.",
+ "Neu in 2.3: Formeln, Vorlagen, Archiv und Link-Vorschau": "New in 2.3: formulas, templates, archive and link previews",
+ "Neu in 2.1 bis 2.3": "New in 2.1 to 2.3",
+ "Kostenlos, Version 2.3.0 für Android und Ubuntu, mit oder ohne eigenen Server.": "Free, version 2.3.0 for Android and Ubuntu, with or without your own server.",
+ "Ab Android 8 · rund 12 MB": "Android 8 and later · about 12 MB"
 }
