@@ -568,8 +568,9 @@ class SyncEngine:
     def set_sharing(self, object_id, member_ids):
         """Share a container (or single note) with exactly `member_ids`
         (besides the owner). An empty list makes it private again.
-        Removing someone rotates the key – unless the container holds objects of
-        other people: only their owners may re-encrypt those (card fc38cfad)."""
+        Removing someone always rotates the key (card 5939587a, Olaf: „Privatsphäre
+        first“): own objects move at once; other people's stay readable in the old
+        share for those who remain until their owners move them (follow_moved_shares)."""
         obj = self.get(object_id)
         if obj is None:
             return
@@ -583,11 +584,8 @@ class SyncEngine:
         foreign = [item for item in self.container_members(obj) if item["owner"] != self.user_id]
         # Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
         # other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
-        # share and wraps its key for them; so does removing them while others' objects are inside (the server stops
-        # serving the share to whoever left).
-        if own_share and (set(current_members) <= set(member_ids) or foreign):
-            if foreign and not set(current_members) <= set(member_ids):
-                print("LiNotes: Freigabe ohne Schlüsselwechsel – enthält Objekte anderer Personen:", object_id, len(foreign))
+        # share and wraps its key for them.
+        if own_share and set(current_members) <= set(member_ids):
             self.rewrap_share(current, member_ids)
             self.emit_from_thread({object_id})
             return current
@@ -614,12 +612,37 @@ class SyncEngine:
             data = self.rekey_files(item, new_share)
             self.put(item["kind"], data, new_share, item["id"], notify=False)
         # The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
-        # folder's share stays for the folder (card fc38cfad).
-        if current and current != new_share and own_share and not foreign:
-            self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
+        # folder's share stays for the folder (card fc38cfad). With others' objects inside it keeps only those who stay
+        # and points to the new share: their owners move them there on their next sync (card 5939587a).
+        if current and current != new_share and own_share:
+            if foreign:
+                stay = {str(uid) for uid in [self.user_id] + member_ids}
+                keys = {uid: wrapped for uid, wrapped in old["data"].get("keys", {}).items() if uid in stay}
+                self.put("share", dict(old["data"], keys=keys, moved_to=new_share), current, current, notify=False, members=member_ids)
+            else:
+                self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
         # Called from a worker thread (run_async): tell the window on the main loop.
         self.emit_from_thread({object_id})
         return new_share
+
+    def follow_moved_shares(self):
+        """Someone was removed from a share holding my objects (card 5939587a): the share now points to its successor –
+        I move mine there, re-encrypted with its key. The share's owner empties it once nothing is left inside."""
+        moves = []
+        with self.lock:
+            for share in [o for o in self.plain.values() if o["kind"] == "share" and not o["deleted"]]:
+                target = share["data"].get("moved_to")
+                if not target or target not in self.share_keys:
+                    continue
+                inside = [o for o in self.plain.values() if o.get("share") == share["id"] and o["kind"] != "share" and not o["deleted"]]
+                mine = [o for o in inside if o["owner"] == self.user_id]
+                moves.append((share, target, mine, len(inside) - len(mine)))
+        for share, target, mine, others in moves:
+            for item in mine:
+                self.put(item["kind"], self.rekey_files(item, target), target, item["id"], notify=False)
+            if share["owner"] == self.user_id and not others and share["data"].get("keys"):
+                self.put("share", dict(share["data"], keys={}), share["id"], share["id"], notify=False, members=[])
+        return any(mine for _s, _t, mine, _o in moves)
 
     def rewrap_share(self, share_id, member_ids):
         """The share's key, wrapped for exactly the owner and `member_ids`: those who stay keep their entry, new
@@ -868,6 +891,7 @@ class SyncEngine:
                 self.rebuild()
         self.save()
         if changed:
+            self.follow_moved_shares()   # card 5939587a
             self.emit_from_thread(changed)
         if response.get("more"):
             self.pull_once()

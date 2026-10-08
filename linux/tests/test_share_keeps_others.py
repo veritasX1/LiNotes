@@ -1,6 +1,7 @@
 """Board teilen verliert keine Karten anderer Personen (Karte fc38cfad, 08.10.2026: zweimal
 Daten verloren). Personen hinzufügen behält die Freigabe und packt ihren Schlüssel nur für die
-Neuen ein; Entfernen wechselt den Schlüssel nur, wenn alles im Board dem Teilenden gehört.
+Neuen ein. Entfernen wechselt immer den Schlüssel (Karte 5939587a, „Privatsphäre first“): Eigenes
+zieht sofort um, fremde Karten bleiben für die Verbliebenen lesbar, bis ihr Besitzer sie umzieht.
 Läuft ohne Server: python3 tests/test_share_keeps_others.py"""
 
 import os
@@ -56,11 +57,21 @@ def main():
         assert [readable(e, people[uid], uid, c)["title"] for c in cards] == ["Meine Karte", "Bernds Karte"], uid
     assert sorted(e.get(first)["data"]["keys"]) == sorted([str(e.user_id), "2", "3"])
 
-    # Carla leaves while Bernd's card is inside: no new key (it would strand his card), her key is gone.
+    # Carla leaves while Bernd's card is inside: a new key all the same (card 5939587a). Mine moves at once; Bernd's stays
+    # in the old share – without Carla, readable for those who stay – which points to the new one.
     after = e.set_sharing(board["id"], [BERND])
-    assert after == first and sorted(e.get(first)["data"]["keys"]) == sorted([str(e.user_id), "2"])
-    assert readable(e, people[CARLA], CARLA, his["id"]) is None
+    assert after != first and e.get(mine["id"])["share"] == after and e.get(his["id"])["share"] == first
+    old = e.get(first)["data"]
+    assert sorted(old["keys"]) == sorted([str(e.user_id), "2"]) and old["moved_to"] == after
+    assert readable(e, people[CARLA], CARLA, his["id"]) is None and readable(e, people[CARLA], CARLA, mine["id"]) is None
     assert readable(e, people[BERND], BERND, his["id"])["title"] == "Bernds Karte"
+    assert readable(e, people[BERND], BERND, mine["id"])["title"] == "Meine Karte"
+    # Bernd's next sync (here: this device plays his): his card follows to the new share; the old one, empty now, is cleared.
+    e.plain[his["id"]]["owner"] = e.user_id
+    assert e.follow_moved_shares()
+    assert e.get(his["id"])["share"] == after and e.get(first)["data"]["keys"] == {}
+    assert readable(e, people[BERND], BERND, his["id"])["title"] == "Bernds Karte"
+    assert not e.follow_moved_shares()
 
     # A board that is all mine: removing someone still rotates the key, the old share is emptied (as before).
     solo = e.put("board", {"name": "Nur meins"}, notify=False)
@@ -69,8 +80,8 @@ def main():
     s2 = e.set_sharing(solo["id"], [BERND])
     assert s2 != s1 and e.get(note["id"])["share"] == s2 and e.get(s1)["data"]["keys"] == {}
     assert readable(e, people[BERND], BERND, note["id"])["title"] == "Allein"
-    print("ok: Hinzufügen behält die Freigabe (alle lesen alle Karten); Entfernen mit fremden Karten ohne "
-          "Schlüsselwechsel; eigenes Board wechselt den Schlüssel wie bisher")
+    print("ok: Hinzufügen behält die Freigabe (alle lesen alle Karten); Entfernen wechselt immer den Schlüssel, "
+          "fremde Karten ziehen beim nächsten Abgleich ihres Besitzers nach")
 
 
 if __name__ == "__main__":
