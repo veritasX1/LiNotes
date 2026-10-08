@@ -66,6 +66,11 @@ Ohne Gerät und ohne Schlüsseldatei sind die Daten verloren – das ist gewollt
   Abgleich zieht jeder Besitzer seine Inhalte selbst in die neue Freigabe um,
   danach wird die alte geleert. Hinzufügen ändert den Schlüssel nicht: Die
   Neuen bekommen S verpackt.
+  Grenzen: Die entfernte Person kennt S weiterhin. Was noch unter S liegt,
+  schützt bis zum Umzug nur der Server, weil er es ihr nicht mehr ausliefert.
+  Ruft ein Besitzer nie wieder ab, bleibt sein Inhalt unter S. Die geleerte
+  alte Freigabe führt der Server noch mit ihrem Besitzer als einzigem
+  Mitglied, ohne Schlüssel und ohne Inhalt.
 
 ## Vertrauen (Verifizieren)
 
