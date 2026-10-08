@@ -751,7 +751,7 @@ private val HELP = listOf(
             tr("Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch ") +
             tr("nicht der Server – euch einen falschen Schlüssel unterschieben."),
         tr("Etwas teilen") to tr("Ordner, Liste, Board oder Notiz lange gedrückt halten → „Teilen …“ und die Personen auswählen. ") +
-            tr("Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt."),
+            tr("Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel: Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer – bis dahin können sie nur noch die Verbliebenen lesen."),
     ),
     tr("Listen und Aufgaben") to listOf(
         tr("Listen") to tr("Einträge unten eintippen – sie landen automatisch in der passenden Warengruppe. Abgehakt wird mit dem Kreis."),

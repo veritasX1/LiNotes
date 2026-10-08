@@ -559,8 +559,9 @@ class SyncEngine(private val context: Context) {
     }
 
     /** Share `objectId` with exactly `memberIds`; empty = private again. Blocking (network for pictures).
-     *  Removing someone rotates the key – unless the container holds objects of other people: only their owners may
-     *  re-encrypt those (card fc38cfad, twin of sync.py). */
+     *  Removing someone always rotates the key (card 5939587a, Olaf: „Privatsphäre first“): own objects move at once;
+     *  other people's stay readable in the old share for those who remain until their owners move them
+     *  ([followMovedShares], twin of sync.py). */
     fun setSharing(objectId: String, memberIds: List<Int>): String? {
         val obj = get(objectId) ?: return null
         val members = memberIds.toSet().minus(userId).sorted()
@@ -572,9 +573,8 @@ class SyncEngine(private val context: Context) {
         val foreign = containerMembers(obj).filter { it.owner != userId }
         // Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
         // other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
-        // share and wraps its key for them; so does removing them while others' objects are inside (the server stops
-        // serving the share to whoever left).
-        if (ownShare && (members.containsAll(currentMembers) || foreign.isNotEmpty())) {
+        // share and wraps its key for them.
+        if (ownShare && members.containsAll(currentMembers)) {
             rewrapShare(current!!, members)
             return current
         }
@@ -597,11 +597,43 @@ class SyncEngine(private val context: Context) {
             put(full.kind, rekeyFiles(full, newShare), newShare, full.id)
         }
         // The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
-        // folder's share stays for the folder (card fc38cfad).
-        if (current != null && current != newShare && ownShare && foreign.isEmpty()) {
-            put("share", JSONObject(old!!.data.toString()).put("keys", JSONObject()), current, current, emptyList())
+        // folder's share stays for the folder (card fc38cfad). With others' objects inside it keeps only those who stay
+        // and points to the new share: their owners move them there on their next sync (card 5939587a).
+        if (current != null && current != newShare && ownShare) {
+            val data = JSONObject(old!!.data.toString())
+            if (foreign.isNotEmpty()) {
+                val stay = (listOf(userId) + members).map { it.toString() }.toSet()
+                val had = data.optJSONObject("keys") ?: JSONObject()
+                val keys = JSONObject()
+                for (uid in had.keys()) if (uid in stay) keys.put(uid, had.get(uid))
+                put("share", data.put("keys", keys).put("moved_to", newShare ?: JSONObject.NULL), current, current, members)
+            } else put("share", data.put("keys", JSONObject()), current, current, emptyList())
         }
         return newShare
+    }
+
+    /** Someone was removed from a share holding my objects (card 5939587a): the share now points to its successor – I move
+     *  mine there, re-encrypted with its key. The share's owner empties it once nothing is left inside. Twin of sync.py. */
+    fun followMovedShares(): Boolean {
+        data class Move(val share: SyncObject, val target: String, val mine: List<SyncObject>, val others: Int)
+        val moves = synchronized(lock) {
+            plain.values.filter { it.kind == "share" && !it.deleted }.mapNotNull { share ->
+                val target = share.data.optString("moved_to").takeIf { it.isNotEmpty() && it != "null" && shareKeys.containsKey(it) }
+                    ?: return@mapNotNull null
+                val inside = plain.values.filter { it.share == share.id && it.kind != "share" && !it.deleted }
+                val mine = inside.filter { it.owner == userId }
+                Move(share, target, mine, inside.size - mine.size)
+            }
+        }
+        for (move in moves) {
+            for (item in move.mine) {
+                val full = if (item.evicted) fetchNote(item.id) ?: item else item
+                put(full.kind, rekeyFiles(full, move.target), move.target, full.id)
+            }
+            if (move.share.owner == userId && move.others == 0 && (move.share.data.optJSONObject("keys")?.length() ?: 0) > 0)
+                put("share", JSONObject(move.share.data.toString()).put("keys", JSONObject()), move.share.id, move.share.id, emptyList())
+        }
+        return moves.any { it.mine.isNotEmpty() }
     }
 
     /** The share's key, wrapped for exactly the owner and `members`: those who stay keep their entry, new ones get the
@@ -916,6 +948,7 @@ class SyncEngine(private val context: Context) {
         }
         if (changed) evict()
         save()
+        if (changed) followMovedShares()   // card 5939587a
         if (changed) bump()
         if (response.optBoolean("more")) pullOnce()
     }

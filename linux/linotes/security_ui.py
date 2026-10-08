@@ -730,7 +730,7 @@ HELP = [
     ]),
     (_("Teilen"), [
         (_("Personen verifizieren"), _("Bevor du etwas teilst, verifiziert ihr euch einmal: Account-Menü → „Personen“ → „Verifizieren“. Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch nicht der Server – euch einen falschen Schlüssel unterschieben.")),
-        (_("Etwas teilen"), _("Rechtsklick auf einen Ordner, eine Liste, ein Board oder eine Notiz → „Teilen …“ und die Personen auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt.")),
+        (_("Etwas teilen"), _("Rechtsklick auf einen Ordner, eine Liste, ein Board oder eine Notiz → „Teilen …“ und die Personen auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel: Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer – bis dahin können sie nur noch die Verbliebenen lesen.")),
     ]),
     (_("Listen und Aufgaben"), [
         (_("Listen"), _("Einträge oben eintippen – sie landen automatisch in der passenden Warengruppe. Mehrere Zeilen einfügen legt mehrere Einträge an. Abgehakt wird mit dem Kreis.")),

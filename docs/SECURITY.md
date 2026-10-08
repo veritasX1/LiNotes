@@ -56,8 +56,16 @@ Ohne Gerät und ohne Schlüsseldatei sind die Daten verloren – das ist gewollt
   verpackt (ECIES). Der Server kennt nur die Mitgliederliste und setzt sie
   durch (wer kein Mitglied ist, bekommt die Daten gar nicht).
 - Teilbar: einzelne Notizen, Listen, Boards oder ganze Ordner.
-- Wird jemand entfernt, erzeugt der Besitzer einen neuen Schlüssel und
-  verschlüsselt neu.
+- **Personen entfernen** (seit 08.10.2026, „Privatsphäre first“): Wird jemand
+  entfernt, erzeugt der Besitzer der Freigabe immer einen neuen Schlüssel S′.
+  Seine eigenen Inhalte verschlüsselt er sofort mit S′. Inhalte anderer
+  Personen (z. B. deren Karten in einem geteilten Board) darf nur ihr
+  Besitzer neu verschlüsseln: Sie bleiben vorerst in der alten Freigabe, die
+  nur noch für die Verbliebenen verpackt ist und auf die neue zeigt. Der
+  Server liefert sie der entfernten Person nicht mehr aus. Beim nächsten
+  Abgleich zieht jeder Besitzer seine Inhalte selbst in die neue Freigabe um,
+  danach wird die alte geleert. Hinzufügen ändert den Schlüssel nicht: Die
+  Neuen bekommen S verpackt.
 
 ## Vertrauen (Verifizieren)
 

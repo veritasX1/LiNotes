@@ -8,14 +8,17 @@ import io.github.veritasx1.linotes.data.User
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** Card fc38cfad (08.10.2026: cards lost twice): sharing a board with more people keeps the share – everyone reads every
- *  card, other people's too; removing someone rotates the key only when everything inside is the sharer's own.
+ *  card, other people's too. Card 5939587a: removing someone always rotates the key; others' cards follow on their
+ *  owners' next sync.
  *  Twin of linux/tests/test_share_keeps_others.py. Runs without a server. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -58,10 +61,27 @@ class ShareKeepsOthersTest {
             assertEquals(title, readable(sync, people, uid, id)!!.getString("title"))
         }
 
-        // Carla leaves while Bernd's card is inside: no new key (it would strand his card), her key is gone.
-        assertEquals(first, sync.setSharing(board.id, listOf(bernd)))
+        // Carla leaves while Bernd's card is inside: a new key all the same (card 5939587a, „Privatsphäre first“). Mine moves
+        // at once; Bernd's stays in the old share – without Carla, readable for those who stay – which points to the new one.
+        val after = sync.setSharing(board.id, listOf(bernd))!!
+        assertNotEquals(first, after)
+        assertEquals(after, sync.get(mine.id)!!.share)
+        assertEquals(first, sync.get(his.id)!!.share)
+        val old = sync.get(first)!!.data
+        assertEquals(setOf(sync.userId.toString(), bernd.toString()), old.getJSONObject("keys").keys().asSequence().toSet())
+        assertEquals(after, old.getString("moved_to"))
         assertNull(readable(sync, people, carla, his.id))
+        assertNull(readable(sync, people, carla, mine.id))
         assertEquals("Bernds Karte", readable(sync, people, bernd, his.id)!!.getString("title"))
+        assertEquals("Meine Karte", readable(sync, people, bernd, mine.id)!!.getString("title"))
+        // Bernd's next sync (here: this device plays his): his card follows; the old share, empty now, is cleared.
+        val moved = plain(sync).getValue(his.id)
+        plain(sync)[his.id] = SyncObject(moved.id, moved.kind, moved.share, sync.userId, moved.data, false, moved.version, moved.updated, sync.userId)
+        assertTrue(sync.followMovedShares())
+        assertEquals(after, sync.get(his.id)!!.share)
+        assertEquals(0, sync.get(first)!!.data.getJSONObject("keys").length())
+        assertEquals("Bernds Karte", readable(sync, people, bernd, his.id)!!.getString("title"))
+        assertFalse(sync.followMovedShares())
 
         // A board that is all mine: removing someone still rotates the key, the old share is emptied (as before).
         val solo = sync.put("board", JSONObject().put("name", "Nur meins"))
