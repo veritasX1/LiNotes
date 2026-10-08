@@ -19,7 +19,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk, Pango
 from . import model, vault
 from . import smoothscroll
 from .dialogs import ask_password, ask_text, confirm, error_text, run_async
-from . import activity, audio, security_ui, textsize, uiprefs
+from . import activity, audio, linkpreview, security_ui, textsize, uiprefs, uploads
 from .icons import Icon, icon_button, icon_menu_button
 from .kanban import BoardView
 from .lists import ShoppingListView
@@ -27,6 +27,7 @@ from .notes import NoteList, NotePane
 from .sidebar import Sidebar
 from . import sync as sync_module
 from .sync import device_name
+from .i18n import _
 
 
 DECORATION_LAYOUT = "close,minimize,maximize:"
@@ -47,23 +48,23 @@ def text_size_step(keyval):
 
 MAX_ATTACHMENT = 24 * 1024 * 1024  # the server takes 25 MB including encryption
 
-HIGHLIGHT_MENU = [("h", "Gelb"), ("h:orange", "Orange"), ("h:pink", "Pink"), ("h:purple", "Lila"),
-                  ("h:mint", "Mint"), ("h:blue", "Blau"), (None, "Markierung entfernen")]
+HIGHLIGHT_MENU = [("h", _("Gelb")), ("h:orange", _("Orange")), ("h:pink", _("Pink")), ("h:purple", _("Lila")),
+                  ("h:mint", _("Mint")), ("h:blue", _("Blau")), (None, _("Markierung entfernen"))]
 
-TEXT_COLOR_MENU = [("c:purple", "Lila"), ("c:pink", "Pink"), ("c:orange", "Orange"), ("c:mint", "Mint"),
-                   ("c:blue", "Blau"), (None, "Standardfarbe")]
+TEXT_COLOR_MENU = [("c:purple", _("Lila")), ("c:pink", _("Pink")), ("c:orange", _("Orange")), ("c:mint", _("Mint")),
+                   ("c:blue", _("Blau")), (None, _("Standardfarbe"))]
 
 PARAGRAPH_MENU = [
-    ("title", "Titel", "<Control><Shift>t"),
-    ("heading", "Überschrift", "<Control><Shift>h"),
-    ("subheading", "Unterüberschrift", "<Control><Shift>j"),
-    ("body", "Text", "<Control><Shift>b"),
-    ("mono", "Monospace", "<Control><Shift>m"),
-    ("bullet", "• Aufzählung", "<Control><Shift>7"),
-    ("dash", "– Liste mit Strichen", "<Control><Shift>8"),
-    ("number", "1. Nummerierte Liste", "<Control><Shift>9"),
-    ("check", "Checkliste", "<Control><Shift>l"),
-    ("quote", "Zitat", "<Control>apostrophe"),
+    ("title", _("Titel"), "<Control><Shift>t"),
+    ("heading", _("Überschrift"), "<Control><Shift>h"),
+    ("subheading", _("Unterüberschrift"), "<Control><Shift>j"),
+    ("body", _("Text"), "<Control><Shift>b"),
+    ("mono", _("Monospace"), "<Control><Shift>m"),
+    ("bullet", _("• Aufzählung"), "<Control><Shift>7"),
+    ("dash", _("– Liste mit Strichen"), "<Control><Shift>8"),
+    ("number", _("1. Nummerierte Liste"), "<Control><Shift>9"),
+    ("check", _("Checkliste"), "<Control><Shift>l"),
+    ("quote", _("Zitat"), "<Control>apostrophe"),
 ]
 
 
@@ -73,7 +74,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         super().__init__(application=app)
         self.sync = sync
         self.set_default_size(1180, 760)
-        self.set_title("LiNotes")
+        self.set_title(_("LiNotes"))
         self.vault_key = None
         self.vault_used = 0
         self.current_key = "all"
@@ -86,7 +87,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.toasts = Adw.ToastOverlay()
         self.set_content(self.toasts)
         self.pages = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.toasts.set_child(self.pages)
+        # Running uploads float at the bottom, the window stays usable meanwhile.
+        overlay = Gtk.Overlay(child=self.pages)
+        self.uploads_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER,
+                                   valign=Gtk.Align.END, margin_bottom=72, visible=False, css_classes=["upload-card"])
+        self.uploads_box.set_size_request(360, -1)
+        overlay.add_overlay(self.uploads_box)
+        self.toasts.set_child(overlay)
 
         self.login = security_ui.Onboarding(self)
         self.login.connect("signed-in", self.on_signed_in)
@@ -113,18 +120,19 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ========================================================
 
     def build_main(self):
-        self.split = Adw.OverlaySplitView(min_sidebar_width=210, max_sidebar_width=260)
+        self.split = Adw.OverlaySplitView(min_sidebar_width=210, max_sidebar_width=300)
 
         sidebar_view = Adw.ToolbarView()
         sidebar_header = Adw.HeaderBar(show_title=False, show_end_title_buttons=False)
         sidebar_header.set_decoration_layout(DECORATION_LAYOUT)
         new_menu = Gio.Menu()
-        new_menu.append("Neuer Ordner", "win.new-folder")
-        new_menu.append("Neue Liste", "win.new-list")
-        new_menu.append("Neues Board", "win.new-board")
-        new_menu.append("Neuer Plan …", "win.new-plan")
+        new_menu.append(_("Neue Notiz aus Vorlage …"), "win.new-from-template")
+        new_menu.append(_("Neuer Ordner"), "win.new-folder")
+        new_menu.append(_("Neue Liste"), "win.new-list")
+        new_menu.append(_("Neues Board"), "win.new-board")
+        new_menu.append(_("Neuer Plan …"), "win.new-plan")
         self.new_menu = new_menu
-        new_button = icon_menu_button("plus", "Neu …")
+        new_button = icon_menu_button("plus", _("Neu …"))
         new_button.set_menu_model(new_menu)
         sidebar_header.pack_end(new_button)
         sidebar_view.add_top_bar(sidebar_header)
@@ -142,20 +150,20 @@ class LiNotesWindow(Adw.ApplicationWindow):
             GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.INVERT_BOOLEAN,
         )
         header.set_title_widget(Gtk.Box())
-        toggle = icon_button("sidebar", "Seitenleiste", toggle=True)
+        toggle = icon_button("sidebar", _("Seitenleiste"), toggle=True)
         self.split.bind_property("show-sidebar", toggle, "active",
                                  GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL)
         header.pack_start(toggle)
         # Narrow windows show list and note one after the other; this leads back to the list.
-        self.back_button = icon_button("back", "Zurück zur Liste")
+        self.back_button = icon_button("back", _("Zurück zur Liste"))
         self.back_button.set_visible(False)
         self.back_button.connect("clicked", lambda _button: self.show_list_narrow())
         header.pack_start(self.back_button)
 
         self.view_toggle = Gtk.Box()
         self.view_toggle.add_css_class("linked")
-        self.list_mode = icon_button("list", "Liste (Strg+1)", toggle=True)
-        self.gallery_mode = icon_button("gallery", "Galerie (Strg+2)", toggle=True)
+        self.list_mode = icon_button("list", _("Liste (Strg+1)"), toggle=True)
+        self.gallery_mode = icon_button("gallery", _("Galerie (Strg+2)"), toggle=True)
         self.gallery_mode.set_group(self.list_mode)
         self.list_mode.set_active(True)
         self.list_mode.connect("toggled", lambda button: button.get_active() and self.set_note_mode("list"))
@@ -168,53 +176,64 @@ class LiNotesWindow(Adw.ApplicationWindow):
         section = Gio.Menu()
         for key, label in model.NOTE_SORTS:
             section.append(label, f"win.sort-notes::{key}")
-        sort_menu.append_section("Notizen sortieren nach", section)
+        sort_menu.append_section(_("Notizen sortieren nach"), section)
         # Like Apple's default text size: per device, Ctrl+Plus/Minus/0.
         sizes = Gio.Menu()
         for level, (_factor, label) in enumerate(textsize.SIZES):
             sizes.append(label, f"win.text-size::{level}")
-        sort_menu.append_section("Textgröße (Strg + / Strg −)", sizes)
+        sort_menu.append_section(_("Textgröße (Strg + / Strg −)"), sizes)
         layout = Gio.Menu()
-        layout.append("Blocksatz", "win.justify")
+        layout.append(_("Blocksatz"), "win.justify")
+        # Off by default: a preview means fetching the page, the site then sees this computer's address.
+        layout.append(_("Link-Vorschau (Webseite abrufen)"), "win.link-previews")
+        # Off by default ("Tante Erna" first): code colors, footnotes … only when switched on (all devices).
+        layout.append(_("Profi-Funktionen"), "win.pro-features")
         sort_menu.append_section(None, layout)
-        self.sort_button = icon_menu_button("more", "Sortieren und Darstellung", Gtk.PopoverMenu.new_from_model(sort_menu))
+        # Language: like the system, or chosen here (takes effect at the next start).
+        from . import i18n
+        languages = Gio.Menu()
+        languages.append(_("Wie das System"), "win.language::system")
+        for code, name in i18n.LANGUAGES.items():
+            languages.append(name, f"win.language::{code}")
+        sort_menu.append_submenu(_("Sprache"), languages)
+        self.sort_button = icon_menu_button("more", _("Sortieren und Darstellung"), Gtk.PopoverMenu.new_from_model(sort_menu))
         header.pack_start(self.sort_button)
-        self.delete_button = icon_button("trash", "Löschen")
+        self.delete_button = icon_button("trash", _("Löschen"))
         self.delete_button.set_action_name("win.delete-note")
         header.pack_start(self.delete_button)
 
         self.note_tools = Gtk.Box(spacing=4)
-        compose = icon_button("compose", "Neue Notiz (Strg+N)")
+        compose = icon_button("compose", _("Neue Notiz (Strg+N)"))
         compose.set_action_name("win.new-note")
         self.note_tools.append(compose)
-        self.format_button = icon_menu_button("format", "Format", self.build_format_popover())
+        self.format_button = icon_menu_button("format", _("Format"), self.build_format_popover())
         self.note_tools.append(self.format_button)
-        checklist = icon_button("checklist", "Checkliste (Strg+Shift+L)")
+        checklist = icon_button("checklist", _("Checkliste (Strg+Shift+L)"))
         checklist.connect("clicked", lambda _button: self.paragraph("check"))
         self.note_tools.append(checklist)
-        table = icon_button("table", "Tabelle einfügen")
+        table = icon_button("table", _("Tabelle einfügen"))
         table.set_action_name("win.insert-table")
         self.note_tools.append(table)
-        photo = icon_button("photo", "Foto einfügen")
+        photo = icon_button("photo", _("Foto einfügen"))
         photo.set_action_name("win.insert-photo")
         self.note_tools.append(photo)
-        attach = Gtk.Button(icon_name="mail-attachment-symbolic", tooltip_text="Datei anhängen (PDF, Dokument …)")
+        attach = Gtk.Button(icon_name="mail-attachment-symbolic", tooltip_text=_("Datei anhängen (PDF, Dokument …)"))
         attach.set_action_name("win.attach-file")
         self.note_tools.append(attach)
-        record = Gtk.Button(icon_name="audio-input-microphone-symbolic", tooltip_text="Audio aufnehmen")
+        record = Gtk.Button(icon_name="audio-input-microphone-symbolic", tooltip_text=_("Audio aufnehmen"))
         record.set_action_name("win.record-audio")
         self.note_tools.append(record)
-        self.lock_button = icon_button("lock", "Notiz sperren")
+        self.lock_button = icon_button("lock", _("Notiz sperren"))
         self.lock_button.set_action_name("win.lock-button")
         self.note_tools.append(self.lock_button)
-        self.share_button = icon_button("share", "Notiz teilen …")
+        self.share_button = icon_button("share", _("Notiz teilen …"))
         self.share_button.set_action_name("win.share-note")
         self.note_tools.append(self.share_button)
         header.pack_end(self.note_tools)
         content.add_top_bar(header)
         # A friendly reminder after a few days of use – never at the first start.
-        self.keyfile_banner = Adw.Banner(title="Sichere dein Konto mit einer Schlüsseldatei – falls ein Gerät verloren geht.",
-                                         button_label="Jetzt sichern")
+        self.keyfile_banner = Adw.Banner(title=_("Sichere deinen Account mit einer Schlüsseldatei – falls ein Gerät verloren geht."),
+                                         button_label=_("Jetzt sichern"))
         self.keyfile_banner.connect("button-clicked", lambda _b: (self.keyfile_banner.set_revealed(False),
                                                                   security_ui.KeyfileDialog(self).present(self)))
         content.add_top_bar(self.keyfile_banner)
@@ -237,6 +256,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.note_pane.editor.connect("link-requested", lambda _editor: self.show_link_choice())
         self.note_pane.editor.connect("open-note", lambda _editor, note_id: self.open_linked_note(note_id))
         self.note_pane.editor.connect("open-file", lambda _editor, block: self.open_attachment(block, self.note_pane.image_share))
+        self.note_pane.editor.connect("link-line", lambda editor, url: self.make_link_preview(editor, self.current_note, url))
         # Drop files from the file manager into the note (like Apple): photos as photos, the rest attached.
         drop = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY)
         drop.connect("drop", lambda _target, file, _x, _y: self.drop_file(file))
@@ -317,13 +337,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
                                 ("u", "U", "text-underline"), ("s", "S", "text-strike")):
             button = Gtk.Button(label=label)
             button.add_css_class(css)
-            button.set_tooltip_text({"b": "Fett", "i": "Kursiv", "u": "Unterstrichen", "s": "Durchgestrichen"}[key])
+            button.set_tooltip_text({"b": _("Fett"), "i": _("Kursiv"), "u": _("Unterstrichen"), "s": _("Durchgestrichen")}[key])
             button.connect("clicked", lambda _button, name=key: self.inline(name, editor))
             inline.append(button)
         box.append(inline)
         # Highlight colors like in Apple's Notes; a click on the active color removes it again.
         colors = Gtk.Box(spacing=6, margin_top=6, margin_start=4)
-        colors.append(Gtk.Label(label="Markieren", xalign=0, hexpand=True))
+        colors.append(Gtk.Label(label=_("Markieren"), xalign=0, hexpand=True))
         for name, tooltip in HIGHLIGHT_MENU:
             swatch = Gtk.Button(tooltip_text=tooltip)
             swatch.add_css_class("highlight-swatch")
@@ -335,7 +355,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         box.append(colors)
         # Text color, font and alignment (like Format → Font / Text in Notes).
         text_colors = Gtk.Box(spacing=6, margin_top=6, margin_start=4)
-        text_colors.append(Gtk.Label(label="Textfarbe", xalign=0, hexpand=True))
+        text_colors.append(Gtk.Label(label=_("Textfarbe"), xalign=0, hexpand=True))
         for name, tooltip in TEXT_COLOR_MENU:
             swatch = Gtk.Button(tooltip_text=tooltip)
             swatch.add_css_class("highlight-swatch")
@@ -349,8 +369,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         box.append(text_colors)
         fonts = Gtk.Box(homogeneous=True, margin_top=6)
         fonts.add_css_class("linked")
-        for name, label, css in ((None, "Standard", None), ("f:serif", "Serif", "font-serif"), ("f:mono", "Mono", "monospace")):
-            button = Gtk.Button(label=label, tooltip_text="Schrift: " + label)
+        for name, label, css in ((None, _("Standard"), None), ("f:serif", _("Serif"), "font-serif"), ("f:mono", _("Mono"), "monospace")):
+            button = Gtk.Button(label=label, tooltip_text=_("Schrift: ") + label)
             if css:
                 button.add_css_class(css)
             button.connect("clicked", lambda _button, font=name: self.font(font, editor))
@@ -358,9 +378,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
         box.append(fonts)
         aligns = Gtk.Box(homogeneous=True, margin_top=6)
         aligns.add_css_class("linked")
-        for name, icon, tooltip in ((None, "format-justify-left-symbolic", "Linksbündig"),
-                                    ("center", "format-justify-center-symbolic", "Zentriert"),
-                                    ("right", "format-justify-right-symbolic", "Rechtsbündig")):
+        for name, icon, tooltip in ((None, "format-justify-left-symbolic", _("Linksbündig")),
+                                    ("center", "format-justify-center-symbolic", _("Zentriert")),
+                                    ("right", "format-justify-right-symbolic", _("Rechtsbündig"))):
             button = Gtk.Button(icon_name=icon, tooltip_text=tooltip)
             button.connect("clicked", lambda _button, align=name: self.align(align, editor))
             aligns.append(button)
@@ -385,22 +405,63 @@ class LiNotesWindow(Adw.ApplicationWindow):
         divider = Gtk.Button()
         divider.add_css_class("flat")
         line = Gtk.Box(spacing=16)
-        line.append(Gtk.Label(label="Trennlinie", xalign=0, hexpand=True))
+        line.append(Gtk.Label(label=_("Trennlinie"), xalign=0, hexpand=True))
         hint = Gtk.Label(label="--- ↵")
         hint.add_css_class("dim-label")
         line.append(hint)
         divider.set_child(line)
-        divider.set_tooltip_text("Oder auf einer leeren Zeile --- tippen und Enter drücken")
+        divider.set_tooltip_text(_("Oder auf einer leeren Zeile --- tippen und Enter drücken"))
         divider.connect("clicked", lambda _button: (popover.popdown(), self.insert_divider(editor)))
         box.append(divider)
+        # Profi-Funktionen: only shown when switched on (Tante Erna sees a calm menu).
+        pro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        code_row = Gtk.Box(spacing=6, margin_start=10, margin_top=2)
+        code_row.append(Gtk.Label(label=_("Code"), xalign=0, hexpand=True, css_classes=["monospace"]))
+        languages = Gtk.Box(css_classes=["linked"])
+        from . import syntax
+        for lang, label in syntax.LANGUAGES.items():
+            button = Gtk.Button(label=label, tooltip_text=_("Markierte Zeilen als {label}-Code mit Syntaxfarben", label=label))
+            button.connect("clicked", lambda _b, lang=lang: (popover.popdown(), (editor or self.note_pane.editor).make_code(lang)))
+            languages.append(button)
+        code_row.append(languages)
+        pro.append(code_row)
+        footnote = Gtk.Button(css_classes=["flat"], tooltip_text=_("Hochgestellte Nummer an der Cursorstelle, der Text steht unter der Notiz"))
+        footnote_line = Gtk.Box(spacing=16)
+        footnote_line.append(Gtk.Label(label=_("Fußnote / Quelle …"), xalign=0, hexpand=True))
+        footnote.set_child(footnote_line)
+        footnote.connect("clicked", lambda _b: (popover.popdown(), self.ask_footnote(editor or self.note_pane.editor)))
+        pro.append(footnote)
+        formula = Gtk.Button(css_classes=["flat"], tooltip_text=_("Mathematische Formel in LaTeX-Schreibweise, z. B. \\frac{a}{b}"))
+        formula_line = Gtk.Box(spacing=16)
+        formula_line.append(Gtk.Label(label=_("Formel (LaTeX) …"), xalign=0, hexpand=True))
+        formula.set_child(formula_line)
+        formula.connect("clicked", lambda _b: (popover.popdown(), self.insert_math(editor)))
+        pro.append(formula)
+        box.append(pro)
+        popover.connect("show", lambda _p: pro.set_visible(self.pro_features()))
         box.append(Gtk.Separator(margin_top=4, margin_bottom=4))
-        sort_checked = Gtk.CheckButton(label="Abgehakte Objekte nach unten sortieren")
+        sort_checked = Gtk.CheckButton(label=_("Abgehakte Objekte nach unten sortieren"))
         sort_checked.connect("toggled", lambda button: setattr(editor or self.note_pane.editor, "auto_sort_checked", button.get_active()))
         box.append(sort_checked)
         if editor is None:
             self.sort_checked = sort_checked
         popover.set_child(box)
         return popover
+
+    def add_upload(self, upload):
+        from .uploads import UploadRow
+        self.uploads_box.append(UploadRow(upload))
+        self.uploads_box.set_visible(True)
+
+    def remove_upload(self, upload):
+        child = self.uploads_box.get_first_child()
+        while child is not None:
+            following = child.get_next_sibling()
+            if child.upload is upload:
+                child.detach()
+                self.uploads_box.remove(child)
+            child = following
+        self.uploads_box.set_visible(self.uploads_box.get_first_child() is not None)
 
     def toast(self, text):
         toast = Adw.Toast(title=text)
@@ -416,15 +477,15 @@ class LiNotesWindow(Adw.ApplicationWindow):
             # Used without a server so far: move everything into the account.
             def done(_result, error):
                 if isinstance(error, sync_module.VaultConflict):
-                    self.toast("Dieses Konto hat schon ein Notizen-Passwort. Entferne zuerst die Sperre deiner gesperrten Notizen.")
+                    self.toast(_("Dieser Account hat schon ein Notizen-Passwort. Entferne zuerst die Sperre deiner gesperrten Notizen."))
                     return
                 if error is not None:
-                    self.toast(f"Verbinden fehlgeschlagen: {error_text(error)}")
+                    self.toast(_("Verbinden fehlgeschlagen: {error_text}", error_text=error_text(error)))
                     return
                 login.set_connecting(False)
                 self.vault_key = None
                 self.enter_main()
-                self.toast("Mit dem Server verbunden – deine Notizen werden hochgeladen.")
+                self.toast(_("Mit dem Server verbunden – deine Notizen werden hochgeladen."))
             run_async(lambda: self.sync.connect_local(server, response, account), done)
             return
         self.sync.sign_in(server, response, account)
@@ -441,7 +502,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def needs_server(self, then):
         """Sharing, people and key files only make sense with a server."""
         if self.sync.is_local:
-            self.toast("Dafür brauchst du einen Server – Kontomenü → „Mit Server verbinden …“")
+            self.toast(_("Dafür brauchst du einen Server – Account-Menü → „Mit Server verbinden …“"))
         else:
             then()
 
@@ -460,7 +521,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
 
         def done(_result, error):
             if error is not None:
-                self.toast("Offline – Änderungen werden später übertragen.")
+                self.toast(_("Offline – Änderungen werden später übertragen."))
             model.ensure_defaults(self.sync)
             self.purge_trash()
             self.sync.start()
@@ -481,7 +542,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             # This device was signed out on the server.
             self.sync.sign_out()
             self.pages.set_visible_child_name("login")
-            self.toast("Dieses Gerät wurde abgemeldet.")
+            self.toast(_("Dieses Gerät wurde abgemeldet."))
             return
         self.sidebar.set_status(bool(online))
 
@@ -499,12 +560,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.login.set_connecting(False)
             self.pages.set_visible_child_name("login")
         if self.sync.is_local:
-            confirm(self, "Alle Daten löschen?",
-                    "Alle Notizen, Listen und Aufgaben auf diesem Computer werden endgültig gelöscht.", "Löschen", really)
+            confirm(self, _("Alle Daten löschen?"),
+                    _("Alle Notizen, Listen und Aufgaben auf diesem Computer werden endgültig gelöscht."), _("Löschen"), really)
             return
-        confirm(self, "Dieses Gerät abmelden?",
-                "Die Notizen bleiben auf dem Server. Zum erneuten Anmelden brauchst du ein anderes Gerät oder deine Schlüsseldatei.",
-                "Abmelden", really)
+        confirm(self, _("Dieses Gerät abmelden?"),
+                _("Die Notizen bleiben auf dem Server. Zum erneuten Anmelden brauchst du ein anderes Gerät oder deine Schlüsseldatei."),
+                _("Abmelden"), really)
 
     def invite(self):
         def done(code, error):
@@ -512,12 +573,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.toast(error_text(error))
                 return
             dialog = Adw.AlertDialog(
-                heading="Einladungscode",
-                body=f"Mit diesem Code kann einmalig ein neues Konto erstellt werden:\n\n{code}\n\n"
-                     f"Server: {self.sync.server}\nIn der App „Neues Konto erstellen“ wählen.",
+                heading=_("Einladungscode"),
+                body=_("Mit diesem Code kann einmalig ein neuer Account erstellt werden:\n\n{code}\n\nServer: {server}\nIn der App „Neuen Account erstellen“ wählen.", code=code, server=self.sync.server),
             )
-            dialog.add_response("copy", "Kopieren")
-            dialog.add_response("ok", "Fertig")
+            dialog.add_response("copy", _("Kopieren"))
+            dialog.add_response("ok", _("Fertig"))
             dialog.connect("response", lambda _d, r: r == "copy" and self.get_clipboard().set(code))
             dialog.present(self)
         run_async(self.sync.api.invite, done)
@@ -532,6 +592,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     # ========================================================
 
     def refresh_all(self):
+        self.pro_features()  # the menu check follows the account setting (other devices)
         self.sidebar.refresh()
         self.select(self.current_key, keep_note=True)
 
@@ -576,17 +637,21 @@ class LiNotesWindow(Adw.ApplicationWindow):
         notes = self.sync.objects("note")
         kind, _sep, object_id = key.partition(":")
         if key == "trash":
-            return [n for n in notes if n["data"].get("trashed")], "Zuletzt gelöscht"
+            return [n for n in notes if n["data"].get("trashed")], _("Zuletzt gelöscht")
         notes = [n for n in notes if not n["data"].get("trashed")]
+        if key == "archive":
+            return [n for n in notes if model.archived(n)], _("Archiv")
+        if not getattr(self, "searching_archive", False):
+            notes = [n for n in notes if not model.archived(n)]
         if key == "locked":
-            return [n for n in notes if n["data"].get("enc")], "Gesperrt"
+            return [n for n in notes if n["data"].get("enc")], _("Gesperrt")
         if key == "shared-notes":
-            return [n for n in notes if n.get("share") and not self.sync.get(n["data"].get("folder") or "")], "Mit mir geteilt"
+            return [n for n in notes if n.get("share") and not self.sync.get(n["data"].get("folder") or "")], _("Mit mir geteilt")
         if kind == "folder":
             folder = self.sync.get(object_id)
-            name = folder["data"].get("name", "Ordner") if folder else "Ordner"
+            name = folder["data"].get("name", "Ordner") if folder else _("Ordner")
             return [n for n in notes if n["data"].get("folder") == object_id], name
-        return notes, "Alle Notizen"
+        return notes, _("Alle Notizen")
 
     def folder_extras(self, key):
         """Subfolders, lists and boards of a folder – shown above its notes."""
@@ -598,19 +663,24 @@ class LiNotesWindow(Adw.ApplicationWindow):
         entries = []
         for folder in sorted((f for f in sync.objects("folder") if model.folder_parent(sync, f) == folder_id), key=model.folder_sort_key):
             entries.append(("folder:" + folder["id"], "folder", folder["data"].get("name", "Ordner"),
-                            sum(1 for n in live if n["data"].get("folder") == folder["id"]), "Ordner"))
+                            sum(1 for n in live if n["data"].get("folder") == folder["id"]), _("Ordner")))
         items = sync.objects("item")
-        for shopping in sorted((l for l in sync.objects("list") if l["data"].get("folder") == folder_id), key=lambda l: l["data"].get("name", "").lower()):
+        for shopping in sorted((l for l in sync.objects("list") if l["data"].get("folder") == folder_id and not model.archived(l)),
+                               key=lambda l: l["data"].get("name", "").lower()):
             entries.append(("list:" + shopping["id"], "cart", shopping["data"].get("name", "Liste"),
-                            sum(1 for i in items if i["data"].get("list") == shopping["id"] and not i["data"].get("done")), "Listen"))
+                            sum(1 for i in items if i["data"].get("list") == shopping["id"] and not i["data"].get("done")), _("Listen")))
         cards = sync.objects("card")
-        for board in sorted((b for b in sync.objects("board") if b["data"].get("folder") == folder_id), key=lambda b: b["data"].get("name", "").lower()):
+        for board in sorted((b for b in sync.objects("board") if b["data"].get("folder") == folder_id and not model.archived(b)),
+                            key=lambda b: b["data"].get("name", "").lower()):
             entries.append(("board:" + board["id"], "board", board["data"].get("name", "Board"),
-                            sum(1 for c in cards if c["data"].get("board") == board["id"] and not c["data"].get("archived")), "Boards"))
+                            sum(1 for c in cards if c["data"].get("board") == board["id"] and not c["data"].get("archived")), _("Boards")))
         return entries
 
     def show_notes(self, keep_note=True):
+        # A search also finds what is in the archive (marked "im Archiv" in the list).
+        self.searching_archive = bool(self.note_list.search.get_text().strip())
         notes, title = self.notes_for(self.current_key)
+        self.searching_archive = False
         tags = self.sidebar.active_tags
         if tags:
             notes = [n for n in notes if tags <= model.note_tags(n)]
@@ -619,11 +689,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if query:
             notes = [n for n in notes if query in model.note_text(n).lower()
                      or query in model.note_title(n).lower()]
-            title = f"Suche: {query}"
+            title = _("Suche: {query}", query=query)
         selected = self.current_note if keep_note else None
         if selected and selected not in {n["id"] for n in notes}:
             selected = None
-        self.note_list.show(title, notes, selected, "Keine Treffer" if query else "Keine Notizen")
+        self.note_list.show(title, notes, selected, _("Keine Treffer") if query else _("Keine Notizen"))
         self.note_list.show_extras([] if query else self.folder_extras(self.current_key))
         if selected is None:
             if notes and not keep_note:
@@ -688,7 +758,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         blocks = self.note_body(note)
         if blocks is None:
-            self.toast("Diese Notiz konnte nicht entschlüsselt werden.")
+            self.toast(_("Diese Notiz konnte nicht entschlüsselt werden."))
             self.note_pane.show_locked(note_id)
             return
         self.editing_blocks = blocks
@@ -809,7 +879,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                     box.append(place)
                 listbox.append(box)
             if not found:
-                listbox.append(Gtk.Label(label="Keine passende Person" if mention else "Keine passende Notiz",
+                listbox.append(Gtk.Label(label=_("Keine passende Person") if mention else _("Keine passende Notiz"),
                                          margin_top=6, margin_bottom=6, sensitive=False))
             else:
                 listbox.select_row(listbox.get_row_at_index(0))
@@ -853,7 +923,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 changed = True
             if count > known and note.get("updated_by") not in (None, 0, me):
                 notification = Gio.Notification.new(f"{self.sync.user_name(note['updated_by'])} hat dich erwähnt")
-                notification.set_body(f"in „{model.note_title(note)}“")
+                notification.set_body(_("in „{note_title}“", note_title=model.note_title(note)))
                 notification.set_default_action_and_target("app.open-note", GLib.Variant.new_string(note_id))
                 self.get_application().send_notification(f"mention-{note_id}", notification)
         if changed:
@@ -873,7 +943,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def open_linked_note(self, note_id):
         note = self.sync.get(note_id)
         if note is None or note["data"].get("trashed"):
-            self.toast("Die verlinkte Notiz gibt es nicht mehr.")
+            self.toast(_("Die verlinkte Notiz gibt es nicht mehr."))
             return
         self.note_pane.editor.flush()
         if self.stack.get_visible_child_name() != "notes" or note_id not in {n["id"] for n in self.notes_for(self.current_key)[0]}:
@@ -938,7 +1008,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             # Like Apple: the open lock in an unlocked note locks it again right away.
             unlocked = locked and self.vault_key is not None
             self.lock_button.get_child().name = "lock-open" if unlocked else "lock"
-            self.lock_button.set_tooltip_text("Jetzt sperren" if unlocked else "Entsperren" if locked else "Notiz sperren")
+            self.lock_button.set_tooltip_text(_("Jetzt sperren") if unlocked else _("Entsperren") if locked else _("Notiz sperren"))
             self.lock_button.get_child().queue_draw()
             self.lookup_action("insert-photo").set_enabled(not locked and not note["data"].get("trashed"))
             self.lookup_action("attach-file").set_enabled(not locked and not note["data"].get("trashed"))
@@ -952,12 +1022,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if note is None:
             return
         if note["data"].get("trashed"):
-            confirm(self, "Endgültig löschen?", "Die Notiz wird auf allen Geräten gelöscht.", "Löschen",
+            confirm(self, _("Endgültig löschen?"), _("Die Notiz wird auf allen Geräten gelöscht."), _("Löschen"),
                     lambda: (self.sync.delete(note_id), self.after_delete()))
             return
         self.sync.update(note_id, trashed=time.time())
         self.after_delete()
-        self.toast("In „Zuletzt gelöscht“ verschoben")
+        self.toast(_("In „Zuletzt gelöscht“ verschoben"))
 
     def after_delete(self):
         self.current_note = None
@@ -975,7 +1045,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sync.put("note", data, None if note["owner"] == self.sync.user_id else note.get("share"), note["id"])
         else:
             self.sync.put("note", data, note.get("share"), note["id"])
-        self.toast("Notiz wiederhergestellt")
+        self.toast(_("Notiz wiederhergestellt"))
         self.refresh_list_only()
         self.open_note(note["id"])
 
@@ -1011,7 +1081,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return None
         blocks = self.note_pane.editor.to_blocks() if self.note_pane.get_visible_child_name() == "editor" \
             else model.note_blocks(note)
-        title = model.blocks_title(blocks) or "Notiz"
+        title = model.blocks_title(blocks) or _("Notiz")
         modified = time.strftime("%d.%m.%Y %H:%M", time.localtime(note["data"].get("modified") or time.time()))
         return note, title, f"{title} · {modified}", blocks
 
@@ -1028,7 +1098,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if found is None:
             return
         safe = re.sub(r'[/\\:*?"<>|]', "_", found[1])[:80]
-        dialog = Gtk.FileDialog(title="Als PDF exportieren")
+        dialog = Gtk.FileDialog(title=_("Als PDF exportieren"))
         dialog.set_initial_name(f"{safe}.pdf")
 
         def chosen(dialog, result):
@@ -1038,7 +1108,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 return
             path = path if path.lower().endswith(".pdf") else path + ".pdf"
             self.write_note_pdf(path)
-            self.toast(f"PDF gespeichert: {Path(path).name}")
+            self.toast(_("PDF gespeichert: {name}", name=Path(path).name))
         dialog.save(self, None, chosen)
 
     def print_note(self):
@@ -1048,7 +1118,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         folder = Path(tempfile.mkdtemp(prefix="linotes-print-"))
         path = str(folder / "notiz.pdf")
         title = self.write_note_pdf(path)
-        dialog = Gtk.PrintUnixDialog(title="Drucken", transient_for=self, modal=True)
+        dialog = Gtk.PrintUnixDialog(title=_("Drucken"), transient_for=self, modal=True)
         dialog.set_manual_capabilities(Gtk.PrintCapabilities.COPIES | Gtk.PrintCapabilities.PAGE_SET)
 
         def finished(*_args):
@@ -1062,18 +1132,18 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 finished()
                 return
             if not printer.accepts_pdf():
-                self.toast("Dieser Drucker nimmt kein PDF an – bitte als PDF exportieren und von dort drucken.")
+                self.toast(_("Dieser Drucker nimmt kein PDF an – bitte als PDF exportieren und von dort drucken."))
                 finished()
                 return
             job = Gtk.PrintJob.new(title, printer, settings, setup)
             try:
                 job.set_source_file(path)
             except GLib.Error as error:
-                self.toast(f"Drucken nicht möglich: {error.message}")
+                self.toast(_("Drucken nicht möglich: {message}", message=error.message))
                 finished()
                 return
-            job.send(lambda _job, error: (finished(), error and self.toast(f"Drucken fehlgeschlagen: {error.message}")))
-            self.toast(f"„{title}“ wird gedruckt.")
+            job.send(lambda _job, error: (finished(), error and self.toast(_("Drucken fehlgeschlagen: {message}", message=error.message))))
+            self.toast(_("„{title}“ wird gedruckt.", title=title))
         dialog.connect("response", response)
         dialog.present()
 
@@ -1086,12 +1156,12 @@ class LiNotesWindow(Adw.ApplicationWindow):
                    for f in folders if f["id"] != note["data"].get("folder")]
         if not choices:
             return
-        dialog = Adw.AlertDialog(heading="Verschieben nach",
-                                 body="Notizen in geteilten Ordnern sehen alle, mit denen der Ordner geteilt ist.")
+        dialog = Adw.AlertDialog(heading=_("Verschieben nach"),
+                                 body=_("Notizen in geteilten Ordnern sehen alle, mit denen der Ordner geteilt ist."))
         dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
         dialog.set_extra_child(dropdown)
-        dialog.add_response("cancel", "Abbrechen")
-        dialog.add_response("ok", "Verschieben")
+        dialog.add_response("cancel", _("Abbrechen"))
+        dialog.add_response("ok", _("Verschieben"))
         dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
 
         def on_response(_dialog, response):
@@ -1109,10 +1179,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         share = folder.get("share")
         if share and note["data"].get("enc"):
-            self.toast("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre.")
+            self.toast(_("Gesperrte Notizen können nicht geteilt werden. Entferne zuerst die Sperre."))
             return
         if share != note.get("share") and note["owner"] != self.sync.user_id:
-            self.toast("Nur wer die Notiz erstellt hat, kann sie in einen anderen Bereich verschieben.")
+            self.toast(_("Nur wer die Notiz erstellt hat, kann sie in einen anderen Bereich verschieben."))
             return
 
         def move():
@@ -1122,8 +1192,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sync.put("note", data, share, current["id"], notify=False)
             self.sync.emit_from_thread({note_id})
 
-        run_async(move, lambda _r, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error
-                                           else self.toast(f"Nach „{folder['data'].get('name')}“ verschoben"),
+        run_async(move, lambda _r, error: (self.toast(_("Verschieben fehlgeschlagen: {error}", error=error)) if error
+                                           else self.toast(_("Nach „{name}“ verschoben", name=folder['data'].get('name'))),
                                            self.refresh_list_only()))
 
     def move_object_to(self, object_id, folder_id):
@@ -1132,19 +1202,19 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if obj is None:
             return
         if obj["kind"] == "folder" and folder_id and folder_id in (model.folder_descendants(self.sync, object_id) | {object_id}):
-            self.toast("Ein Ordner kann nicht in sich selbst liegen.")
+            self.toast(_("Ein Ordner kann nicht in sich selbst liegen."))
             return
         field = "parent" if obj["kind"] == "folder" else "folder"
         if (obj["data"].get(field) or None) == folder_id:
             return
         if self.sync.share_after_move(obj, folder_id) != obj.get("share") and obj["owner"] != self.sync.user_id:
-            self.toast("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+            self.toast(_("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben."))
             return
         if folder_id:
             self.sidebar.collapsed.discard(folder_id)
         # Into or out of a shared folder everything inside is re-encrypted – may take a moment.
         run_async(lambda: self.sync.move_to_folder(object_id, folder_id),
-                  lambda _result, error: (self.toast(f"Verschieben fehlgeschlagen: {error}") if error else self.toast("Verschoben"),
+                  lambda _result, error: (self.toast(_("Verschieben fehlgeschlagen: {error}", error=error)) if error else self.toast(_("Verschoben")),
                                           self.refresh_all()))
 
     def drop_on(self, target, payload):
@@ -1168,7 +1238,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(self.current_note)
         if note is None or note["data"].get("enc"):
             return
-        dialog = Gtk.FileDialog(title="Foto einfügen")
+        dialog = Gtk.FileDialog(title=_("Foto einfügen"))
         filters = Gio.ListStore.new(Gtk.FileFilter)
         images = Gtk.FileFilter(name="Bilder")
         images.add_mime_type("image/*")
@@ -1188,8 +1258,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if error is not None:
                     self.toast(error_text(error))
                     return
-                self.note_pane.editor.insert_image(file_id)
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                self.deliver_upload(note["id"], self.note_pane.editor, {"t": "image", "f": file_id})
+            uploads.start(self, path.name, content, note.get("share"), done)
 
         dialog.open(self, None, chosen)
 
@@ -1199,7 +1269,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         note = self.sync.get(note_id or self.current_note) if (note_id or self.current_note) else None
         if note is None or note["data"].get("enc"):
             return
-        dialog = Gtk.FileDialog(title="Datei anhängen")
+        dialog = Gtk.FileDialog(title=_("Datei anhängen"))
 
         def chosen(dialog, result):
             try:
@@ -1213,7 +1283,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def attach_path(self, path, editor, note):
         size = path.stat().st_size
         if size > MAX_ATTACHMENT:
-            self.toast(f"„{path.name}“ ist zu groß (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB).")
+            self.toast(_("„{name}“ ist zu groß (höchstens {value} MB).", name=path.name, value=MAX_ATTACHMENT // 1024 // 1024))
             return
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         content = path.read_bytes()
@@ -1222,9 +1292,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if error is not None:
                 self.toast(error_text(error))
                 return
-            editor.insert_file({"t": "file", "f": file_id, "n": path.name, "m": mime, "b": size})
-        self.toast(f"„{path.name}“ wird angehängt …")
-        run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+            self.deliver_upload(note["id"], editor, {"t": "file", "f": file_id, "n": path.name, "m": mime, "b": size})
+        uploads.start(self, path.name, content, note.get("share"), done)
 
     def record_audio(self, editor=None, note_id=None):
         """Like Apple: record with the microphone; the recording is attached encrypted."""
@@ -1243,20 +1312,20 @@ class LiNotesWindow(Adw.ApplicationWindow):
             content = path.read_bytes()
             path.unlink(missing_ok=True)
             if len(content) > MAX_ATTACHMENT:
-                self.toast(f"Die Aufnahme ist zu lang (höchstens {MAX_ATTACHMENT // 1024 // 1024} MB, etwa 90 Minuten).")
+                self.toast(_("Die Aufnahme ist zu lang (höchstens {value} MB, etwa 90 Minuten).", value=MAX_ATTACHMENT // 1024 // 1024))
                 return
 
             def done(file_id, error):
                 if error is not None:
                     self.toast(error_text(error))
                     return
-                editor.insert_file({"t": "file", "f": file_id, "n": name, "m": audio.MIME, "b": len(content),
-                                    "d": round(length, 1)})
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                self.deliver_upload(note["id"], editor, {"t": "file", "f": file_id, "n": name, "m": audio.MIME,
+                                                         "b": len(content), "d": round(length, 1)})
+            uploads.start(self, name, content, note.get("share"), done)
         try:
             dialog = audio.RecordDialog(folder / name, recorded)
         except Exception as error:
-            self.toast(f"Aufnahme nicht möglich: {error}")
+            self.toast(_("Aufnahme nicht möglich: {error}", error=error))
             return
         dialog.present(self)
 
@@ -1272,14 +1341,146 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 if error is not None:
                     self.toast(error_text(error))
                 else:
-                    self.note_pane.editor.insert_image(file_id)
-            run_async(lambda: self.sync.upload_file(content, note.get("share")), done)
+                    self.deliver_upload(note["id"], self.note_pane.editor, {"t": "image", "f": file_id})
+            uploads.start(self, path.name, content, note.get("share"), done)
         else:
             self.attach_path(path, self.note_pane.editor, note)
         return True
 
+    # --- templates (Vorlagen) ---
+
+    def toggle_template(self, note_id):
+        note = self.sync.get(note_id) if note_id else None
+        if note is None or "enc" in note["data"]:
+            return
+        data = dict(note["data"])
+        if data.get("template"):
+            data.pop("template")
+            self.toast(_("Keine Vorlage mehr"))
+        else:
+            data["template"] = True
+            self.toast(_("Als Vorlage gemerkt – „Neu …“ → „Neue Notiz aus Vorlage“"))
+        self.sync.put("note", data, note.get("share"), note_id)
+        self.refresh_all()
+
+    def choose_template(self):
+        """Neu → Neue Notiz aus Vorlage: own templates first, then the shipped ones."""
+        own = sorted((n for n in self.sync.objects("note") if n["data"].get("template") and not n["data"].get("trashed")
+                      and "enc" not in n["data"]), key=lambda n: model.note_title(n).lower())
+        dialog = Adw.Dialog(title=_("Neue Notiz aus Vorlage"), content_width=420)
+        page = Adw.PreferencesPage()
+
+        def row(title, subtitle, action):
+            entry = Adw.ActionRow(title=GLib.markup_escape_text(title), subtitle=GLib.markup_escape_text(subtitle), activatable=True)
+            entry.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            entry.connect("activated", lambda _r: (dialog.close(), action()))
+            return entry
+        if own:
+            group = Adw.PreferencesGroup(title=_("Eigene Vorlagen"))
+            for note in own:
+                group.add(row(model.note_title(note), model.note_preview(note) or "",
+                              lambda note=note: self.new_from_template(model.note_blocks(note), note)))
+            page.add(group)
+        group = Adw.PreferencesGroup(title=_("Mitgeliefert"),
+                                     description=_("Eigene Vorlagen: eine Notiz anlegen, Rechtsklick → „Als Vorlage verwenden“. {{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen ersetzt."))
+        for _key, name, blocks in model.BUILTIN_TEMPLATES:
+            group.add(row(name, " · ".join(b["x"] for b in blocks[1:4] if b.get("x")) or "",
+                          lambda blocks=blocks: self.new_from_template(blocks, None)))
+        page.add(group)
+        view = Adw.ToolbarView(content=page)
+        view.add_top_bar(Adw.HeaderBar())
+        dialog.set_child(view)
+        dialog.present(self)
+
+    def new_from_template(self, blocks, source):
+        """A new note in the current folder with the template's content and the placeholders filled in."""
+        import datetime
+        if self.stack.get_visible_child_name() != "notes" or self.current_key in ("trash", "locked", "archive"):
+            self.sidebar.select("all", emit=False)
+            self.current_key = "all"
+            self.stack.set_visible_child_name("notes")
+            self.show_note_tools(True)
+        self.note_pane.editor.flush()
+        folder = self.current_folder_for_new()
+        share = folder.get("share") if folder else None
+        body = model.fill_template(blocks, datetime.datetime.now())
+
+        def build():
+            data = {"body": body}
+            if source is not None and source.get("share") != share:
+                # Pictures and files of the template are encrypted for its own place – re-encrypt them.
+                data = self.sync.rekey_files({"data": data, "share": source.get("share")}, share)
+            return data
+
+        def done(data, error):
+            if error is not None:
+                self.toast(error_text(error))
+                return
+            now = time.time()
+            note = self.sync.put("note", {"folder": folder["id"] if folder else None, "body": data["body"],
+                                          "created": now, "modified": now}, share)
+            self.current_note = note["id"]
+            self.sidebar.refresh()
+            self.show_notes()
+            self.open_note(note["id"])
+            self.show_note_narrow()
+        run_async(build, done)
+
+    def toggle_archive(self, object_id):
+        """Into the archive or back – for everyone the item is shared with (Olaf, 04.10.2026)."""
+        obj = self.sync.get(object_id) if object_id else None
+        if obj is None:
+            return
+        on = not model.archived(obj)
+        model.set_archived(self.sync, object_id, on)
+        self.toast(_("Ins Archiv verschoben") if on else _("Aus dem Archiv geholt"))
+        if obj["kind"] == "note" and on and self.current_key != "archive":
+            self.current_note = None
+        self.refresh_all()
+
+    def make_link_preview(self, editor, note_id, url):
+        """A web address alone on a line becomes a preview card – only if switched on, never in
+        locked notes. Only this computer fetches the page; the card (with picture) is stored
+        encrypted in the note. Fails quietly: the address simply stays a link."""
+        if not uiprefs.get("link_previews", False) or not note_id:
+            return
+        note = self.sync.get(note_id)
+        if note is None or "enc" in note["data"] or note["data"].get("trashed"):
+            return
+        share = note.get("share")
+
+        def work():
+            found = linkpreview.fetch(url)
+            reference = self.sync.upload_file(found["picture"], share) if found.get("picture") else None
+            return linkpreview.block(url, found, reference)
+
+        def done(block, error):
+            if error is not None:
+                print("LiNotes: keine Link-Vorschau:", error)
+                return
+            still_there = editor.get_root() is not None and (editor is not self.note_pane.editor or self.current_note == note_id)
+            if still_there:
+                editor.replace_url_line(url, block)
+        run_async(work, done)
+
+    def deliver_upload(self, note_id, editor, block):
+        """A finished upload goes into the editor if it still shows that note – meanwhile one may
+        have switched notes or closed the note window – otherwise to the end of the note."""
+        showing = editor.get_root() is not None and (editor is not self.note_pane.editor or self.current_note == note_id)
+        if showing:
+            if block["t"] == "image":
+                editor.insert_image(block["f"])
+            else:
+                editor.insert_file(block)
+            return
+        note = self.sync.get(note_id)
+        if note is None or "enc" in note["data"] or note["data"].get("trashed"):
+            return
+        self.sync.update(note_id, body=list(model.note_blocks(note)) + [block], modified=time.time())
+
     def open_attachment(self, block, share):
-        """Decrypt the file into a private folder under its own name and open it with its app."""
+        """Decrypt the file into a private folder under its own name and show it in a quick look
+        inside LiNotes (another app only via "Teilen")."""
         def fetch():
             source = self.sync.fetch_file(block["f"], share)
             folder = Path(GLib.get_user_cache_dir()) / "linotes" / "open" / block["f"].partition(":")[2][:12]
@@ -1292,7 +1493,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
             if error is not None:
                 self.toast(error_text(error))
                 return
-            Gtk.FileLauncher.new(Gio.File.new_for_path(str(target))).launch(self, None, None)
+            from .quicklook import QuickLook
+            QuickLook(self, target, block.get("n"), block.get("m")).present(self)
         run_async(fetch, done)
 
     def format_target(self, editor):
@@ -1347,18 +1549,20 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.open_note(note_id)
         menu = Gio.Menu()
         if note["data"].get("trashed"):
-            menu.append("Wiederherstellen", "win.restore-note")
-            menu.append("Endgültig löschen", "win.delete-note")
+            menu.append(_("Wiederherstellen"), "win.restore-note")
+            menu.append(_("Endgültig löschen"), "win.delete-note")
         else:
-            menu.append("In eigenem Fenster öffnen", "win.note-window")
-            menu.append("Lösen" if note["data"].get("pinned") else "Anheften", "win.pin-note")
-            menu.append("Teilen …", "win.share-note")
-            menu.append("Verschieben nach …", "win.move-note")
-            menu.append("Duplizieren", "win.duplicate-note")
-            menu.append("Als PDF exportieren …", "win.export-note")
-            menu.append("Drucken …", "win.print-note")
-            menu.append("Sperre entfernen" if note["data"].get("enc") else "Notiz sperren", "win.toggle-lock")
-            menu.append("Löschen", "win.delete-note")
+            menu.append(_("In eigenem Fenster öffnen"), "win.note-window")
+            menu.append(_("Lösen") if note["data"].get("pinned") else _("Anheften"), "win.pin-note")
+            menu.append(_("Teilen …"), "win.share-note")
+            menu.append(_("Verschieben nach …"), "win.move-note")
+            menu.append(_("Duplizieren"), "win.duplicate-note")
+            menu.append(_("Aus dem Archiv holen") if model.archived(note) else _("Archivieren"), "win.archive-note")
+            menu.append(_("Nicht mehr als Vorlage") if note["data"].get("template") else _("Als Vorlage verwenden"), "win.template-note")
+            menu.append(_("Als PDF exportieren …"), "win.export-note")
+            menu.append(_("Drucken …"), "win.print-note")
+            menu.append(_("Sperre entfernen") if note["data"].get("enc") else _("Notiz sperren"), "win.toggle-lock")
+            menu.append(_("Löschen"), "win.delete-note")
         self.popup_menu(menu, widget, x, y)
 
     def popup_menu(self, menu, widget, x, y):
@@ -1411,7 +1615,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.note_pane.show_locked(note["id"])
         self.update_note_actions()
 
-    def with_vault(self, then, reason="Gib dein Notizen-Passwort ein."):
+    def with_vault(self, then, reason=_("Gib dein Notizen-Passwort ein.")):
         """Make sure the vault is unlocked (creating it first if needed)."""
         if self.vault_key is not None:
             self.touch_vault()
@@ -1426,11 +1630,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.touch_vault()
                 then()
             ask_password(
-                self, "Notizen-Passwort festlegen",
-                "Gesperrte Notizen werden auf deinem Gerät mit diesem Passwort verschlüsselt – "
-                "nicht einmal der Server kann sie lesen. Wenn du das Passwort vergisst, "
-                "lassen sich gesperrte Notizen nicht wiederherstellen.",
-                create, confirm=True, action="Festlegen",
+                self, _("Notizen-Passwort festlegen"),
+                _("Gesperrte Notizen werden auf deinem Gerät mit diesem Passwort verschlüsselt – nicht einmal der Server kann sie lesen. Wenn du das Passwort vergisst, lassen sich gesperrte Notizen nicht wiederherstellen."),
+                create, confirm=True, action=_("Festlegen"),
             )
             return
 
@@ -1449,8 +1651,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
                     self.touch_vault()
                     then()
                 run_async(derive, done)
-            ask_password(self, "Gesperrte Notizen", reason, unlock, hint=existing["data"].get("hint"),
-                         action="Entsperren", wrong=wrong)
+            ask_password(self, _("Gesperrte Notizen"), reason, unlock, hint=existing["data"].get("hint"),
+                         action=_("Entsperren"), wrong=wrong)
         ask()
 
     def on_lock_button(self):
@@ -1491,13 +1693,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 data.pop("title", None)
                 data["body"] = body
                 self.sync.put("note", data, current.get("share"), current["id"])
-                self.toast("Sperre entfernt")
+                self.toast(_("Sperre entfernt"))
                 self.refresh_list_only()
                 self.open_note(current["id"])
-            self.with_vault(remove, "Gib dein Notizen-Passwort ein, um die Sperre zu entfernen.")
+            self.with_vault(remove, _("Gib dein Notizen-Passwort ein, um die Sperre zu entfernen."))
             return
         if note["space"] == "shared":
-            self.toast("Geteilte Notizen können nicht gesperrt werden – wie in Apples Notizen.")
+            self.toast(_("Geteilte Notizen können nicht gesperrt werden – wie in Apples Notizen."))
             return
 
         def lock():
@@ -1509,7 +1711,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             data["title"] = model.blocks_title(body)
             data["modified"] = time.time()
             self.sync.put("note", data, current.get("share"), current["id"])
-            self.toast("Notiz gesperrt")
+            self.toast(_("Notiz gesperrt"))
             # Locking hides the content right away (and every other open locked note).
             self.lock_all()
             self.refresh_list_only()
@@ -1519,7 +1721,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def change_vault_password(self):
         existing = self.vault_object()
         if existing is None:
-            self.toast("Du hast noch kein Notizen-Passwort festgelegt.")
+            self.toast(_("Du hast noch kein Notizen-Passwort festgelegt."))
             return
 
         def got_old(old, _hint):
@@ -1542,11 +1744,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.sync.put("vault", data, None, existing["id"])
                 self.vault_key = new_key
                 self.touch_vault()
-                self.toast(f"Notizen-Passwort geändert, {count} Notizen neu verschlüsselt.")
-            ask_password(self, "Neues Notizen-Passwort", "", got_new, confirm=True, action="Ändern")
+                self.toast(_("Notizen-Passwort geändert, {count} Notizen neu verschlüsselt.", count=count))
+            ask_password(self, _("Neues Notizen-Passwort"), "", got_new, confirm=True, action=_("Ändern"))
 
         def ask_old(wrong=False):
-            ask_password(self, "Notizen-Passwort ändern", "Gib dein aktuelles Notizen-Passwort ein.", got_old,
+            ask_password(self, _("Notizen-Passwort ändern"), _("Gib dein aktuelles Notizen-Passwort ein."), got_old,
                          hint=existing["data"].get("hint"), wrong=wrong)
         ask_old()
 
@@ -1568,32 +1770,32 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sidebar.refresh()
             self.sidebar.select("folder:" + folder["id"])
         if parent is not None:
-            ask_text(self, "Neuer Unterordner", create, placeholder="Name", action="Erstellen",
-                     body=f"Neuer Ordner in „{parent['data'].get('name', 'Ordner')}“.")
+            ask_text(self, _("Neuer Unterordner"), create, placeholder=_("Name"), action=_("Erstellen"),
+                     body=_("Neuer Ordner in „{name}“.", name=parent['data'].get('name', 'Ordner')))
         else:
-            ask_text(self, "Neuer Ordner", create, placeholder="Name", action="Erstellen",
-                     body="Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben.")
+            ask_text(self, _("Neuer Ordner"), create, placeholder=_("Name"), action=_("Erstellen"),
+                     body=_("Neue Ordner sind privat. Mit Rechtsklick → „Teilen …“ kannst du sie freigeben."))
 
     def move_folder(self, folder_id):
-        """Move a folder (into another folder or to the top) or a list/board into a
+        """Move a folder (into another folder or to the top) or a list/board/plan into a
         folder (or out of it), like dragging in Notes."""
         folder = self.sync.get(folder_id)
-        if folder is None or folder["kind"] not in ("folder", "list", "board"):
+        if folder is None or folder["kind"] not in ("folder", "list", "board", "plan"):
             return
         is_folder = folder["kind"] == "folder"
         blocked = (model.folder_descendants(self.sync, folder_id) | {folder_id}) if is_folder else set()
         targets = [f for f in self.sync.objects("folder") if f["id"] not in blocked]
         targets.sort(key=lambda f: (bool(f.get("share")), model.folder_path(self.sync, f).lower()))
-        choices = [(None, "Oberste Ebene" if is_folder else "Kein Ordner")] + [
+        choices = [(None, _("Oberste Ebene") if is_folder else _("Kein Ordner"))] + [
             (f["id"], model.folder_path(self.sync, f) + (" (geteilt)" if f.get("share") else "")) for f in targets]
         current = model.folder_parent(self.sync, folder) if is_folder else (folder["data"].get("folder") or None)
         choices = [choice for choice in choices if choice[0] != current]
-        dialog = Adw.AlertDialog(heading=f"„{folder['data'].get('name', 'Ordner')}“ verschieben nach",
-                                 body="In einem geteilten Ordner sehen alle, mit denen er geteilt ist, auch den Inhalt.")
+        dialog = Adw.AlertDialog(heading=_("„{name}“ verschieben nach", name=folder['data'].get('name', 'Ordner')),
+                                 body=_("In einem geteilten Ordner sehen alle, mit denen er geteilt ist, auch den Inhalt."))
         dropdown = Gtk.DropDown.new_from_strings([label for _id, label in choices])
         dialog.set_extra_child(dropdown)
-        dialog.add_response("cancel", "Abbrechen")
-        dialog.add_response("ok", "Verschieben")
+        dialog.add_response("cancel", _("Abbrechen"))
+        dialog.add_response("ok", _("Verschieben"))
         dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
 
         def on_response(_dialog, response):
@@ -1621,7 +1823,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             shopping = self.sync.put("list", data, folder.get("share") if folder else None)
             self.sidebar.refresh()
             self.sidebar.select("list:" + shopping["id"])
-        ask_text(self, "Neue Liste", create, placeholder="z. B. Drogerie", action="Erstellen")
+        ask_text(self, _("Neue Liste"), create, placeholder=_("z. B. Drogerie"), action=_("Erstellen"))
 
     def new_board(self, folder_id=None):
         folder = self.target_folder(folder_id)
@@ -1636,7 +1838,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 self.sync.put("column", {"board": board["id"], "name": column, "order": order}, share, notify=False)
             self.sidebar.refresh()
             self.sidebar.select("board:" + board["id"])
-        ask_text(self, "Neues Board", create, placeholder="z. B. Haushalt", action="Erstellen")
+        ask_text(self, _("Neues Board"), create, placeholder=_("z. B. Haushalt"), action=_("Erstellen"))
 
     def new_plan(self, folder_id=None):
         """Like a list or board: a plan from a template (timetable, shifts, cleaning rota …)."""
@@ -1651,7 +1853,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             plan = self.sync.put("plan", data, folder.get("share") if folder else None)
             self.sidebar.refresh()
             self.sidebar.select("plan:" + plan["id"])
-        ask_text(self, "Neuer Plan", create, placeholder="z. B. Putzplan WG", action="Erstellen", choices=choices)
+        ask_text(self, _("Neuer Plan"), create, placeholder=_("z. B. Putzplan WG"), action=_("Erstellen"), choices=choices)
 
     def export_plan(self, plan_id):
         """A plan as PDF (to hang up) – saved, or printed from the PDF viewer."""
@@ -1659,8 +1861,8 @@ class LiNotesWindow(Adw.ApplicationWindow):
         if plan is None:
             return
         from . import report
-        name = plan["data"].get("name") or "Plan"
-        dialog = Gtk.FileDialog(title="Plan als PDF speichern", initial_name=f"{name}.pdf")
+        name = plan["data"].get("name") or _("Plan")
+        dialog = Gtk.FileDialog(title=_("Plan als PDF speichern"), initial_name=f"{name}.pdf")
 
         def chosen(dialog, result):
             try:
@@ -1668,11 +1870,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
             except GLib.Error:
                 return
             try:
-                report.write_plan_pdf(plan["data"], file.get_path())
+                report.write_plan_pdf(plan["data"], file.get_path(), self.sync.user_name)
             except Exception as error:
-                self.toast(f"PDF nicht möglich: {error}")
+                self.toast(_("PDF nicht möglich: {error}", error=error))
                 return
-            self.toast("Plan als PDF gespeichert")
+            self.toast(_("Plan als PDF gespeichert"))
             Gtk.FileLauncher.new(file).launch(self, None, None)
         dialog.save(self, None, chosen)
 
@@ -1682,23 +1884,27 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         self.menu_target = object_id
         menu = Gio.Menu()
-        menu.append("Teilen …", "win.share-object")
-        menu.append("Umbenennen …", "win.rename-object")
+        menu.append(_("Teilen …"), "win.share-object")
+        menu.append(_("Umbenennen …"), "win.rename-object")
         if kind == "folder":
-            menu.append("Neuer Unterordner …", "win.new-subfolder")
-            menu.append("Neue Liste hier …", "win.new-list-here")
-            menu.append("Neues Board hier …", "win.new-board-here")
+            menu.append(_("Neuer Unterordner …"), "win.new-subfolder")
+            menu.append(_("Neue Liste hier …"), "win.new-list-here")
+            menu.append(_("Neues Board hier …"), "win.new-board-here")
         if kind in ("folder", "list", "board", "plan"):
-            menu.append("Verschieben nach …", "win.move-object")
+            menu.append(_("Verschieben nach …"), "win.move-object")
+        if kind in ("list", "board", "plan"):
+            menu.append(_("Aus dem Archiv holen") if model.archived(obj) else _("Archivieren"), "win.archive-object")
         if kind == "plan":
-            menu.append("Als PDF …", "win.export-plan")
+            menu.append(_("Als PDF …"), "win.export-plan")
         if kind == "board":
-            menu.append("Bericht exportieren …", "win.export-object")
-            menu.append("Entwicklungsprojekt ausschalten" if obj["data"].get("dev") else "Als Entwicklungsprojekt führen",
+            menu.append(_("Bericht exportieren …"), "win.export-object")
+            menu.append(_("Entwicklungsprojekt ausschalten") if obj["data"].get("dev") else _("Als Entwicklungsprojekt führen"),
                         "win.toggle-dev")
+            if obj["data"].get("dev"):
+                menu.append(_("Farben der Personen …"), "win.comment-colors")
         protected = object_id == model.default_private_folder(self.sync.user_id)
         if not protected:
-            menu.append("Löschen …", "win.delete-object")
+            menu.append(_("Löschen …"), "win.delete-object")
         self.popup_menu(menu, widget, x, y)
 
     def export_board(self, board_id):
@@ -1709,10 +1915,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         from . import report
         name = board["data"].get("name", "Board")
-        dialog = Gtk.FileDialog(title="Bericht exportieren")
+        dialog = Gtk.FileDialog(title=_("Bericht exportieren"))
         dialog.set_initial_name(f"{name} – Stand {time.strftime('%Y-%m-%d')}.pdf")
         filters = Gio.ListStore.new(Gtk.FileFilter)
-        for label, pattern in (("PDF-Bericht", "*.pdf"), ("Tabelle (CSV, z. B. für Excel)", "*.csv")):
+        for label, pattern in ((_("PDF-Bericht"), "*.pdf"), (_("Tabelle (CSV, z. B. für Excel)"), "*.csv")):
             file_filter = Gtk.FileFilter(name=label)
             file_filter.add_pattern(pattern)
             filters.append(file_filter)
@@ -1729,7 +1935,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             else:
                 path = path if path.lower().endswith(".pdf") else path + ".pdf"
                 report.write_pdf(data, path)
-            self.toast(f"Bericht gespeichert: {Path(path).name}")
+            self.toast(_("Bericht gespeichert: {name}", name=Path(path).name))
         dialog.save(self, None, chosen)
 
     def toggle_dev(self):
@@ -1739,15 +1945,22 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return
         dev = not board["data"].get("dev")
         self.sync.update(board["id"], dev=dev)
-        self.toast(f"„{board['data'].get('name', 'Board')}“ ist jetzt ein Entwicklungsprojekt." if dev
-                   else f"„{board['data'].get('name', 'Board')}“ ist wieder ein einfaches Board.")
+        self.toast(_("„{name}“ ist jetzt ein Entwicklungsprojekt.", name=board['data'].get('name', 'Board')) if dev
+                   else _("„{name}“ ist wieder ein einfaches Board.", name=board['data'].get('name', 'Board')))
         self.refresh_all()
+
+    def comment_colors(self):
+        """Team colours for the comment heads of a development project's cards (way C, Olaf 07.10.)."""
+        board = self.sync.get(getattr(self, "menu_target", ""))
+        if board is not None and board["kind"] == "board":
+            from .kanban import CommentColorsDialog
+            CommentColorsDialog(self.sync, board["id"]).present(self)
 
     def rename_object(self):
         obj = self.sync.get(getattr(self, "menu_target", ""))
         if obj is None:
             return
-        ask_text(self, "Umbenennen", lambda name, _c: (self.sync.update(obj["id"], name=name), self.refresh_all()),
+        ask_text(self, _("Umbenennen"), lambda name, _c: (self.sync.update(obj["id"], name=name), self.refresh_all()),
                  text=obj["data"].get("name", ""))
 
     def delete_object(self):
@@ -1757,12 +1970,11 @@ class LiNotesWindow(Adw.ApplicationWindow):
         kind = obj["kind"]
         name = obj["data"].get("name", "")
         if obj["space"] == "shared" and obj["owner"] != self.sync.user_id:
-            body = f"„{name}“ gehört allen – es wird auch für die anderen gelöscht."
+            body = _("„{name}“ gehört allen – es wird auch für die anderen gelöscht.", name=name)
         else:
-            body = f"„{name}“ und alles darin wird gelöscht."
+            body = _("„{name}“ und alles darin wird gelöscht.", name=name)
             if kind == "folder":
-                body = (f"„{name}“, seine Unterordner und ihre Notizen werden gelöscht (Notizen landen in "
-                        "„Zuletzt gelöscht“). Listen und Boards darin bleiben erhalten – ohne Ordner.")
+                body = (_("„{name}“, seine Unterordner und ihre Notizen werden gelöscht (Notizen landen in „Zuletzt gelöscht“). Listen und Boards darin bleiben erhalten – ohne Ordner.", name=name))
 
         def remove():
             if kind == "folder":
@@ -1788,7 +2000,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             self.sync.delete(obj["id"])
             self.current_key = "all"
             self.refresh_all()
-        confirm(self, "Löschen?", body, "Löschen", remove)
+        confirm(self, _("Löschen?"), body, _("Löschen"), remove)
 
     # ========================================================
     # SYNC EVENTS
@@ -1866,6 +2078,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "export-plan": lambda: self.export_plan(getattr(self, "menu_target", "")),
             "rename-object": self.rename_object,
             "toggle-dev": self.toggle_dev,
+            "comment-colors": self.comment_colors,
             "new-subfolder": lambda: self.new_folder(getattr(self, "menu_target", None)),
             "new-list-here": lambda: self.new_list(getattr(self, "menu_target", None)),
             "new-board-here": lambda: self.new_board(getattr(self, "menu_target", None)),
@@ -1882,6 +2095,10 @@ class LiNotesWindow(Adw.ApplicationWindow):
             "sign-out": self.sign_out,
             "connect": self.connect_server,
             "search": lambda: (self.select("all"), self.note_list.search.grab_focus()),
+            "archive-note": lambda: self.toggle_archive(self.current_note),
+            "template-note": lambda: self.toggle_template(self.current_note),
+            "new-from-template": self.choose_template,
+            "archive-object": lambda: self.toggle_archive(self.menu_target),
             "list-view": lambda: self.list_mode.set_active(True),
             "gallery-view": lambda: self.gallery_mode.set_active(True),
         }
@@ -1894,6 +2111,13 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.text_size_action.connect("activate", lambda _action, value: self.set_text_size(int(value.get_string())))
         self.add_action(self.text_size_action)
         textsize.apply(textsize.load())
+        self.pro_action = Gio.SimpleAction.new_stateful("pro-features", None, GLib.Variant.new_boolean(False))
+        self.pro_action.connect("activate", lambda action, _value: self.set_pro_features(not action.get_state().get_boolean()))
+        self.add_action(self.pro_action)
+        previews = Gio.SimpleAction.new_stateful("link-previews", None, GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))
+        previews.connect("activate", lambda action, _value: (uiprefs.put("link_previews", not action.get_state().get_boolean()),
+                                                             action.set_state(GLib.Variant.new_boolean(bool(uiprefs.get("link_previews", False))))))
+        self.add_action(previews)
         self.justify_action = Gio.SimpleAction.new_stateful("justify", None, GLib.Variant.new_boolean(textsize.load_justify()))
         self.justify_action.connect("activate", lambda action, _value: self.set_justified(not action.get_state().get_boolean()))
         self.add_action(self.justify_action)
@@ -1901,6 +2125,17 @@ class LiNotesWindow(Adw.ApplicationWindow):
         self.sort_action = Gio.SimpleAction.new_stateful("sort-notes", GLib.VariantType.new("s"), GLib.Variant.new_string(current))
         self.sort_action.connect("activate", lambda action, value: self.sort_notes(value.get_string()))
         self.add_action(self.sort_action)
+        # Language: takes effect after a restart (texts are created once when the window is built).
+        chosen = uiprefs.get("language") or "system"
+        self.language_action = Gio.SimpleAction.new_stateful("language", GLib.VariantType.new("s"), GLib.Variant.new_string(chosen))
+        self.language_action.connect("activate", lambda action, value: self.choose_language(value.get_string()))
+        self.add_action(self.language_action)
+
+    def choose_language(self, code):
+        from . import i18n
+        i18n.set_language(None if code == "system" else code)
+        self.language_action.set_state(GLib.Variant.new_string(code))
+        self.toast(_("Die Sprache wechselt beim nächsten Start von LiNotes."))
 
     def show_shortcuts(self):
         from .shortcuts import shortcuts_dialog
@@ -1910,7 +2145,35 @@ class LiNotesWindow(Adw.ApplicationWindow):
         level = max(0, min(len(textsize.SIZES) - 1, level))
         textsize.save(level)
         textsize.apply(level)
+        # Formulas are set once at a size taken from the text – set them again at the new one.
+        GLib.idle_add(lambda: [editor.refresh_math() for editor in [self.note_pane.editor] + [w.editor for w in self.note_windows]] and False)
         self.text_size_action.set_state(GLib.Variant.new_string(str(level)))
+
+    def insert_math(self, editor=None):
+        editor = editor or self.note_pane.editor
+        if not self.pro_features() or not editor.get_editable():
+            return
+        editor.insert_math()
+
+    def ask_footnote(self, editor):
+        """Format → Fußnote / Quelle (Profi-Funktion)."""
+        def done(text, _choice):
+            if text.strip():
+                editor.insert_footnote(text)
+        ask_text(self, _("Fußnote oder Quelle"), done, placeholder=_("z. B. Müller, Gartenbau, 2020, S. 41"), action=_("Einfügen"),
+                 body=_("An der Cursorstelle erscheint eine hochgestellte Nummer, der Text steht unter der Notiz und im PDF."))
+
+    def set_pro_features(self, on):
+        self.sync.set_pro_features(on)
+        self.pro_action.set_state(GLib.Variant.new_boolean(on))
+        self.toast(_("Profi-Funktionen an") if on else _("Profi-Funktionen aus"))
+
+    def pro_features(self):
+        """Current state (the menu check follows syncs from other devices when asked)."""
+        on = self.sync.pro_features() if self.sync.user_id is not None else False
+        if self.pro_action.get_state().get_boolean() != on:
+            self.pro_action.set_state(GLib.Variant.new_boolean(on))
+        return on
 
     def set_justified(self, on):
         textsize.save_justify(on)
@@ -1954,6 +2217,9 @@ class LiNotesWindow(Adw.ApplicationWindow):
             return True
         if key == Gdk.KEY_d and not shift:
             self.duplicate()
+            return True
+        if key == Gdk.KEY_f and self.stack.get_visible_child_name() == "board":
+            self.board_view.start_search()  # find cards in the open board
             return True
         if key == Gdk.KEY_f and (alt or not self.note_pane.editor.has_focus()):
             self.activate_action("win.search")

@@ -16,6 +16,7 @@ import time
 
 from . import e2e
 from .api import ApiError
+from .i18n import _
 
 
 LINK_A, LINK_B = b"linotes-new-device", b"linotes-account"
@@ -33,7 +34,7 @@ def qr_text(purpose, channel, code):
 def parse_qr(text):
     parts = text.strip().split("|")
     if len(parts) != 4 or parts[0] != "LINOTES" or parts[1] not in ("link", "verify"):
-        raise PairingError("Kein LiNotes-Code")
+        raise PairingError(_("Kein LiNotes-Code"))
     return parts[1], parts[2], parts[3]
 
 
@@ -45,13 +46,13 @@ def wait_message(api, channel, after, role, timeout, cancelled=lambda: False):
             messages = api.relay_get(channel, after, wait=min(20, max(1, int(deadline - time.time()))))
         except ApiError as error:
             if error.status == 404:
-                raise PairingError("Der Vorgang wurde abgebrochen oder ist abgelaufen.") from None
+                raise PairingError(_("Der Vorgang wurde abgebrochen oder ist abgelaufen.")) from None
             raise
         for message in messages:
             if message["role"] == role:
                 return message
             after = message["seq"]
-    raise PairingError("Zeitüberschreitung")
+    raise PairingError(_("Zeitüberschreitung"))
 
 
 def payload_key(ke):
@@ -84,7 +85,7 @@ class NewDeviceLink:
         ke, confirmation, expected = self.spake.finish(bytes.fromhex(reply["p"]))
         if not hmac.compare_digest(reply.get("c", ""), expected.hex()):
             self.close()
-            raise PairingError("Der Code war falsch. Bitte neu versuchen.")
+            raise PairingError(_("Der Code war falsch. Bitte neu versuchen."))
         content = e2e.open_sealed(payload_key(ke), reply["k"], "link")
         self.api.relay_post(self.channel, "A", json.dumps({"ok": True, "c": confirmation.hex()}))
         return e2e.unb64(content["secret"])
@@ -109,10 +110,10 @@ def approve_link(api, channel, code, account):
     try:
         done = wait_message(api, channel, first["seq"], "A", 40)
     except PairingError:
-        raise PairingError("Das neue Gerät hat nicht bestätigt – war der Code richtig?")
+        raise PairingError(_("Das neue Gerät hat nicht bestätigt – war der Code richtig?"))
     result = json.loads(done["body"])
     if not hmac.compare_digest(result.get("c", ""), expected.hex()):
-        raise PairingError("Der Code war falsch.")
+        raise PairingError(_("Der Code war falsch."))
     return True
 
 
@@ -124,7 +125,7 @@ def _peer_public(users, user_id):
     for user in users:
         if user["id"] == user_id:
             return user["identity"]
-    raise PairingError("Unbekanntes Konto")
+    raise PairingError(_("Unbekannter Account"))
 
 
 class VerifyShow:
@@ -144,10 +145,10 @@ class VerifyShow:
         reply = json.loads(message["body"])
         ke, confirmation, expected = self.spake.finish(bytes.fromhex(reply["p"]))
         if not hmac.compare_digest(reply.get("c", ""), expected.hex()):
-            raise PairingError("Der eingegebene Code war falsch.")
+            raise PairingError(_("Der eingegebene Code war falsch."))
         peer = _peer_public(users, self.other_id)
         if not hmac.compare_digest(reply.get("m", ""), mac(ke, VERIFY_B, peer)):
-            raise PairingError("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!")
+            raise PairingError(_("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
         self.api.relay_post(self.channel, "A", json.dumps({"c": confirmation.hex(), "m": mac(ke, VERIFY_A, my_public)}))
         return e2e.fingerprint(peer)
 
@@ -161,8 +162,8 @@ def verify_enter(api, channel, code, other_id, my_public, users):
                                              "m": mac(ke, VERIFY_B, my_public)}))
     done = json.loads(wait_message(api, channel, first["seq"], "A", 60)["body"])
     if not hmac.compare_digest(done.get("c", ""), expected.hex()):
-        raise PairingError("Der Code war falsch.")
+        raise PairingError(_("Der Code war falsch."))
     peer = _peer_public(users, other_id)
     if not hmac.compare_digest(done.get("m", ""), mac(ke, VERIFY_A, peer)):
-        raise PairingError("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!")
+        raise PairingError(_("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
     return e2e.fingerprint(peer)

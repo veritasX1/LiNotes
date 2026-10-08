@@ -11,6 +11,7 @@ class LiNotesApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        io.github.veritasx1.linotes.i18n.I18n.init(this)
         state = AppState(SyncEngine(this), BiometricStore(this))
     }
 }

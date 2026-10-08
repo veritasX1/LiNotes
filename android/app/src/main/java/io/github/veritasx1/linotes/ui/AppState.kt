@@ -1,6 +1,9 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +61,36 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     var pickFile: ((String, String, ByteArray) -> Unit) -> Unit = {}
     /** Open a decrypted attachment with the app that handles its type. */
     var openFile: (file: java.io.File, mime: String) -> Unit = { _, _ -> }
+    /** A photo or file on its way to the server; [progress] goes from 0 to 1. */
+    class Upload(val name: String, val target: String?) {
+        var progress by mutableFloatStateOf(0f)
+    }
+
+    /** Running uploads, shown as progress bars. */
+    val uploads = mutableStateListOf<Upload>()
+
+    /** Upload in the background of the whole app, not of one screen: leaving the note or card
+     *  does not cancel it. [done] gets the file reference on the main thread. */
+    fun upload(name: String, bytes: ByteArray, share: String?, target: String? = null, done: (String) -> Unit) {
+        val item = Upload(name, target)
+        uploads.add(item)
+        sync.launch {
+            try {
+                val reference = withContext(Dispatchers.IO) {
+                    // 100 % only once the server has it (it still stores the file after the last byte).
+                    sync.uploadFile(bytes, share) { sent, total -> item.progress = minOf(sent.toFloat() / total, 0.99f) }
+                }
+                withContext(Dispatchers.Main) { done(reference) }
+            } catch (error: Exception) {
+                withContext(Dispatchers.Main) { showToast(tr("„{name}“ nicht hochgeladen: ", "name" to name) + errorText(error)) }
+            } finally {
+                withContext(Dispatchers.Main) { uploads.remove(item) }
+            }
+        }
+    }
+
+    /** The attachment shown in the quick look (null: closed). */
+    var quickLook by mutableStateOf<LookFile?>(null)
 
     // Platform hooks, filled in by MainActivity.
     var authenticate: (title: String, done: (Boolean) -> Unit) -> Unit = { _, done -> done(false) }
@@ -77,7 +110,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
 
     fun scanQr(onResult: (String) -> Unit) {
         requestCamera { granted ->
-            if (granted) scanner = onResult else toastLater("Ohne Kamerazugriff kann kein QR-Code gescannt werden.")
+            if (granted) scanner = onResult else toastLater(tr("Ohne Kamerazugriff kann kein QR-Code gescannt werden."))
         }
     }
 
@@ -140,7 +173,7 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
     fun enableBiometric(done: (Boolean) -> Unit) {
         val key = vaultKey ?: return done(false)
         val store = biometric ?: return done(false)
-        authenticate("Entsperren mit Fingerabdruck, PIN oder Muster einschalten") { ok ->
+        authenticate(tr("Entsperren mit Fingerabdruck, PIN oder Muster einschalten")) { ok ->
             val stored = ok && try { store.store(key, vaultObject()?.id.orEmpty()); true } catch (error: Exception) { false }
             done(stored)
         }
@@ -152,14 +185,14 @@ class AppState(val sync: SyncEngine, val biometric: BiometricStore? = null) {
 
     fun unlockWithBiometric(done: (Boolean) -> Unit) {
         val store = biometric?.takeIf { it.enabled } ?: return done(false)
-        authenticate("Gesperrte Notizen öffnen") { ok ->
+        authenticate(tr("Gesperrte Notizen öffnen")) { ok ->
             if (!ok) return@authenticate done(false)
             val key = try { store.load() } catch (error: Exception) { null }
             val vault = vaultObject()
             if (key == null || vault == null || !Vault.checkKey(vault.data, key)) {
                 // The notes password changed or the phone's lock was reset.
                 store.clear()
-                toastLater("Bitte einmal das Notizen-Passwort eingeben.")
+                toastLater(tr("Bitte einmal das Notizen-Passwort eingeben."))
                 return@authenticate done(false)
             }
             vaultKey = key

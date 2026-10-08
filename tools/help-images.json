@@ -1,0 +1,20 @@
+{
+  "_": "Pictures for the in-app help: entry title -> screenshots from homepage/img (light; the dark variant is taken along when it exists). After changing: python3 tools/sync-help-images.py",
+  "ubuntu": {
+    "Formatieren": ["ubuntu-02-rezept"],
+    "Checklisten": ["ubuntu-01-notiz"],
+    "Listen": ["ubuntu-07-liste"],
+    "Aufgaben-Board": ["ubuntu-08-board"],
+    "Entwicklungsprojekt": ["ubuntu-13-entwicklung", "ubuntu-14-karte"],
+    "Bericht": ["ubuntu-15-bericht-seite-1"],
+    "Pläne": ["ubuntu-12-dienstplan", "ubuntu-11-projektplan"]
+  },
+  "android": {
+    "Ohne Server": ["android-m-start"],
+    "Formatieren": ["android-c-notiz"],
+    "Auf dem Handy behalten": ["android-l-einstellungen"],
+    "Listen": ["android-f-liste"],
+    "Aufgaben-Board": ["android-g-board"],
+    "Pläne": ["android-k-dienstplan", "android-j-projektplan"]
+  }
+}

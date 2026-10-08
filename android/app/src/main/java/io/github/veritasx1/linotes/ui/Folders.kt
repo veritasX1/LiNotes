@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import io.github.veritasx1.linotes.data.SyncEngine
 import io.github.veritasx1.linotes.data.SyncObject
 import org.json.JSONObject
@@ -51,7 +53,7 @@ fun folderPath(sync: SyncEngine, folder: SyncObject): String {
     var current: SyncObject? = folder
     var guard = 0
     while (current != null && guard++ < 32) {
-        names.add(current.data.optString("name", "Ordner"))
+        names.add(current.data.optString("name", tr("Ordner")))
         current = folderParent(sync, current)?.let { sync.get(it) }
     }
     return names.reversed().joinToString(" › ")
@@ -67,8 +69,8 @@ fun MoveToFolderSheet(state: AppState, obj: SyncObject, onDone: () -> Unit) {
     val targets = sync.all("folder").filter { it.id !in blocked && it.id != current }
         .sortedWith(compareBy({ it.share != null }, { folderPath(sync, it).lowercase() }))
     fun move(target: SyncObject?) = moveObjectTo(state, obj.id, target?.id)
-    ActionSheet("„${obj.data.optString("name")}“ verschieben nach", buildList {
-        if (current != null) add(SheetAction(if (isFolder) "Oberste Ebene" else "Kein Ordner") { move(null) })
+    ActionSheet(tr("„{name}“ verschieben nach", "name" to (obj.data.optString("name"))), buildList {
+        if (current != null) add(SheetAction(if (isFolder) tr("Oberste Ebene") else tr("Kein Ordner")) { move(null) })
         targets.forEach { target -> add(SheetAction(folderPath(sync, target) + if (target.share != null) " (geteilt)" else "") { move(target) }) }
     }, onDone)
 }
@@ -87,14 +89,14 @@ fun moveNoteTo(state: AppState, noteId: String, folderId: String) {
     val folder = sync.get(folderId)?.takeIf { it.kind == "folder" } ?: return
     if (note.data.optString("folder") == folderId) return
     when {
-        folder.share != null && note.data.has("enc") -> state.toastLater("Gesperrte Notizen können nicht geteilt werden.")
-        folder.share != note.share && note.owner != sync.userId -> state.toastLater("Nur wer die Notiz erstellt hat, kann sie verschieben.")
+        folder.share != null && note.data.has("enc") -> state.toastLater(tr("Gesperrte Notizen können nicht geteilt werden."))
+        folder.share != note.share && note.owner != sync.userId -> state.toastLater(tr("Nur wer die Notiz erstellt hat, kann sie verschieben."))
         else -> sync.launch {
             val current = sync.get(noteId) ?: return@launch
             val data = if (folder.share != current.share) sync.rekeyFiles(current, folder.share) else JSONObject(current.data.toString())
             data.put("folder", folder.id)
             sync.put("note", data, folder.share, current.id)
-            state.toastLater("Nach „${folder.data.optString("name")}“ verschoben")
+            state.toastLater(tr("Nach „{name}“ verschoben", "name" to (folder.data.optString("name"))))
         }
     }
 }
@@ -104,19 +106,19 @@ fun moveObjectTo(state: AppState, objectId: String, folderId: String?) {
     val sync = state.sync
     val obj = sync.get(objectId) ?: return
     if (obj.kind == "folder" && folderId != null && folderId in folderDescendants(sync, objectId) + objectId) {
-        state.toastLater("Ein Ordner kann nicht in sich selbst liegen.")
+        state.toastLater(tr("Ein Ordner kann nicht in sich selbst liegen."))
         return
     }
     val field = if (obj.kind == "folder") "parent" else "folder"
     if (obj.data.optString(field).takeIf { it.isNotEmpty() && it != "null" } == folderId) return
     if (sync.shareAfterMove(obj, folderId) != obj.share && obj.owner != sync.userId) {
-        state.toastLater("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben.")
+        state.toastLater(tr("Nur wer es erstellt hat, kann es in einen anderen Bereich verschieben."))
         return
     }
     // Into or out of a shared folder everything inside is re-encrypted – runs in the background.
     sync.launch {
         sync.moveToFolder(objectId, folderId)
-        state.toastLater("Verschoben")
+        state.toastLater(tr("Verschoben"))
     }
 }
 
@@ -138,11 +140,11 @@ fun acceptsOnFolder(payload: String, folderId: String) =
 fun CreateInFolder(state: AppState, folder: SyncObject, kind: String, onDone: () -> Unit) {
     val sync = state.sync
     val (title, hint) = when (kind) {
-        "folder" -> "Neuer Unterordner" to "Name"
-        "list" -> "Neue Liste" to "z. B. Drogerie"
-        else -> "Neues Board" to "z. B. Haushalt"
+        "folder" -> tr("Neuer Unterordner") to tr("Name")
+        "list" -> tr("Neue Liste") to tr("z. B. Drogerie")
+        else -> tr("Neues Board") to tr("z. B. Haushalt")
     }
-    AlertDialog(title, "In „${folder.data.optString("name")}“.", "Erstellen", fields = listOf(AlertField(hint)), onDismiss = onDone) { values ->
+    AlertDialog(title, tr("In „{name}“.", "name" to (folder.data.optString("name"))), tr("Erstellen"), fields = listOf(AlertField(hint)), onDismiss = onDone) { values ->
         val name = values[0].trim()
         if (name.isNotEmpty()) {
             val data = JSONObject().put("name", name).put("order", io.github.veritasx1.linotes.data.Model.now())

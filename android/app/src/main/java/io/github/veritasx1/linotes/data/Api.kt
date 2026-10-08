@@ -117,19 +117,35 @@ class Api(val server: String, var token: String? = null) {
     fun push(changes: JSONArray): JSONArray =
         request("POST", "/api/sync", JSONObject().put("changes", changes), timeoutSeconds = 40).getJSONArray("results")
 
-    fun upload(content: ByteArray, share: String?): String {
+    /** [progress] gets (bytes sent, bytes total) while the body streams out. */
+    fun upload(content: ByteArray, share: String?, progress: ((Long, Long) -> Unit)? = null): String {
         val boundary = "----linotes" + UUID.randomUUID().toString().replace("-", "")
         val connection = open("/api/files", "POST", 120)
         try {
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-            val body = ByteArrayOutputStream()
-            if (share != null) body.write("--$boundary\r\nContent-Disposition: form-data; name=\"share\"\r\n\r\n$share\r\n".toByteArray())
-            body.write("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"datei\"\r\nContent-Type: application/octet-stream\r\n\r\n".toByteArray())
-            body.write(content)
-            body.write("\r\n--$boundary--\r\n".toByteArray())
+            val head = ByteArrayOutputStream()
+            if (share != null) head.write("--$boundary\r\nContent-Disposition: form-data; name=\"share\"\r\n\r\n$share\r\n".toByteArray())
+            head.write("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"datei\"\r\nContent-Type: application/octet-stream\r\n\r\n".toByteArray())
+            val tail = "\r\n--$boundary--\r\n".toByteArray()
+            val total = head.size().toLong() + content.size + tail.size
+            // Streamed in pieces (not buffered whole), so the progress is the real one.
+            connection.setFixedLengthStreamingMode(total)
             try {
-                connection.outputStream.use { it.write(body.toByteArray()) }
+                connection.outputStream.use { out ->
+                    out.write(head.toByteArray())
+                    var sent = head.size().toLong()
+                    var offset = 0
+                    while (offset < content.size) {
+                        val count = minOf(64 * 1024, content.size - offset)
+                        out.write(content, offset, count)
+                        offset += count
+                        sent += count
+                        progress?.invoke(sent, total)
+                    }
+                    out.write(tail)
+                    progress?.invoke(total, total)
+                }
             } catch (error: IOException) {
                 throw OfflineException(error.message ?: "offline")
             }

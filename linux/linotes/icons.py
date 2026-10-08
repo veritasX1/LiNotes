@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Graphene", "1.0")
 
-from gi.repository import Gdk, GObject, Graphene, Gtk
+from gi.repository import Gdk, GLib, GObject, Graphene, Gtk
 
 
 LINE = 1.35
@@ -209,6 +209,20 @@ def icon_folder_shared(cr):
     cr.move_to(5.5, 12.8)
     cr.curve_to(5.5, 10.6, 10.5, 10.6, 10.5, 12.8)
     _stroke(cr, 1.0)
+
+
+def icon_archive(cr):
+    """Apple's archive box: a lid, the box below it, a handle slot."""
+    rounded_rectangle(cr, 1.5, 2.5, 13, 3.5, 1.2)
+    _stroke(cr)
+    cr.move_to(2.7, 6)
+    cr.line_to(2.7, 13.5)
+    cr.line_to(13.3, 13.5)
+    cr.line_to(13.3, 6)
+    _stroke(cr)
+    cr.move_to(6.3, 8.8)
+    cr.line_to(9.7, 8.8)
+    _stroke(cr)
 
 
 def icon_cart(cr):
@@ -464,3 +478,47 @@ def drop_target(widget, accept, on_drop):
     target.connect("leave", lambda *_args: widget.remove_css_class("drop-hover"))
     target.connect("drop", dropped)
     widget.add_controller(target)
+
+
+def drag_autoscroll(scroller, edge=56, fastest=22, sideways=False):
+    """While something is dragged over `scroller`, scroll when the pointer nears an edge (top and
+    bottom; left and right too with `sideways`) – GTK does not do this by itself, so a far-away
+    folder or column was out of reach. The closer to the edge, the faster."""
+    speed = {"x": 0.0, "y": 0.0}
+    state = {"tick": None}
+
+    def edge_speed(position, size):
+        if position < edge:
+            return -fastest * (edge - position) / edge
+        if position > size - edge:
+            return fastest * (position - (size - edge)) / edge
+        return 0.0
+
+    def nudge(adjustment, delta):
+        if delta:
+            top = adjustment.get_upper() - adjustment.get_page_size()
+            adjustment.set_value(min(max(adjustment.get_value() + delta, adjustment.get_lower()), top))
+
+    def step():
+        if not speed["x"] and not speed["y"]:
+            state["tick"] = None
+            return False
+        nudge(scroller.get_vadjustment(), speed["y"])
+        nudge(scroller.get_hadjustment(), speed["x"])
+        return True
+
+    def moved(_controller, x, y):
+        speed["y"] = edge_speed(y, scroller.get_height())
+        speed["x"] = edge_speed(x, scroller.get_width()) if sideways else 0.0
+        if (speed["x"] or speed["y"]) and state["tick"] is None:
+            state["tick"] = GLib.timeout_add(16, step)
+
+    def stopped(*_args):
+        speed["x"] = speed["y"] = 0.0
+
+    motion = Gtk.DropControllerMotion()
+    motion.connect("enter", moved)
+    motion.connect("motion", moved)
+    motion.connect("leave", stopped)
+    scroller.add_controller(motion)
+    return speed

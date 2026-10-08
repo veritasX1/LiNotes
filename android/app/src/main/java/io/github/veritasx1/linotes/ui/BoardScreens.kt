@@ -1,6 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
-import android.app.DatePickerDialog
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,7 +68,7 @@ val CARD_COLORS = listOf("rot" to Color(0xFFE0463A), "orange" to Color(0xFFF08C0
     "grün" to Color(0xFF2FA84F), "blau" to Color(0xFF2B7DE0), "lila" to Color(0xFF9B59D0))
 
 /** Like Apple's Reminders: none, low, medium, high – shown as ! / !! / !!! before the title. */
-val PRIORITIES = listOf("" to "Keine", "niedrig" to "Niedrig", "mittel" to "Mittel", "hoch" to "Hoch")
+val PRIORITIES = listOf("" to tr("Keine"), "niedrig" to tr("Niedrig"), "mittel" to tr("Mittel"), "hoch" to tr("Hoch"))
 val PRIORITY_MARKS = mapOf("niedrig" to "!", "mittel" to "!!", "hoch" to "!!!")
 
 /** One step of a card's status history. The column name is kept as it was,
@@ -97,12 +98,12 @@ fun evidenceDetails(sync: SyncEngine, item: JSONObject): String {
         parts += "%02d.%02d.%d %02d:%02d".format(moment.dayOfMonth, moment.monthValue, moment.year, moment.hour, moment.minute)
     }
     if (item.has("by")) parts += sync.userName(item.optInt("by"))
-    item.optString("h").takeIf { it.isNotEmpty() }?.let { parts += "SHA-256 ${it.take(12)}…" }
+    item.optString("h").takeIf { it.isNotEmpty() }?.let { parts += tr("SHA-256 {take}…", "take" to (it.take(12))) }
     return parts.joinToString(" · ")
 }
 
 fun humanSize(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes Bytes"
+    bytes < 1024 -> tr("{bytes} Bytes", "bytes" to bytes)
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> "%.1f MB".format(java.util.Locale.GERMANY, bytes / 1024.0 / 1024.0)
 }
@@ -127,8 +128,8 @@ private fun momentLabel(seconds: Double): String {
     val moment = java.time.Instant.ofEpochMilli((seconds * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
     val time = "%02d:%02d".format(moment.hour, moment.minute)
     return when (java.time.temporal.ChronoUnit.DAYS.between(moment.toLocalDate(), LocalDate.now())) {
-        0L -> "heute, $time"
-        1L -> "gestern, $time"
+        0L -> tr("heute, {time}", "time" to time)
+        1L -> tr("gestern, {time}", "time" to time)
         else -> "%02d.%02d.%d".format(moment.dayOfMonth, moment.monthValue, moment.year)
     }
 }
@@ -138,9 +139,9 @@ fun cardDates(card: SyncObject, dev: Boolean): String {
     val created = card.data.optDouble("created", 0.0)
     val done = card.data.optDouble("done_at", 0.0)
     return buildList {
-        if (created > 0) add("Erstellt " + momentLabel(created))
-        if (dev && card.updated > 0 && (created <= 0 || card.updated - created > 60)) add("Bearbeitet " + momentLabel(card.updated))
-        if (done > 0) add("Erledigt " + momentLabel(done))
+        if (created > 0) add(tr("Erstellt ") + momentLabel(created))
+        if (dev && card.updated > 0 && (created <= 0 || card.updated - created > 60)) add(tr("Bearbeitet ") + momentLabel(card.updated))
+        if (done > 0) add(tr("Erledigt ") + momentLabel(done))
     }.joinToString(" · ")
 }
 
@@ -148,32 +149,40 @@ fun cardDates(card: SyncObject, dev: Boolean): String {
 fun BoardsScreen(state: AppState, revision: Long) {
     val sync = state.sync
     val context = LocalContext.current
-    val boards = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val everything = remember(revision) { sync.all("board").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val boards = everything.filter { !Model.archived(it) }
+    val archivedBoards = everything.filter { Model.archived(it) }
+    var archiveOpen by remember { mutableStateOf(false) }
     val cards = remember(revision) { sync.all("card") }
     var creating by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
     var renaming by remember { mutableStateOf<SyncObject?>(null) }
     var moving by remember { mutableStateOf<SyncObject?>(null) }
+    var coloring by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
-        title = "Aufgaben",
-        actions = { BarButton(Glyph.Plus, "Neues Board") { creating = "new" } },
+        title = tr("Aufgaben"),
+        actions = { BarButton(Glyph.Plus, tr("Neues Board")) { creating = "new" } },
     ) {
-        if (boards.isEmpty()) item { EmptyState("Keine Boards", glyph = Glyph.Board) }
+        if (boards.isEmpty()) item { EmptyState(tr("Keine Boards"), glyph = Glyph.Board) }
         // Grouped by folder: unfiled boards first, then one section per folder.
         // Drag a board onto a section heading to move it into that folder (or out, on "Boards").
-        for ((folder, group) in groupByFolder(sync, boards)) section("boards-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Boards",
+        for ((folder, group) in groupByFolder(sync, boards)) section("boards-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: tr("Boards"),
             headerDrop = Pair({ it.startsWith("board:") }, { dropOnFolder(state, it, folder?.id) })) {
             group.forEachIndexed { index, board ->
-                GroupRow(board.data.optString("name", "Board"), Glyph.Board,
+                GroupRow(board.data.optString("name", tr("Board")), Glyph.Board,
                     subtitle = shareLabel(sync, board),
                     detail = "${cards.count { it.data.optString("board") == board.id && !it.data.optBoolean("archived") }}",
                     divider = index < group.lastIndex, dragPayload = "board:${board.id}", onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
             }
         }
+        archiveSection("boards", archivedBoards, archiveOpen, { archiveOpen = !archiveOpen }) { board, divider ->
+            GroupRow(board.data.optString("name", tr("Board")), Glyph.Board, subtitle = shareLabel(sync, board), divider = divider,
+                onLongClick = { menu = board }) { state.push(Route.Board(board.id)) }
+        }
     }
     creating?.let { _ ->
-        AlertDialog("Neues Board", confirm = "Erstellen", fields = listOf(AlertField("z. B. Haushalt")), onDismiss = { creating = null }) { values ->
+        AlertDialog(tr("Neues Board"), confirm = tr("Erstellen"), fields = listOf(AlertField(tr("z. B. Haushalt"))), onDismiss = { creating = null }) { values ->
             if (values[0].isNotBlank()) {
                 val board = sync.put("board", JSONObject().put("name", values[0].trim()).put("order", Model.now()))
                 Model.defaultColumns.forEachIndexed { order, (_, name) ->
@@ -186,24 +195,27 @@ fun BoardsScreen(state: AppState, revision: Long) {
     }
     menu?.let { board ->
         ActionSheet(board.data.optString("name"), listOf(
-            SheetAction("Umbenennen") { renaming = board },
-            SheetAction("Verschieben nach …") { moving = board },
-            SheetAction("Teilen …") { state.push(Route.Share(board.id)) },
-            SheetAction("Bericht teilen (PDF) …") { Report.share(state, context, board.id) },
-            SheetAction(if (isDevBoard(board)) "Entwicklungsprojekt ausschalten" else "Als Entwicklungsprojekt führen") {
+            SheetAction(tr("Umbenennen")) { renaming = board },
+            SheetAction(tr("Verschieben nach …")) { moving = board },
+            SheetAction(tr("Teilen …")) { state.push(Route.Share(board.id)) },
+            SheetAction(tr("Bericht teilen (PDF) …")) { Report.share(state, context, board.id) },
+            archiveAction(state, board),
+            SheetAction(if (isDevBoard(board)) tr("Entwicklungsprojekt ausschalten") else tr("Als Entwicklungsprojekt führen")) {
                 val dev = !isDevBoard(board)
                 sync.update(board.id) { it.put("dev", dev) }
-                state.toastLater(if (dev) "„${board.data.optString("name")}“ ist jetzt ein Entwicklungsprojekt." else "„${board.data.optString("name")}“ ist wieder ein einfaches Board.")
+                state.toastLater(if (dev) tr("„{name}“ ist jetzt ein Entwicklungsprojekt.", "name" to (board.data.optString("name"))) else tr("„{name}“ ist wieder ein einfaches Board.", "name" to (board.data.optString("name"))))
             },
-            SheetAction("Board löschen", destructive = true) {
+        ) + (if (isDevBoard(board)) listOf(SheetAction(tr("Farben der Personen …")) { coloring = board }) else emptyList()) + listOf(
+            SheetAction(tr("Board löschen"), destructive = true) {
                 for (child in sync.all("card") + sync.all("column")) if (child.data.optString("board") == board.id) sync.delete(child.id)
                 sync.delete(board.id)
             },
         )) { menu = null }
     }
     moving?.let { board -> MoveToFolderSheet(state, board) { moving = null } }
+    coloring?.let { board -> CommentColorsSheet(sync, board.id) { coloring = null } }
     renaming?.let { board ->
-        AlertDialog("Board umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", board.data.optString("name"))),
+        AlertDialog(tr("Board umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), board.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->
             if (values[0].isNotBlank()) sync.update(board.id) { it.put("name", values[0].trim()) }
             renaming = null
@@ -224,27 +236,47 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
     var columnMenu by remember { mutableStateOf<SyncObject?>(null) }
     var renameColumn by remember { mutableStateOf<SyncObject?>(null) }
     var addColumn by remember { mutableStateOf(false) }
+    // The magnifier finds cards by id, title, notes, fields, commits … (Model.cardMatches).
+    var searching by remember(boardId) { mutableStateOf(false) }
+    var query by remember(boardId) { mutableStateOf("") }
+    val shown = if (searching && query.isNotBlank()) cards.filter { Model.cardMatches(it, query) { id -> sync.userName(id) } } else cards
     val width = LocalConfiguration.current.screenWidthDp
 
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
-        NavBar("", "Aufgaben", { state.pop() }, actions = {
-            BarButton(Glyph.Share, "Teilen") { state.push(Route.Share(board.id)) }
-            BarButton(Glyph.Plus, "Spalte hinzufügen") { addColumn = true }
+        NavBar("", tr("Aufgaben"), { state.pop() }, actions = {
+            BarButton(Glyph.Search, tr("Karten suchen")) { searching = !searching; if (!searching) query = "" }
+            BarButton(Glyph.Share, tr("Teilen")) { state.push(Route.Share(board.id)) }
+            BarButton(Glyph.Plus, tr("Spalte hinzufügen")) { addColumn = true }
         })
         Text(board.data.optString("name"), style = Type.largeTitle, color = colors.label, modifier = Modifier.padding(horizontal = 16.dp))
-        Text("${cards.size} Karten · " + shareLabel(sync, board) + if (isDevBoard(board)) " · Entwicklungsprojekt" else "",
+        Text(tr("{size} Karten · ", "size" to cards.size) + shareLabel(sync, board) + if (isDevBoard(board)) tr(" · Entwicklungsprojekt") else "",
             style = Type.subheadline, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp))
+        if (searching) {
+            val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+            Row(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SearchField(query, { query = it }, tr("Karten-ID, Titel, Notizen, Commit …"), Modifier.weight(1f), focus)
+                Spacer(Modifier.width(10.dp))
+                TextButton(tr("Abbrechen")) { searching = false; query = "" }
+            }
+            if (query.isNotBlank()) Text(if (shown.size == 1) tr("1 Treffer") else tr("{size} Treffer", "size" to shown.size), style = Type.footnote, color = colors.secondary,
+                modifier = Modifier.padding(horizontal = 16.dp).padding(top = 4.dp))
+            androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        }
         Spacer(Modifier.height(10.dp))
         LazyRow(Modifier.weight(1f).navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(columns, key = { it.id }) { column ->
-                val columnCards = cards.filter { it.data.optString("column") == column.id }.sortedBy { it.data.optDouble("order", 0.0) }
+            // While searching only the columns with hits – the hit is right there, no swiping.
+            items(if (shown === cards) columns else columns.filter { column -> shown.any { it.data.optString("column") == column.id } },
+                key = { it.id }) { column ->
+                val columnCards = shown.filter { it.data.optString("column") == column.id }.sortedBy { it.data.optDouble("order", 0.0) }
+                val columnTotal = if (shown === cards) columnCards.size else cards.count { it.data.optString("column") == column.id }
                 Column(Modifier.width((width * 0.82f).dp).fillMaxHeight().clip(RoundedCornerShape(14.dp)).background(if (colors.dark) colors.fill.copy(alpha = 0.5f) else colors.fill).padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(column.data.optString("name"), style = Type.headline, color = colors.label)
                         Spacer(Modifier.width(6.dp))
-                        Text("${columnCards.size}", style = Type.subheadline, color = colors.secondary, modifier = Modifier.weight(1f))
-                        BarButton(Glyph.More, "Spalte ${column.data.optString("name")} bearbeiten", tint = colors.secondary) { columnMenu = column }
+                        Text(if (shown === cards) "${columnCards.size}" else "${columnCards.size} / $columnTotal", style = Type.subheadline,
+                            color = colors.secondary, modifier = Modifier.weight(1f))
+                        BarButton(Glyph.More, tr("Spalte {name} bearbeiten", "name" to (column.data.optString("name"))), tint = colors.secondary) { columnMenu = column }
                     }
                     LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(columnCards, key = { it.id }) { card ->
@@ -266,34 +298,34 @@ fun BoardScreen(state: AppState, boardId: String, revision: Long) {
 
     editing?.let { id -> CardSheet(state, id, columns) { editing = null } }
     moving?.let { card ->
-        ActionSheet("„${card.data.optString("title")}“ verschieben nach", columns.filter { it.id != card.data.optString("column") }.map { column ->
+        ActionSheet(tr("„{name}“ verschieben nach", "name" to (card.data.optString("title"))), columns.filter { it.id != card.data.optString("column") }.map { column ->
             SheetAction(column.data.optString("name")) {
                 val last = cards.filter { it.data.optString("column") == column.id }.maxOfOrNull { it.data.optDouble("order", 0.0) } ?: 0.0
                 sync.update(card.id) { it.put("column", column.id).put("order", last + 1); recordMove(it, columns, column.id, sync.userId) }
             }
-        } + SheetAction("Karte löschen", destructive = true) { sync.delete(card.id) }) { moving = null }
+        } + SheetAction(tr("Karte löschen"), destructive = true) { sync.delete(card.id) }) { moving = null }
     }
     columnMenu?.let { column ->
         val index = columns.indexOf(column)
         ActionSheet(column.data.optString("name"), buildList {
-            add(SheetAction("Umbenennen") { renameColumn = column })
-            if (index > 0) add(SheetAction("Nach links") { swapColumns(state, columns, index, index - 1) })
-            if (index < columns.lastIndex) add(SheetAction("Nach rechts") { swapColumns(state, columns, index, index + 1) })
-            add(SheetAction("Spalte löschen", destructive = true) {
+            add(SheetAction(tr("Umbenennen")) { renameColumn = column })
+            if (index > 0) add(SheetAction(tr("Nach links")) { swapColumns(state, columns, index, index - 1) })
+            if (index < columns.lastIndex) add(SheetAction(tr("Nach rechts")) { swapColumns(state, columns, index, index + 1) })
+            add(SheetAction(tr("Spalte löschen"), destructive = true) {
                 cards.filter { it.data.optString("column") == column.id }.forEach { sync.delete(it.id) }
                 sync.delete(column.id)
             })
         }) { columnMenu = null }
     }
     renameColumn?.let { column ->
-        AlertDialog("Spalte umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", column.data.optString("name"))),
+        AlertDialog(tr("Spalte umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), column.data.optString("name"))),
             onDismiss = { renameColumn = null }) { values ->
             if (values[0].isNotBlank()) sync.update(column.id) { it.put("name", values[0].trim()) }
             renameColumn = null
         }
     }
     if (addColumn) {
-        AlertDialog("Neue Spalte", confirm = "Hinzufügen", fields = listOf(AlertField("Name")), onDismiss = { addColumn = false }) { values ->
+        AlertDialog(tr("Neue Spalte"), confirm = tr("Hinzufügen"), fields = listOf(AlertField(tr("Name"))), onDismiss = { addColumn = false }) { values ->
             if (values[0].isNotBlank()) {
                 val order = (columns.lastOrNull()?.data?.optDouble("order", 0.0) ?: -1.0) + 1
                 sync.put("column", JSONObject().put("board", boardId).put("name", values[0].trim()).put("order", order), board.share)
@@ -332,10 +364,16 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
                 Text(mark, style = Type.headline.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = colors.accentText)
                 Spacer(Modifier.width(5.dp))
             }
-            Text(data.optString("title"), style = Type.headline, color = colors.label)
+            // Long titles take at most two lines; the whole title is in the card sheet.
+            Text(data.optString("title"), style = Type.headline, color = colors.label, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         if (data.optString("notes").isNotEmpty()) {
-            Text(data.optString("notes").take(140), style = Type.footnote, color = colors.secondary)
+            // At most two lines, ending in "…" (like Mail's two-line preview); line breaks of the notes
+            // become spaces so no line is wasted. The whole text is in the card sheet.
+            val preview = data.optString("notes").split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ").take(400)
+            Text(commentText(preview, Model.commentColors(state.sync, data.optString("board")), lineStart = false),
+                style = Type.footnote, color = colors.secondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         val due = runCatching { LocalDate.parse(data.optString("due")) }.getOrNull()
         val doneAt = data.optDouble("done_at", 0.0).takeIf { isLast && it > 0 }
@@ -354,10 +392,10 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
                 }
                 if (due != null) {
                     val overdue = due.isBefore(LocalDate.now()) && !isLast
-                    Text("Fällig: " + dueLabel(due), style = Type.footnote, color = if (overdue) colors.red else colors.secondary, modifier = Modifier.weight(1f))
+                    Text(tr("Fällig: ") + dueLabel(due), style = Type.footnote, color = if (overdue) colors.red else colors.secondary, modifier = Modifier.weight(1f))
                 } else if (doneAt != null) {
                     val day = java.time.Instant.ofEpochMilli((doneAt * 1000).toLong()).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                    Text("Erledigt: " + dueLabel(day), style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
+                    Text(tr("Erledigt: ") + dueLabel(day), style = Type.footnote, color = colors.secondary, modifier = Modifier.weight(1f))
                 } else Spacer(Modifier.weight(1f))
                 if (assignee != 0) {
                     Text(state.sync.userName(assignee), style = Type.caption, color = colors.label,
@@ -371,9 +409,9 @@ private fun CardView(state: AppState, card: SyncObject, isLast: Boolean, dev: Bo
 fun dueLabel(day: LocalDate): String {
     val delta = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), day)
     return when (delta) {
-        0L -> "Heute"
-        1L -> "Morgen"
-        -1L -> "Gestern"
+        0L -> tr("Heute")
+        1L -> tr("Morgen")
+        -1L -> tr("Gestern")
         else -> "%02d.%02d.".format(day.dayOfMonth, day.monthValue)
     }
 }
@@ -387,7 +425,7 @@ private fun AddCardField(accent: Color, onAdd: (String) -> Unit) {
         GlyphIcon(Glyph.Plus, accent, 14.dp)
         Spacer(Modifier.width(8.dp))
         Box(Modifier.weight(1f)) {
-            if (text.isEmpty()) Text("Karte hinzufügen", style = Type.body, color = colors.secondary)
+            if (text.isEmpty()) Text(tr("Karte hinzufügen"), style = Type.body, color = colors.secondary)
             BasicTextField(text, { text = it }, singleLine = true, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) onAdd(text.trim()); text = "" }),
@@ -407,6 +445,16 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     var notes by remember { mutableStateOf(card.data.optString("notes")) }
     var due by remember { mutableStateOf(card.data.optString("due").takeIf { it.isNotEmpty() && it != "null" }) }
     var assignee by remember { mutableStateOf(card.data.optInt("assignee")) }
+    var calendarOpen by remember { mutableStateOf(false) }
+    // Only people the board is shared with (and oneself) – not everyone one knows. Someone assigned
+    // earlier who is no longer in the board stays visible, so it can be undone.
+    val assignable = remember(card.share) {
+        val inBoard = sync.shareMembers(card.share).toSet() + sync.userId
+        val assigned = card.data.optInt("assignee")
+        (inBoard + listOfNotNull(assigned.takeIf { it != 0 }))
+            .map { id -> id to sync.userName(id) + if (id in inBoard) "" else tr(" (nicht im Board)") }
+            .sortedBy { it.second.lowercase() }
+    }
     var color by remember { mutableStateOf(card.data.optString("color").takeIf { it.isNotEmpty() && it != "null" }) }
     var column by remember { mutableStateOf(card.data.optString("column")) }
     var priority by remember { mutableStateOf(card.data.optString("priority").takeIf { it in PRIORITY_MARKS } ?: "") }
@@ -423,24 +471,20 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     val evidence = remember(filesRevision) { sync.get(cardId)?.let { cardEvidence(it.data) } ?: emptyList() }
 
     fun attach(name: String, mime: String, bytes: ByteArray, key: String = "files") {
-        scope.launch {
-            try {
-                val reference = withContext(Dispatchers.IO) { sync.uploadFile(bytes, card.share) }
-                val entry = JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size)
-                if (key == "evidence") entry.put("h", sha256(bytes)).put("at", Model.now()).put("by", sync.userId)
-                sync.update(cardId) { data ->
-                    val array = data.optJSONArray(key) ?: org.json.JSONArray()
-                    array.put(entry)
-                    data.put(key, array)
-                }
-                filesRevision++
-            } catch (error: Exception) {
-                state.showToast(errorText(error))
+        // Runs on in the background when the card is closed; the entry goes to the card either way.
+        state.upload(name, bytes, card.share, target = "$cardId/$key") { reference ->
+            val entry = JSONObject().put("f", reference).put("n", name).put("m", mime).put("b", bytes.size)
+            if (key == "evidence") entry.put("h", sha256(bytes)).put("at", Model.now()).put("by", sync.userId)
+            sync.update(cardId) { data ->
+                val array = data.optJSONArray(key) ?: org.json.JSONArray()
+                array.put(entry)
+                data.put(key, array)
             }
+            filesRevision++
         }
     }
 
-    fun photoName(mime: String) = "Foto " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")) +
+    fun photoName(mime: String) = tr("Foto ") + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")) +
         (if (mime == "image/png") ".png" else ".jpg")
 
     fun removeFile(index: Int, key: String = "files") {
@@ -458,9 +502,9 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                 val file = withContext(Dispatchers.IO) {
                     val source = sync.fetchFile(item.getString("f"), card.share)
                     val folder = java.io.File(context.cacheDir, "attachments/" + item.getString("f").substringAfter(":").take(12)).apply { mkdirs() }
-                    java.io.File(folder, java.io.File(item.optString("n", "Datei")).name).also { source.copyTo(it, overwrite = true) }
+                    java.io.File(folder, java.io.File(item.optString("n", tr("Datei"))).name).also { source.copyTo(it, overwrite = true) }
                 }
-                state.openFile(file, item.optString("m", "application/octet-stream"))
+                state.quickLook = LookFile(file, item.optString("m", "application/octet-stream"))
             } catch (error: Exception) {
                 state.showToast(errorText(error))
             }
@@ -492,39 +536,50 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     Dialog(onDismissRequest = { save() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         UseWholeScreen()
         Column(Modifier.fillMaxSize().background(colors.background).navigationBarsPadding().imePadding()) {
-            NavBar("Karte", null, null, actions = { TextButton("Fertig", bold = true) { save() } })
+            NavBar(tr("Karte"), null, null, actions = { TextButton(tr("Fertig"), bold = true) { save() } })
             Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 FormSection {
-                    FormField(title, { title = it }, "Titel")
+                    FormField(title, { title = it }, tr("Titel"))
                     HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
                     Box(Modifier.fillMaxWidth().heightIn(min = 110.dp).padding(16.dp)) {
-                        if (notes.isEmpty()) Text("Notizen", style = Type.body, color = colors.tertiary)
+                        if (notes.isEmpty()) Text(tr("Notizen"), style = Type.body, color = colors.tertiary)
+                        val heads = remember(card.data.optString("board")) { Model.commentColors(sync, card.data.optString("board")) }
                         BasicTextField(notes, { notes = it }, textStyle = Type.body.copy(color = colors.label), cursorBrush = SolidColor(colors.accent),
-                            modifier = Modifier.fillMaxWidth())
+                            modifier = Modifier.fillMaxWidth(),
+                            // Comment heads in their person's colour (card 8f29c4b8) – only shown, the text stays as typed.
+                            visualTransformation = if (heads.isEmpty()) androidx.compose.ui.text.input.VisualTransformation.None
+                                else androidx.compose.ui.text.input.VisualTransformation { androidx.compose.ui.text.input.TransformedText(commentText(it.text, heads), androidx.compose.ui.text.input.OffsetMapping.Identity) })
                     }
                     val links = remember(notes) { LINK.findAll(notes).map { it.value.trimEnd('.', ',', ')', ';') }.distinct().toList() }
                     links.forEach { link ->
                         HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
                         Text(link, style = Type.subheadline, color = colors.accentText, maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Link öffnen") { runCatching { uriHandler.openUri(link) } }
+                            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = tr("Link öffnen")) { runCatching { uriHandler.openUri(link) } }
                                 .padding(horizontal = 16.dp, vertical = 12.dp))
                     }
                 }
                 FormSection {
-                    PickerRow("Spalte", columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
-                    PickerRow("Zuständig", listOf(0 to "Niemand") + sync.users.map { it.id to it.name }, assignee, divider = true) { assignee = it }
-                    PickerRow("Priorität", PRIORITIES, priority, divider = true) { priority = it }
-                    val label = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { "%02d.%02d.%d".format(it.dayOfMonth, it.monthValue, it.year) } ?: "Kein Datum"
-                    GroupRow("Fällig", detail = label, chevron = false, divider = due != null) {
-                        val start = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
-                        DatePickerDialog(context, { _, year, month, day ->
-                            due = "%04d-%02d-%02d".format(year, month + 1, day)
-                        }, start.year, start.monthValue - 1, start.dayOfMonth).show()
+                    PickerRow(tr("Spalte"), columns.map { it.id to it.data.optString("name") }, column, divider = true) { column = it }
+                    PickerRow(tr("Zuständig"), listOf(0 to tr("Niemand")) + assignable, assignee, divider = true) { assignee = it }
+                    PickerRow(tr("Priorität"), PRIORITIES, priority, divider = true) { priority = it }
+                    // Like Reminders: a switch turns the date on, the calendar opens right in the form;
+                    // tapping the row folds it away (no Android date dialog).
+                    val dueDate = due?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                    val label = dueDate?.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", java.util.Locale.GERMAN))
+                    fun toggleDue() {
+                        if (due == null) { due = LocalDate.now().toString(); calendarOpen = true } else { due = null; calendarOpen = false }
                     }
-                    if (due != null) GroupRow("Datum entfernen", chevron = false, divider = false, titleColor = colors.red) { due = null }
+                    GroupRow(tr("Fällig"), detail = label, chevron = false, divider = false,
+                        trailing = { IosSwitch(due != null, tr("Fällig")) { toggleDue() } }) {
+                        if (due == null) toggleDue() else calendarOpen = !calendarOpen
+                    }
+                    if (dueDate != null && calendarOpen) {
+                        HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
+                        InlineCalendar(dueDate) { due = it.toString() }
+                    }
                 }
-                FormSection("Farbe") {
+                FormSection(tr("Farbe")) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.size(30.dp).clip(CircleShape).background(colors.fill).clickable { color = null }, contentAlignment = Alignment.Center) {
                             if (color == null) GlyphIcon(Glyph.Close, colors.secondary, 12.dp)
@@ -536,32 +591,34 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
                         }
                     }
                 }
-                FormSection("Anhänge") {
-                    AttachmentRows(sync, card.share, files, "Anhang entfernen", { humanSize(it.optLong("b")) }, ::openFile) { removeFile(it) }
-                    GroupRow("Datei oder Bild hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "files" }
+                FormSection(tr("Anhänge")) {
+                    AttachmentRows(sync, card.share, files, tr("Anhang entfernen"), { humanSize(it.optLong("b")) }, ::openFile) { removeFile(it) }
+                    UploadRows(state, "$cardId/files")
+                    GroupRow(tr("Datei oder Bild hinzufügen …"), glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "files" }
                 }
                 if (dev) {
-                    FormSection("Auswirkungsanalyse") { MultiLineField(impact, { impact = it }, "Was ist betroffen, welche Risiken?") }
-                    FormSection("Verifikation") { MultiLineField(verification, { verification = it }, "Tests, Prüfungen und Nachweise") }
+                    FormSection(tr("Auswirkungsanalyse")) { MultiLineField(impact, { impact = it }, tr("Was ist betroffen, welche Risiken?")) }
+                    FormSection(tr("Verifikation")) { MultiLineField(verification, { verification = it }, tr("Tests, Prüfungen und Nachweise")) }
                     // Evidence right below the verification text, so test records travel with the card.
-                    FormSection("Nachweise") {
-                        AttachmentRows(sync, card.share, evidence, "Nachweis entfernen", { evidenceDetails(sync, it) }, ::openFile) {
+                    FormSection(tr("Nachweise")) {
+                        AttachmentRows(sync, card.share, evidence, tr("Nachweis entfernen"), { evidenceDetails(sync, it) }, ::openFile) {
                             removeFile(it, "evidence")
                         }
-                        GroupRow("Nachweis hinzufügen …", glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "evidence" }
+                        UploadRows(state, "$cardId/evidence")
+                        GroupRow(tr("Nachweis hinzufügen …"), glyph = Glyph.Plus, chevron = false, divider = false) { attachMenu = "evidence" }
                     }
                     if (evidence.isEmpty()) {
-                        Text("Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und erscheinen im Bericht mit Prüfsumme (SHA-256).",
+                        Text(tr("Prüfprotokolle, Screenshots, Messdaten – liegen verschlüsselt an der Karte und erscheinen im Bericht mit Prüfsumme (SHA-256)."),
                             style = Type.footnote, color = colors.secondary, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 6.dp))
                     }
                     TraceSection(sync, card, version) { version = it }
                 }
                 Spacer(Modifier.height(16.dp))
                 FormSection {
-                    GroupRow("Karte löschen", chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
+                    GroupRow(tr("Karte löschen"), chevron = false, divider = false, titleColor = colors.red) { sync.delete(cardId); onDone() }
                 }
                 if (files.isEmpty()) {
-                    Text("Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen.", style = Type.footnote, color = colors.secondary,
+                    Text(tr("Bilder, PDFs oder andere Dateien – verschlüsselt wie in Notizen."), style = Type.footnote, color = colors.secondary,
                         modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 8.dp))
                 }
                 val dates = cardDates(card, dev)
@@ -573,9 +630,9 @@ internal fun CardSheet(state: AppState, cardId: String, columns: List<SyncObject
     }
     attachMenu?.let { key ->
         ActionSheet(null, listOf(
-            SheetAction("Foto aufnehmen") { state.takePhoto { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
-            SheetAction("Aus Fotos wählen") { state.pickImage { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
-            SheetAction("Datei wählen …") { state.pickFile { name, mime, bytes -> attach(name, mime, bytes, key) } },
+            SheetAction(tr("Foto aufnehmen")) { state.takePhoto { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
+            SheetAction(tr("Aus Fotos wählen")) { state.pickImage { bytes, mime -> attach(photoName(mime), mime, bytes, key) } },
+            SheetAction(tr("Datei wählen …")) { state.pickFile { name, mime, bytes -> attach(name, mime, bytes, key) } },
         )) { attachMenu = null }
     }
 }
@@ -588,7 +645,7 @@ private fun AttachmentRows(
 ) {
     val colors = palette
     items.forEachIndexed { index, item ->
-        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Öffnen") { onOpen(item) }.padding(horizontal = 16.dp, vertical = 10.dp),
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = tr("Öffnen")) { onOpen(item) }.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically) {
             if (isImageFile(item)) Thumbnail(sync, item.optString("f"), share, 40)
             else Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(colors.fill), contentAlignment = Alignment.Center) {
@@ -596,7 +653,7 @@ private fun AttachmentRows(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.optString("n", "Datei"), style = Type.body, color = colors.label, maxLines = 1,
+                Text(item.optString("n", tr("Datei")), style = Type.body, color = colors.label, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Text(details(item), style = Type.footnote, color = colors.secondary)
             }
@@ -632,12 +689,12 @@ fun FormField(value: String, onChange: (String) -> Unit, placeholder: String) {
 private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card: SyncObject, version: String, onVersion: (String) -> Unit) {
     val colors = palette
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    FormSection("Nachverfolgung") {
-        GroupRow("Karten-ID", detail = shortId(card.id), chevron = false, divider = true) {
+    FormSection(tr("Nachverfolgung")) {
+        GroupRow(tr("Karten-ID"), detail = shortId(card.id), chevron = false, divider = true) {
             clipboard.setText(androidx.compose.ui.text.AnnotatedString(shortId(card.id)))
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Version", style = Type.body, color = colors.label, modifier = Modifier.width(110.dp))
+            Text(tr("Version"), style = Type.body, color = colors.label, modifier = Modifier.width(110.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 if (version.isEmpty()) Text("z. B. 2.1", style = Type.body, color = colors.tertiary)
                 BasicTextField(version, onVersion, singleLine = true, textStyle = Type.body.copy(color = colors.secondary, textAlign = androidx.compose.ui.text.style.TextAlign.End),
@@ -647,21 +704,21 @@ private fun TraceSection(sync: io.github.veritasx1.linotes.data.SyncEngine, card
         HorizontalDivider(Modifier.padding(start = 16.dp), 0.5.dp, colors.separator)
         val commits = card.data.optJSONArray("commits")
         if (commits == null || commits.length() == 0) {
-            GroupRow("Noch keine Commits", subtitle = "Commits mit der Karten-ID werden verknüpft.", chevron = false, divider = true, titleColor = colors.secondary)
+            GroupRow(tr("Noch keine Commits"), subtitle = tr("Commits mit der Karten-ID werden verknüpft."), chevron = false, divider = true, titleColor = colors.secondary)
         } else {
             for (index in 0 until commits.length()) {
                 val commit = commits.getJSONObject(index)
-                GroupRow(commit.optString("s"), subtitle = "Commit " + commit.optString("h"), chevron = false, divider = true)
+                GroupRow(commit.optString("s"), subtitle = tr("Commit ") + commit.optString("h"), chevron = false, divider = true)
             }
         }
         val history = card.data.optJSONArray("history")
         if (history == null || history.length() == 0) {
-            GroupRow("Noch kein Verlauf", subtitle = "Beginnt mit dem nächsten Verschieben.", chevron = false, divider = false, titleColor = colors.secondary)
+            GroupRow(tr("Noch kein Verlauf"), subtitle = tr("Beginnt mit dem nächsten Verschieben."), chevron = false, divider = false, titleColor = colors.secondary)
         } else {
             for (index in history.length() - 1 downTo 0) {
                 val step = history.getJSONObject(index)
                 val moment = java.time.Instant.ofEpochMilli((step.optDouble("at", 0.0) * 1000).toLong()).atZone(java.time.ZoneId.systemDefault())
-                GroupRow(step.optString("n").ifEmpty { "Spalte" }, chevron = false, divider = index > 0,
+                GroupRow(step.optString("n").ifEmpty { tr("Spalte") }, chevron = false, divider = index > 0,
                     subtitle = "%02d.%02d.%d %02d:%02d · %s".format(moment.dayOfMonth, moment.monthValue, moment.year,
                         moment.hour, moment.minute, sync.userName(step.optInt("by"))))
             }
@@ -680,6 +737,44 @@ private fun MultiLineField(value: String, onChange: (String) -> Unit, placeholde
 }
 
 private val LINK = Regex("""https?://\S+""")
+
+/** [text] with each comment head of a person the board gives a colour in that colour (way C, card 8f29c4b8). */
+internal fun commentText(text: String, colors: Map<String, Long>, lineStart: Boolean = true) = androidx.compose.ui.text.buildAnnotatedString {
+    append(text)
+    if (colors.isNotEmpty()) for (head in Model.commentHeads(text, lineStart)) colors[head.name]?.let {
+        addStyle(androidx.compose.ui.text.SpanStyle(color = Color(it)), head.start, head.end)
+    }
+}
+
+/** „Farben der Personen“ (development projects): which colour each person's comment heads have on this board – kept
+ *  in the board, so everyone who sees it sees the same. Tap a name, then a colour. Twin of Ubuntu's dialog. */
+@Composable
+internal fun CommentColorsSheet(sync: SyncEngine, boardId: String, onDone: () -> Unit) {
+    var person by remember { mutableStateOf<String?>(null) }
+    val labels = listOf(null to tr("Keine"), "purple" to tr("Lila"), "pink" to tr("Pink"), "orange" to tr("Orange"),
+        "mint" to tr("Mint"), "blue" to tr("Blau"), "yellow" to tr("Gelb"))
+    val chosen = sync.get(boardId)?.data?.optJSONObject("colors")
+    val name = person
+    // The sheet dismisses itself before running the tapped action: decide after both, close only if no name was tapped.
+    var dismissed by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(dismissed) {
+        if (dismissed) { dismissed = false; if (person == null) onDone() }
+    }
+    if (name == null) ActionSheet(tr("Kommentare in den Karten zeigen den Namen in dieser Farbe."), Model.commentNames(sync, boardId).map { n ->
+        val current = labels.firstOrNull { it.first != null && it.first == chosen?.optString(n) }?.second
+        SheetAction(if (current != null) "$n – $current" else n) { person = n }
+    }) { dismissed = true }
+    // A colour chosen (or Abbrechen): back to the names.
+    else ActionSheet(name, labels.map { (key, label) ->
+        SheetAction(label) {
+            sync.update(boardId) { data ->
+                val colors = data.optJSONObject("colors") ?: org.json.JSONObject()
+                if (key == null) colors.remove(name) else colors.put(name, key)
+                if (colors.length() == 0) data.remove("colors") else data.put("colors", colors)
+            }
+        }
+    }) { person = null }
+}
 
 /** A row with the current value that opens a menu of choices (like a UIKit pull-down button). */
 @Composable

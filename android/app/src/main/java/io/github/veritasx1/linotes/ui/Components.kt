@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -124,7 +126,7 @@ fun NavBar(
                 Box {
                     if (onBack != null) {
                         Row(
-                            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack, onClickLabel = "Zurück", role = Role.Button)
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack, onClickLabel = tr("Zurück"), role = Role.Button)
                                 .padding(start = 6.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -287,7 +289,8 @@ fun GroupRow(
 // ================================================================
 
 @Composable
-fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = "Suchen", modifier: Modifier = Modifier) {
+fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String = tr("Suchen"), modifier: Modifier = Modifier,
+                focus: androidx.compose.ui.focus.FocusRequester? = null) {
     val colors = palette
     Row(
         modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(10.dp)).background(colors.fill).padding(horizontal = 8.dp),
@@ -298,7 +301,8 @@ fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String =
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(placeholder, style = Type.body, color = colors.secondary)
             BasicTextField(value, onChange, singleLine = true, textStyle = Type.body.copy(color = colors.label),
-                cursorBrush = SolidColor(colors.accent), modifier = Modifier.fillMaxWidth())
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier.fillMaxWidth().let { if (focus != null) it.focusRequester(focus) else it })
         }
         if (value.isNotEmpty()) {
             Box(Modifier.size(28.dp).clickable { onChange("") }, contentAlignment = Alignment.Center) {
@@ -436,7 +440,7 @@ fun AlertDialog(
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable(onClick = onDismiss), contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(
@@ -505,7 +509,7 @@ fun ActionSheet(title: String?, actions: List<SheetAction>, onDismiss: () -> Uni
                     Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(14.dp)).background(sheet).clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Abbrechen", style = Type.headline.copy(fontSize = Type.body.fontSize * 1.1f), color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.headline.copy(fontSize = Type.body.fontSize * 1.1f), color = colors.accentText)
                 }
             }
         }
@@ -541,3 +545,57 @@ fun Toast(text: String?) {
 }
 
 val HairlineWidth: Dp = 0.5.dp
+
+/** A month calendar inside a form, like UIDatePicker's inline style in Reminders: month with ‹ ›,
+ *  weekdays from Monday, the chosen day as an accent circle, today in the accent color. */
+@Composable
+fun InlineCalendar(selected: java.time.LocalDate?, onPick: (java.time.LocalDate) -> Unit) {
+    val colors = palette
+    val today = java.time.LocalDate.now()
+    var month by remember(selected) { mutableStateOf(java.time.YearMonth.from(selected ?: today)) }
+    val monthName = month.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, java.util.Locale.GERMAN)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("$monthName ${month.year}", style = Type.headline, color = colors.label, modifier = Modifier.weight(1f).padding(start = 4.dp))
+            for ((glyph, step) in listOf(Glyph.Back to -1L, Glyph.Chevron to 1L)) {
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClickLabel = if (step < 0) tr("Vormonat") else tr("Nächster Monat")) {
+                    month = month.plusMonths(step)
+                }, contentAlignment = Alignment.Center) {
+                    GlyphIcon(glyph, colors.accentText, 20.dp)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            for (name in listOf(tr("Mo"), tr("Di"), tr("Mi"), tr("Do"), tr("Fr"), tr("Sa"), tr("So"))) {
+                Text(name, style = Type.caption, color = colors.secondary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            }
+        }
+        val first = month.atDay(1)
+        val offset = first.dayOfWeek.value - 1
+        val days = month.lengthOfMonth()
+        val rows = (offset + days + 6) / 7
+        for (row in 0 until rows) {
+            Row(Modifier.fillMaxWidth()) {
+                for (column in 0 until 7) {
+                    val number = row * 7 + column - offset + 1
+                    Box(Modifier.weight(1f).height(44.dp), contentAlignment = Alignment.Center) {
+                        if (number in 1..days) {
+                            val date = month.atDay(number)
+                            val chosen = date == selected
+                            Box(Modifier.size(38.dp).clip(CircleShape).background(if (chosen) colors.accent else Color.Transparent)
+                                .clickable(onClickLabel = "%02d.%02d.%d wählen".format(number, month.monthValue, month.year)) { onPick(date) },
+                                contentAlignment = Alignment.Center) {
+                                Text("$number", style = Type.body.copy(fontWeight = if (chosen || date == today) FontWeight.SemiBold else FontWeight.Normal),
+                                    color = when {
+                                        chosen -> if (colors.dark) Color.Black else Color.White  // the dark accent is light yellow
+                                        date == today -> colors.accentText
+                                        else -> colors.label
+                                    })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

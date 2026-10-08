@@ -29,6 +29,7 @@ from gi.repository import GLib, Secret
 
 from . import e2e
 from .api import Api, ApiError, OfflineError
+from .i18n import _
 
 
 DATA_DIR = Path(GLib.get_user_data_dir()) / "linotes"
@@ -52,14 +53,14 @@ def new_id():
 
 
 def device_name():
-    return f"Ubuntu ({socket.gethostname()})"
+    return _("Ubuntu ({gethostname})", gethostname=socket.gethostname())
 
 
 def store_credentials(server, username, token, secret):
     value = json.dumps({"token": token, "secret": e2e.b64(secret)})
     Secret.password_store_sync(
         SECRET_SCHEMA, {"server": server, "username": username},
-        Secret.COLLECTION_DEFAULT, f"LiNotes ({username})", value, None,
+        Secret.COLLECTION_DEFAULT, _("LiNotes ({username})", username=username), value, None,
     )
 
 
@@ -151,13 +152,30 @@ class SyncEngine:
             self.save_timer.start()
 
     def save(self):
+        """Write the state file. Under the lock only a shallow copy is taken (remote objects and pending
+        changes are replaced as a whole, never changed inside); the JSON is then written object by
+        object outside the lock, so the window keeps working meanwhile – one big json.dumps held the
+        lock and the interpreter for a third of a second after every edit (card b9046682)."""
         with self.save_lock:
             with self.lock:
-                data = json.dumps(self.state, ensure_ascii=False)
+                snapshot = {key: (dict(value) if key == "remote" else list(value) if key == "pending" else copy.deepcopy(value))
+                            for key, value in self.state.items()}
             temp = self.path.with_name(f"state.{threading.get_ident()}.tmp")
             fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as handle:
-                handle.write(data)
+                handle.write("{")
+                for index, (key, value) in enumerate(snapshot.items()):
+                    handle.write(("," if index else "") + json.dumps(key) + ":")
+                    if key == "remote":
+                        handle.write("{")
+                        for number, (object_id, stored) in enumerate(value.items()):
+                            handle.write(("," if number else "") + json.dumps(object_id) + ":" + json.dumps(stored, ensure_ascii=False))
+                        handle.write("}")
+                    elif key == "pending":
+                        handle.write("[" + ",".join(json.dumps(change, ensure_ascii=False) for change in value) + "]")
+                    else:
+                        handle.write(json.dumps(value, ensure_ascii=False))
+                handle.write("}")
             os.replace(temp, self.path)
 
     # ========================================================
@@ -225,7 +243,7 @@ class SyncEngine:
         identity = e2e.Identity()
         with self.lock:
             self.state = empty_state("")
-            self.state["user"] = {"id": LOCAL_USER, "username": "", "name": name or "Ich", "identity": identity.public}
+            self.state["user"] = {"id": LOCAL_USER, "username": "", "name": name or _("Ich"), "identity": identity.public}
             self.state["users"] = [self.state["user"]]
             self.state["identity"] = identity.export_sealed(account)
         store_credentials("", "", "", account.secret)
@@ -550,7 +568,9 @@ class SyncEngine:
     def set_sharing(self, object_id, member_ids):
         """Share a container (or single note) with exactly `member_ids`
         (besides the owner). An empty list makes it private again.
-        Removing someone rotates the key."""
+        Removing someone always rotates the key (card 5939587a, Olaf: „Privatsphäre
+        first“): own objects move at once; other people's stay readable in the old
+        share for those who remain until their owners move them (follow_moved_shares)."""
         obj = self.get(object_id)
         if obj is None:
             return
@@ -558,6 +578,16 @@ class SyncEngine:
         current = obj.get("share")
         current_members = [uid for uid in self.share_members(current) if uid != self.user_id]
         if current and set(member_ids) == set(current_members):
+            return current
+        old = self.get(current) if current else None
+        own_share = old is not None and old["owner"] == self.user_id and old["data"].get("target") == object_id
+        foreign = [item for item in self.container_members(obj) if item["owner"] != self.user_id]
+        # Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
+        # other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
+        # share and wraps its key for them.
+        if own_share and set(current_members) <= set(member_ids):
+            self.rewrap_share(current, member_ids)
+            self.emit_from_thread({object_id})
             return current
 
         new_share = None
@@ -569,7 +599,7 @@ class SyncEngine:
             for uid in [self.user_id] + member_ids:
                 user = self.user_by_id(uid)
                 if user is None or not user.get("identity"):
-                    raise ValueError(f"Unbekanntes Konto {uid}")
+                    raise ValueError(_("Unbekannter Account {uid}", uid=uid))
                 keys[str(uid)] = e2e.wrap_key(key, user["identity"], new_share)
             self.put("share", {"keys": keys, "target": object_id, "name": obj["data"].get("name") or obj["kind"]},
                      new_share, new_share, notify=False, members=member_ids)
@@ -577,20 +607,64 @@ class SyncEngine:
         # Re-encrypt the container and its content with the new key
         # (attachments are uploaded again, encrypted with the new key).
         for item in self.container_members(obj):
+            if item["owner"] != self.user_id:
+                continue   # the server would refuse it; it stays readable in the share it is in (card fc38cfad)
             data = self.rekey_files(item, new_share)
             self.put(item["kind"], data, new_share, item["id"], notify=False)
-        if current and current != new_share:
-            old = self.get(current)
-            if old is not None and old["owner"] == self.user_id:
+        # The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
+        # folder's share stays for the folder (card fc38cfad). With others' objects inside it keeps only those who stay
+        # and points to the new share: their owners move them there on their next sync (card 5939587a).
+        if current and current != new_share and own_share:
+            if foreign:
+                stay = {str(uid) for uid in [self.user_id] + member_ids}
+                keys = {uid: wrapped for uid, wrapped in old["data"].get("keys", {}).items() if uid in stay}
+                self.put("share", dict(old["data"], keys=keys, moved_to=new_share), current, current, notify=False, members=member_ids)
+            else:
                 self.put("share", dict(old["data"], keys={}), current, current, notify=False, members=[])
         # Called from a worker thread (run_async): tell the window on the main loop.
         self.emit_from_thread({object_id})
         return new_share
 
+    def follow_moved_shares(self):
+        """Someone was removed from a share holding my objects (card 5939587a): the share now points to its successor –
+        I move mine there, re-encrypted with its key. The share's owner empties it once nothing is left inside."""
+        moves = []
+        with self.lock:
+            for share in [o for o in self.plain.values() if o["kind"] == "share" and not o["deleted"]]:
+                target = share["data"].get("moved_to")
+                if not target or target not in self.share_keys:
+                    continue
+                inside = [o for o in self.plain.values() if o.get("share") == share["id"] and o["kind"] != "share" and not o["deleted"]]
+                mine = [o for o in inside if o["owner"] == self.user_id]
+                moves.append((share, target, mine, len(inside) - len(mine)))
+        for share, target, mine, others in moves:
+            for item in mine:
+                self.put(item["kind"], self.rekey_files(item, target), target, item["id"], notify=False)
+            if share["owner"] == self.user_id and not others and share["data"].get("keys"):
+                self.put("share", dict(share["data"], keys={}), share["id"], share["id"], notify=False, members=[])
+        return any(mine for _s, _t, mine, _o in moves)
+
+    def rewrap_share(self, share_id, member_ids):
+        """The share's key, wrapped for exactly the owner and `member_ids`: those who stay keep their entry, new
+        ones get the same key – nothing is re-encrypted, nobody's objects move (card fc38cfad)."""
+        old = self.get(share_id)
+        key = self.share_keys[share_id]
+        keys = {}
+        for uid in [self.user_id] + member_ids:
+            wrapped = old["data"].get("keys", {}).get(str(uid))
+            if wrapped is None:
+                user = self.user_by_id(uid)
+                if user is None or not user.get("identity"):
+                    raise ValueError(_("Unbekannter Account {uid}", uid=uid))
+                wrapped = e2e.wrap_key(key, user["identity"], share_id)
+            keys[str(uid)] = wrapped
+        self.put("share", dict(old["data"], keys=keys), share_id, share_id, notify=False, members=member_ids)
+
     def rekey_files(self, item, new_share):
         data = copy.deepcopy(item["data"])
         for block in data.get("body") or []:
-            if block.get("t") == "image" and block.get("f"):
+            # Pictures, attached files and link-preview pictures are encrypted with the share's key.
+            if block.get("t") in ("image", "file", "link") and block.get("f"):
                 try:
                     content = self.fetch_file(block["f"], item.get("share")).read_bytes()
                     block["f"] = self.upload_file(content, new_share)
@@ -610,6 +684,14 @@ class SyncEngine:
         data = self.settings()
         data.update(fields)
         self.put("settings", data, None, f"settings-{self.user_id}")
+
+    def pro_features(self):
+        """Profi-Funktionen (code colors, footnotes …): off by default so the app stays simple
+        ("Tante Erna" first); a setting of the account, so every device follows."""
+        return bool(self.settings().get("pro"))
+
+    def set_pro_features(self, on):
+        self.update_settings(pro=bool(on))
 
     def keyfile_saved(self):
         return bool(self.settings().get("keyfile_saved"))
@@ -763,7 +845,7 @@ class SyncEngine:
             body = data.get("body")
             if body and body[0].get("x") is not None:
                 body = copy.deepcopy(body)
-                body[0]["x"] = body[0]["x"] + " (Konflikt)"
+                body[0]["x"] = body[0]["x"] + _(" (Konflikt)")
                 data["body"] = body
             self.put("note", data, mine.get("share"), notify=False)
 
@@ -809,6 +891,7 @@ class SyncEngine:
                 self.rebuild()
         self.save()
         if changed:
+            self.follow_moved_shares()   # card 5939587a
             self.emit_from_thread(changed)
         if response.get("more"):
             self.pull_once()
@@ -864,7 +947,7 @@ class SyncEngine:
             path.write_bytes(content)
         return path
 
-    def upload_file(self, content, share=None):
+    def upload_file(self, content, share=None, progress=None):
         # The file id is unknown before the upload, so the AAD is a
         # separate random name kept inside the encrypted note.
         name = new_id()
@@ -875,7 +958,7 @@ class SyncEngine:
             (LOCAL_FILES / name).write_bytes(blob)
             file_id = "local"
         else:
-            file_id = self.api.upload(blob, share)
+            file_id = self.api.upload(blob, share, progress=progress)
         path = self.file_path(name)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.write_bytes(content)

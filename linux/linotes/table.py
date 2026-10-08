@@ -5,6 +5,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk
+from .i18n import _
 
 
 class NoteTable(Gtk.Grid):
@@ -90,14 +91,14 @@ class NoteTable(Gtk.Grid):
             button.connect("clicked", lambda _button: (popover.popdown(), GLib.idle_add(lambda: action() and False)))
             box.append(button)
 
-        item("Zeile darüber einfügen", lambda: self.add_row(r))
-        item("Zeile darunter einfügen", lambda: self.add_row(r + 1))
-        item("Spalte links einfügen", lambda: self.add_column(c))
-        item("Spalte rechts einfügen", lambda: self.add_column(c + 1))
+        item(_("Zeile darüber einfügen"), lambda: self.add_row(r))
+        item(_("Zeile darunter einfügen"), lambda: self.add_row(r + 1))
+        item(_("Spalte links einfügen"), lambda: self.add_column(c))
+        item(_("Spalte rechts einfügen"), lambda: self.add_column(c + 1))
         box.append(Gtk.Separator())
-        item("Zeile löschen", lambda: self.remove_row(r), rows > 1)
-        item("Spalte löschen", lambda: self.remove_column(c), columns > 1)
-        item("Tabelle löschen", self.on_delete, destructive=True)
+        item(_("Zeile löschen"), lambda: self.remove_row(r), rows > 1)
+        item(_("Spalte löschen"), lambda: self.remove_column(c), columns > 1)
+        item(_("Tabelle löschen"), self.on_delete, destructive=True)
         popover.set_child(box)
         popover.set_parent(cell)
         rect = Gdk.Rectangle()

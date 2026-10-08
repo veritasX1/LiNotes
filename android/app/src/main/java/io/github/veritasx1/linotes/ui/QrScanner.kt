@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -80,7 +82,7 @@ fun QrScannerOverlay(state: AppState) {
                 provider.unbindAll()
                 provider.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, show, analysis)
             } catch (error: Exception) {
-                state.toastLater("Die Kamera lässt sich nicht öffnen.")
+                state.toastLater(tr("Die Kamera lässt sich nicht öffnen."))
                 finish(null)
             }
         }, ContextCompat.getMainExecutor(context))
@@ -96,9 +98,9 @@ fun QrScannerOverlay(state: AppState) {
         Box(Modifier.align(Alignment.Center).size(240.dp).border(3.dp, Color.White, RoundedCornerShape(24.dp)))
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp)) {
             Box(Modifier.fillMaxWidth()) {
-                Box(Modifier.align(Alignment.CenterEnd)) { TextButton("Abbrechen", color = Color.White, bold = true) { finish(null) } }
+                Box(Modifier.align(Alignment.CenterEnd)) { TextButton(tr("Abbrechen"), color = Color.White, bold = true) { finish(null) } }
             }
-            Text("Halte die Kamera auf den QR-Code auf dem anderen Gerät.", color = Color.White, style = Type.subheadline,
+            Text(tr("Halte die Kamera auf den QR-Code auf dem anderen Gerät."), color = Color.White, style = Type.subheadline,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
         }
     }

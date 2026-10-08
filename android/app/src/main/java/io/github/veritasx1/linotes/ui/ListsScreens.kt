@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -54,7 +56,10 @@ fun listColor(obj: SyncObject): Color = LIST_COLORS.firstOrNull { it.first == ob
 @Composable
 fun ListsScreen(state: AppState, revision: Long) {
     val sync = state.sync
-    val lists = remember(revision) { sync.all("list").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val everything = remember(revision) { sync.all("list").sortedWith(compareBy({ it.data.optDouble("order", 0.0) }, { it.data.optString("name") })) }
+    val lists = everything.filter { !Model.archived(it) }
+    val archivedLists = everything.filter { Model.archived(it) }
+    var archiveOpen by remember { mutableStateOf(false) }
     val items = remember(revision) { sync.all("item") }
     var creating by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<SyncObject?>(null) }
@@ -62,18 +67,18 @@ fun ListsScreen(state: AppState, revision: Long) {
     var moving by remember { mutableStateOf<SyncObject?>(null) }
 
     LargeTitleScreen(
-        title = "Listen",
-        actions = { BarButton(Glyph.Plus, "Neue Liste") { creating = true } },
+        title = tr("Listen"),
+        actions = { BarButton(Glyph.Plus, tr("Neue Liste")) { creating = true } },
     ) {
-        if (lists.isEmpty()) item { EmptyState("Keine Listen", glyph = Glyph.Cart) }
+        if (lists.isEmpty()) item { EmptyState(tr("Keine Listen"), glyph = Glyph.Cart) }
         // Grouped by folder: unfiled lists first ("Meine Listen"), then one section per folder.
         // Drag a list onto a section heading to move it into that folder (or out, on "Meine Listen").
-        for ((folder, group) in groupByFolder(sync, lists)) section("lists-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: "Meine Listen",
+        for ((folder, group) in groupByFolder(sync, lists)) section("lists-${folder?.id}", header = folder?.let { folderPath(sync, it) } ?: tr("Meine Listen"),
             headerDrop = Pair({ it.startsWith("list:") }, { dropOnFolder(state, it, folder?.id) })) {
             group.forEachIndexed { index, list ->
                 val open = items.count { it.data.optString("list") == list.id && !it.data.optBoolean("done") }
                 GroupRow(
-                    title = list.data.optString("name", "Liste"),
+                    title = list.data.optString("name", tr("Liste")),
                     subtitle = shareLabel(sync, list),
                     detail = "$open",
                     divider = index < group.lastIndex,
@@ -84,10 +89,14 @@ fun ListsScreen(state: AppState, revision: Long) {
                 ) { state.push(Route.ListDetail(list.id)) }
             }
         }
+        archiveSection("lists", archivedLists, archiveOpen, { archiveOpen = !archiveOpen }) { list, divider ->
+            GroupRow(title = list.data.optString("name", tr("Liste")), subtitle = shareLabel(sync, list), divider = divider,
+                onLongClick = { menu = list }, glyph = Glyph.Cart, tint = listColor(list)) { state.push(Route.ListDetail(list.id)) }
+        }
     }
 
     if (creating) {
-        AlertDialog("Neue Liste", confirm = "Erstellen", fields = listOf(AlertField("z. B. Drogerie")), onDismiss = { creating = false }) { values ->
+        AlertDialog(tr("Neue Liste"), confirm = tr("Erstellen"), fields = listOf(AlertField(tr("z. B. Drogerie"))), onDismiss = { creating = false }) { values ->
             if (values[0].isNotBlank()) {
                 val list = sync.put("list", JSONObject().put("name", values[0].trim()).put("grocery", true).put("order", Model.now()))
                 state.push(Route.ListDetail(list.id))
@@ -98,7 +107,7 @@ fun ListsScreen(state: AppState, revision: Long) {
     menu?.let { list -> ListMenu(state, list, onRename = { renaming = list }, onMove = { moving = list }) { menu = null } }
     moving?.let { list -> MoveToFolderSheet(state, list) { moving = null } }
     renaming?.let { list ->
-        AlertDialog("Liste umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", list.data.optString("name"))),
+        AlertDialog(tr("Liste umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), list.data.optString("name"))),
             onDismiss = { renaming = null }) { values ->
             if (values[0].isNotBlank()) sync.update(list.id) { it.put("name", values[0].trim()) }
             renaming = null
@@ -110,13 +119,14 @@ fun ListsScreen(state: AppState, revision: Long) {
 private fun ListMenu(state: AppState, list: SyncObject, onRename: () -> Unit, onMove: () -> Unit, onDone: () -> Unit) {
     val sync = state.sync
     ActionSheet(list.data.optString("name"), listOf(
-        SheetAction("Umbenennen") { onRename() },
-        SheetAction("Verschieben nach …") { onMove() },
-        SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
-        SheetAction(if (list.data.optBoolean("grocery")) "Warengruppen ausschalten" else "Nach Warengruppen sortieren") {
+        SheetAction(tr("Umbenennen")) { onRename() },
+        SheetAction(tr("Verschieben nach …")) { onMove() },
+        SheetAction(tr("Teilen …")) { state.push(Route.Share(list.id)) },
+        archiveAction(state, list),
+        SheetAction(if (list.data.optBoolean("grocery")) tr("Warengruppen ausschalten") else tr("Nach Warengruppen sortieren")) {
             sync.update(list.id) { it.put("grocery", !it.optBoolean("grocery")) }
         },
-        SheetAction("Liste löschen", destructive = true) {
+        SheetAction(tr("Liste löschen"), destructive = true) {
             for (item in sync.all("item")) if (item.data.optString("list") == list.id) sync.delete(item.id)
             sync.delete(list.id)
             state.pop()
@@ -153,18 +163,18 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
     Column(Modifier.fillMaxSize().background(colors.background).imePadding()) {
         Box(Modifier.weight(1f)) {
             LargeTitleScreen(
-                title = list.data.optString("name", "Liste"),
-                subtitle = "${open.size} offen · " + shareLabel(sync, list),
-                backLabel = "Listen",
+                title = list.data.optString("name", tr("Liste")),
+                subtitle = tr("{size} offen · ", "size" to open.size) + shareLabel(sync, list),
+                backLabel = tr("Listen"),
                 onBack = { state.pop() },
-                actions = { BarButton(Glyph.More, "Mehr") { menu = true } },
+                actions = { BarButton(Glyph.More, tr("Mehr")) { menu = true } },
             ) {
-                if (items.isEmpty()) item { EmptyState("Die Liste ist leer", "Tippe unten einen Eintrag ein.", Glyph.Cart) }
+                if (items.isEmpty()) item { EmptyState(tr("Die Liste ist leer"), tr("Tippe unten einen Eintrag ein."), Glyph.Cart) }
                 if (list.data.optBoolean("grocery")) {
                     val grouped = open.groupBy { it.data.optString("category").ifEmpty { Model.groceryCategory(it.data.optString("text")) } }
                     for (category in Model.categoryOrder) {
                         val group = grouped[category] ?: continue
-                        section("cat-$category", header = category) {
+                        section("cat-$category", header = tr(category)) {
                             group.forEachIndexed { index, item -> ItemRow(state, item, accent, index < group.lastIndex) }
                         }
                     }
@@ -172,7 +182,7 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
                     section("open") { open.forEachIndexed { index, item -> ItemRow(state, item, accent, index < open.lastIndex) } }
                 }
                 if (done.isNotEmpty() && showDone) {
-                    section("done", header = "Erledigt (${done.size})") {
+                    section("done", header = tr("Erledigt ({size})", "size" to done.size)) {
                         done.forEachIndexed { index, item -> ItemRow(state, item, accent, index < done.lastIndex) }
                     }
                 }
@@ -187,35 +197,35 @@ fun ListDetailScreen(state: AppState, listId: String, revision: Long) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f)) {
-                    if (draft.isEmpty()) Text("Neuer Eintrag", style = Type.body, color = colors.secondary)
+                    if (draft.isEmpty()) Text(tr("Neuer Eintrag"), style = Type.body, color = colors.secondary)
                     BasicTextField(draft, { draft = it }, singleLine = true, textStyle = Type.body.copy(color = colors.label),
                         cursorBrush = SolidColor(accent),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { add() }),
                         modifier = Modifier.fillMaxWidth().focusRequester(focus))
                 }
-                if (draft.isNotBlank()) TextButton("Hinzufügen", color = accent) { add() }
+                if (draft.isNotBlank()) TextButton(tr("Hinzufügen"), color = accent) { add() }
             }
         }
     }
 
     if (menu) {
         ActionSheet(list.data.optString("name"), listOf(
-            SheetAction(if (showDone) "Erledigte ausblenden" else "Erledigte einblenden") { showDone = !showDone },
-            SheetAction("Erledigte löschen", destructive = true) { done.forEach { sync.delete(it.id) } },
-            SheetAction(if (list.data.optBoolean("grocery")) "Warengruppen ausschalten" else "Nach Warengruppen sortieren") {
+            SheetAction(if (showDone) tr("Erledigte ausblenden") else tr("Erledigte einblenden")) { showDone = !showDone },
+            SheetAction(tr("Erledigte löschen"), destructive = true) { done.forEach { sync.delete(it.id) } },
+            SheetAction(if (list.data.optBoolean("grocery")) tr("Warengruppen ausschalten") else tr("Nach Warengruppen sortieren")) {
                 sync.update(list.id) { it.put("grocery", !it.optBoolean("grocery")) }
             },
-            SheetAction("Farbe ändern") {
+            SheetAction(tr("Farbe ändern")) {
                 val index = LIST_COLORS.indexOfFirst { it.first == list.data.optString("color") }
                 sync.update(list.id) { it.put("color", LIST_COLORS[(index + 1).mod(LIST_COLORS.size)].first) }
             },
-            SheetAction("Teilen …") { state.push(Route.Share(list.id)) },
-            SheetAction("Umbenennen") { renaming = true },
+            SheetAction(tr("Teilen …")) { state.push(Route.Share(list.id)) },
+            SheetAction(tr("Umbenennen")) { renaming = true },
         )) { menu = false }
     }
     if (renaming) {
-        AlertDialog("Liste umbenennen", confirm = "Sichern", fields = listOf(AlertField("Name", list.data.optString("name"))),
+        AlertDialog(tr("Liste umbenennen"), confirm = tr("Sichern"), fields = listOf(AlertField(tr("Name"), list.data.optString("name"))),
             onDismiss = { renaming = false }) { values ->
             if (values[0].isNotBlank()) sync.update(list.id) { it.put("name", values[0].trim()) }
             renaming = false

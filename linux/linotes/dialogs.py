@@ -10,15 +10,16 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, GObject, Gtk
 
 from .api import OfflineError
+from .i18n import _
 
 
 ERRORS = {
-    "wrong-credentials": "Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Konto.",
-    "too-many-attempts": "Zu viele Versuche. Bitte warte ein paar Minuten.",
-    "invalid-invite": "Dieser Einladungscode ist ungültig oder wurde schon verwendet.",
-    "invalid-username": "Der Benutzername darf nur aus Kleinbuchstaben, Ziffern, Punkt, Minus und Unterstrich bestehen (2–32 Zeichen).",
-    "username-taken": "Dieser Benutzername ist schon vergeben.",
-    "offline": "Der Server ist nicht erreichbar. Prüfe die Internetverbindung.",
+    "wrong-credentials": _("Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Account."),
+    "too-many-attempts": _("Zu viele Versuche. Bitte warte ein paar Minuten."),
+    "invalid-invite": _("Dieser Einladungscode ist ungültig oder wurde schon verwendet."),
+    "invalid-username": _("Der Benutzername darf nur aus Kleinbuchstaben, Ziffern, Punkt, Minus und Unterstrich bestehen (2–32 Zeichen)."),
+    "username-taken": _("Dieser Benutzername ist schon vergeben."),
+    "offline": _("Der Server ist nicht erreichbar. Prüfe die Internetverbindung."),
 }
 
 
@@ -46,22 +47,22 @@ def ask_password(parent, heading, body, callback, hint=None, confirm=False, acti
     dialog = Adw.AlertDialog(heading=heading, body=body)
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
     first = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-    first.set_property("placeholder-text", "Passwort")
+    first.set_property("placeholder-text", _("Passwort"))
     box.append(first)
     second = hint_entry = None
     if confirm:
         second = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True)
-        second.set_property("placeholder-text", "Passwort bestätigen")
+        second.set_property("placeholder-text", _("Passwort bestätigen"))
         box.append(second)
-        hint_entry = Gtk.Entry(placeholder_text="Merkhilfe (empfohlen)")
+        hint_entry = Gtk.Entry(placeholder_text=_("Merkhilfe (empfohlen)"))
         box.append(hint_entry)
     elif wrong:
-        text = "Falsches Passwort." + (f"\nMerkhilfe: {hint}" if hint else "")
+        text = _("Falsches Passwort.") + ("\n" + _("Merkhilfe: {hint}", hint=hint) if hint else "")
         label = Gtk.Label(label=text, xalign=0, wrap=True)
         label.add_css_class("error")
         box.append(label)
     dialog.set_extra_child(box)
-    dialog.add_response("cancel", "Abbrechen")
+    dialog.add_response("cancel", _("Abbrechen"))
     dialog.add_response("ok", action)
     dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
     dialog.set_default_response("ok")
@@ -73,10 +74,10 @@ def ask_password(parent, heading, body, callback, hint=None, confirm=False, acti
         password = first.get_text()
         if confirm:
             if len(password) < 6:
-                toast_error(parent, "Das Passwort muss mindestens 6 Zeichen haben.")
+                toast_error(parent, _("Das Passwort muss mindestens 6 Zeichen haben."))
                 return
             if password != second.get_text():
-                toast_error(parent, "Die Passwörter stimmen nicht überein.")
+                toast_error(parent, _("Die Passwörter stimmen nicht überein."))
                 return
         callback(password, hint_entry.get_text() if hint_entry else None)
 
@@ -90,7 +91,7 @@ def toast_error(parent, text):
         parent.toast(text)
 
 
-def ask_text(parent, heading, callback, text="", placeholder="", action="Sichern", body=None, choices=None):
+def ask_text(parent, heading, callback, text="", placeholder="", action=_("Sichern"), body=None, choices=None):
     """Ask for a name. With `choices`, also offer a dropdown; callback(text, choice)."""
     dialog = Adw.AlertDialog(heading=heading, body=body or "")
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -101,7 +102,7 @@ def ask_text(parent, heading, callback, text="", placeholder="", action="Sichern
         dropdown = Gtk.DropDown.new_from_strings([label for _key, label in choices])
         box.append(dropdown)
     dialog.set_extra_child(box)
-    dialog.add_response("cancel", "Abbrechen")
+    dialog.add_response("cancel", _("Abbrechen"))
     dialog.add_response("ok", action)
     dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
     dialog.set_default_response("ok")
@@ -120,7 +121,7 @@ def ask_text(parent, heading, callback, text="", placeholder="", action="Sichern
 
 def confirm(parent, heading, body, action, callback, destructive=True):
     dialog = Adw.AlertDialog(heading=heading, body=body)
-    dialog.add_response("cancel", "Abbrechen")
+    dialog.add_response("cancel", _("Abbrechen"))
     dialog.add_response("ok", action)
     dialog.set_response_appearance(
         "ok", Adw.ResponseAppearance.DESTRUCTIVE if destructive else Adw.ResponseAppearance.SUGGESTED,

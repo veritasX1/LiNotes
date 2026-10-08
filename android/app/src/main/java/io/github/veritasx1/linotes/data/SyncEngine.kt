@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.data
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.os.Build
 import kotlinx.coroutines.CoroutineScope
@@ -43,9 +45,9 @@ data class User(val id: Int, val username: String, val name: String, val identit
 object Keep {
     const val ALWAYS = "always"
     const val SERVER = "server"
-    val choices = listOf(ALWAYS to "Immer", "90" to "90 Tage", "30" to "30 Tage", "7" to "7 Tage", SERVER to "Nur auf dem Server")
+    val choices = listOf(ALWAYS to tr("Immer"), "90" to tr("90 Tage"), "30" to tr("30 Tage"), "7" to tr("7 Tage"), SERVER to tr("Nur auf dem Server"))
     const val DEFAULT = "90"
-    fun label(value: String) = choices.firstOrNull { it.first == value }?.second ?: "90 Tage"
+    fun label(value: String) = choices.firstOrNull { it.first == value }?.second ?: tr("90 Tage")
 }
 
 /**
@@ -55,7 +57,7 @@ object Keep {
  * are encrypted when queued. Shares carry the keys that let others read.
  */
 /** Same steps as linux/linotes/textsize.py. */
-val TEXT_SIZES = listOf(0.85f to "Klein", 1.0f to "Normal", 1.15f to "Groß", 1.3f to "Sehr groß", 1.5f to "Riesig")
+val TEXT_SIZES = listOf(0.85f to tr("Klein"), 1.0f to tr("Normal"), 1.15f to tr("Groß"), 1.3f to tr("Sehr groß"), 1.5f to tr("Riesig"))
 
 class SyncEngine(private val context: Context) {
     companion object {
@@ -92,6 +94,10 @@ class SyncEngine(private val context: Context) {
     var hyphenate: Boolean
         get() = uiPrefs.getBoolean("hyphenate", false)
         set(value) = uiPrefs.edit().putBoolean("hyphenate", value).apply()
+    /** Link previews fetch the page, the site then sees this phone's address – off unless switched on. */
+    var linkPreviews: Boolean
+        get() = uiPrefs.getBoolean("link_previews", false)
+        set(value) = uiPrefs.edit().putBoolean("link_previews", value).apply()
 
     /** Notes as a gallery (like Apple's "View as Gallery") – a choice per device, as on Ubuntu. */
     var noteGallery: Boolean
@@ -190,7 +196,7 @@ class SyncEngine(private val context: Context) {
     // ACCOUNT
     // ================================================================
 
-    val deviceName: String get() = "Android (${Build.MANUFACTURER} ${Build.MODEL})"
+    val deviceName: String get() = tr("Android ({MANUFACTURER} {MODEL})", "MANUFACTURER" to Build.MANUFACTURER, "MODEL" to Build.MODEL)
     val userId: Int get() = user?.id ?: 0
 
     fun restore(): Boolean {
@@ -242,7 +248,7 @@ class SyncEngine(private val context: Context) {
     fun startLocal(name: String) {
         val newAccount = E2E.Account.create()
         val newIdentity = E2E.Identity.create()
-        val me = User(LOCAL_USER, "", name.ifBlank { "Ich" }, newIdentity.public)
+        val me = User(LOCAL_USER, "", name.ifBlank { tr("Ich") }, newIdentity.public)
         synchronized(lock) {
             remote.clear(); pending.clear(); cursor = 0
             server = ""
@@ -552,12 +558,26 @@ class SyncEngine(private val context: Context) {
         return share.data.optJSONObject("keys")?.keys()?.asSequence()?.map { it.toInt() }?.sorted()?.toList() ?: emptyList()
     }
 
-    /** Share `objectId` with exactly `memberIds`; empty = private again. Blocking (network for pictures). */
+    /** Share `objectId` with exactly `memberIds`; empty = private again. Blocking (network for pictures).
+     *  Removing someone always rotates the key (card 5939587a, Olaf: „Privatsphäre first“): own objects move at once;
+     *  other people's stay readable in the old share for those who remain until their owners move them
+     *  ([followMovedShares], twin of sync.py). */
     fun setSharing(objectId: String, memberIds: List<Int>): String? {
         val obj = get(objectId) ?: return null
         val members = memberIds.toSet().minus(userId).sorted()
         val current = obj.share
-        if (current != null && members.toSet() == shareMembers(current).toSet().minus(userId)) return current
+        val currentMembers = shareMembers(current).toSet().minus(userId)
+        if (current != null && members.toSet() == currentMembers) return current
+        val old = current?.let { get(it) }
+        val ownShare = old != null && old.owner == userId && old.data.optString("target") == objectId
+        val foreign = containerMembers(obj).filter { it.owner != userId }
+        // Card fc38cfad (lost cards twice on 08.10.): the server lets only an object's owner move it to another share, so
+        // other people's cards stayed behind in the old share – whose keys were then emptied. Adding people keeps the
+        // share and wraps its key for them.
+        if (ownShare && members.containsAll(currentMembers)) {
+            rewrapShare(current!!, members)
+            return current
+        }
         var newShare: String? = null
         if (members.isNotEmpty()) {
             newShare = "share-" + UUID.randomUUID().toString().replace("-", "")
@@ -565,22 +585,72 @@ class SyncEngine(private val context: Context) {
             shareKeys[newShare] = key
             val keys = JSONObject()
             for (uid in listOf(userId) + members) {
-                val target = userById(uid) ?: throw IllegalStateException("Unbekanntes Konto")
+                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekannter Account"))
                 keys.put(uid.toString(), E2E.wrapKey(key, target.identity, newShare))
             }
             put("share", JSONObject().put("keys", keys).put("target", objectId)
                 .put("name", obj.data.optString("name").ifEmpty { obj.kind }), newShare, newShare, members)
         }
         for (item in containerMembers(obj)) {
+            if (item.owner != userId) continue   // the server would refuse it; it stays readable where it is (card fc38cfad)
             val full = if (item.evicted) fetchNote(item.id) ?: item else item
             put(full.kind, rekeyFiles(full, newShare), newShare, full.id)
         }
-        if (current != null && current != newShare) {
-            get(current)?.takeIf { it.owner == userId }?.let { old ->
-                put("share", JSONObject(old.data.toString()).put("keys", JSONObject()), current, current, emptyList())
-            }
+        // The old share is emptied only when it was this object's own and nothing of anyone else is left in it – a
+        // folder's share stays for the folder (card fc38cfad). With others' objects inside it keeps only those who stay
+        // and points to the new share: their owners move them there on their next sync (card 5939587a).
+        if (current != null && current != newShare && ownShare) {
+            val data = JSONObject(old!!.data.toString())
+            if (foreign.isNotEmpty()) {
+                val stay = (listOf(userId) + members).map { it.toString() }.toSet()
+                val had = data.optJSONObject("keys") ?: JSONObject()
+                val keys = JSONObject()
+                for (uid in had.keys()) if (uid in stay) keys.put(uid, had.get(uid))
+                put("share", data.put("keys", keys).put("moved_to", newShare ?: JSONObject.NULL), current, current, members)
+            } else put("share", data.put("keys", JSONObject()), current, current, emptyList())
         }
         return newShare
+    }
+
+    /** Someone was removed from a share holding my objects (card 5939587a): the share now points to its successor – I move
+     *  mine there, re-encrypted with its key. The share's owner empties it once nothing is left inside. Twin of sync.py. */
+    fun followMovedShares(): Boolean {
+        data class Move(val share: SyncObject, val target: String, val mine: List<SyncObject>, val others: Int)
+        val moves = synchronized(lock) {
+            plain.values.filter { it.kind == "share" && !it.deleted }.mapNotNull { share ->
+                val target = share.data.optString("moved_to").takeIf { it.isNotEmpty() && it != "null" && shareKeys.containsKey(it) }
+                    ?: return@mapNotNull null
+                val inside = plain.values.filter { it.share == share.id && it.kind != "share" && !it.deleted }
+                val mine = inside.filter { it.owner == userId }
+                Move(share, target, mine, inside.size - mine.size)
+            }
+        }
+        for (move in moves) {
+            for (item in move.mine) {
+                val full = if (item.evicted) fetchNote(item.id) ?: item else item
+                put(full.kind, rekeyFiles(full, move.target), move.target, full.id)
+            }
+            if (move.share.owner == userId && move.others == 0 && (move.share.data.optJSONObject("keys")?.length() ?: 0) > 0)
+                put("share", JSONObject(move.share.data.toString()).put("keys", JSONObject()), move.share.id, move.share.id, emptyList())
+        }
+        return moves.any { it.mine.isNotEmpty() }
+    }
+
+    /** The share's key, wrapped for exactly the owner and `members`: those who stay keep their entry, new ones get the
+     *  same key – nothing is re-encrypted, nobody's objects move (card fc38cfad). */
+    private fun rewrapShare(shareId: String, members: List<Int>) {
+        val old = get(shareId) ?: return
+        val key = shareKeys[shareId] ?: throw IllegalStateException(tr("Unbekannter Account"))
+        val had = old.data.optJSONObject("keys") ?: JSONObject()
+        val keys = JSONObject()
+        for (uid in listOf(userId) + members) {
+            val wrapped = had.optJSONObject(uid.toString()) ?: run {
+                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekannter Account"))
+                E2E.wrapKey(key, target.identity, shareId)
+            }
+            keys.put(uid.toString(), wrapped)
+        }
+        put("share", JSONObject(old.data.toString()).put("keys", keys), shareId, shareId, members)
     }
 
     fun rekeyFiles(item: SyncObject, newShare: String?): JSONObject {
@@ -588,7 +658,8 @@ class SyncEngine(private val context: Context) {
         val body = data.optJSONArray("body") ?: return data
         for (index in 0 until body.length()) {
             val block = body.optJSONObject(index) ?: continue
-            if (block.optString("t") == "image" && block.optString("f").isNotEmpty()) {
+            // Pictures, attached files and link-preview pictures are encrypted with the share's key.
+            if (block.optString("t") in setOf("image", "file", "link") && block.optString("f").isNotEmpty()) {
                 try {
                     val content = fetchFile(block.getString("f"), item.share).readBytes()
                     block.put("f", uploadFile(content, newShare))
@@ -625,6 +696,12 @@ class SyncEngine(private val context: Context) {
     fun noteSort(): String = settings().optString("note_sort", "modified")
 
     fun setNoteSort(order: String) = updateSettings { it.put("note_sort", order) }
+
+    /** Profi-Funktionen (code colors, footnotes …): off by default so the app stays simple
+     *  ("Tante Erna" first); a setting of the account, so every device follows. */
+    var proFeatures: Boolean
+        get() = settings().optBoolean("pro", false)
+        set(value) = updateSettings { it.put("pro", value) }
 
     fun keyfileSaved(): Boolean = settings().optDouble("keyfile_saved", 0.0) > 0
 
@@ -822,7 +899,7 @@ class SyncEngine(private val context: Context) {
         } ?: return
         if (mine.deleted) return
         val data = JSONObject(mine.data.toString()).put("conflict", true)
-        data.optJSONArray("body")?.optJSONObject(0)?.let { it.put("x", it.optString("x") + " (Konflikt)") }
+        data.optJSONArray("body")?.optJSONObject(0)?.let { it.put("x", it.optString("x") + tr(" (Konflikt)")) }
         put("note", data, mine.share)
     }
 
@@ -871,6 +948,7 @@ class SyncEngine(private val context: Context) {
         }
         if (changed) evict()
         save()
+        if (changed) followMovedShares()   // card 5939587a
         if (changed) bump()
         if (response.optBoolean("more")) pullOnce()
     }
@@ -922,7 +1000,7 @@ class SyncEngine(private val context: Context) {
         return target
     }
 
-    fun uploadFile(content: ByteArray, share: String?): String {
+    fun uploadFile(content: ByteArray, share: String?, progress: ((Long, Long) -> Unit)? = null): String {
         val name = UUID.randomUUID().toString().replace("-", "")
         val key = keyFor(share) ?: throw E2E.CryptoError("no key")
         if (server.isEmpty()) {
@@ -933,7 +1011,7 @@ class SyncEngine(private val context: Context) {
             File(filesDir, name).writeBytes(content)
             return "local:$name"
         }
-        val id = api?.upload(E2E.sealBytes(key, content, name), share) ?: throw OfflineException("no session")
+        val id = api?.upload(E2E.sealBytes(key, content, name), share, progress) ?: throw OfflineException("no session")
         filesDir.mkdirs()
         File(filesDir, name).writeBytes(content)
         return "$id:$name"

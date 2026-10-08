@@ -1,5 +1,7 @@
 package io.github.veritasx1.linotes.ui
 
+import io.github.veritasx1.linotes.i18n.tr
+
 import android.content.Context
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -61,6 +63,107 @@ object AudioNotes {
         return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, rest) else "%d:%02d".format(minutes, rest)
     }
 
+    const val BARS = 36          // bars of the waveform in the message bubble
+    private const val WAVE_RATE = 4000
+
+    /** Loudness per bar of the waveform, 0.08…1 (square root, so quiet speech still shows), like the
+     *  bars of a voice message in Apple's Messages. Same rules as audio.peaks on Ubuntu. */
+    fun peaks(samples: ShortArray, bars: Int = BARS): FloatArray {
+        val count = samples.size.toLong()
+        if (count == 0L) return FloatArray(bars) { 0.08f }
+        val values = IntArray(bars) { index ->
+            val start = (index * count / bars).toInt()
+            val end = maxOf(start + 1, ((index + 1) * count / bars).toInt())
+            var top = 0
+            for (i in start until end) top = maxOf(top, kotlin.math.abs(samples[i].toInt()))
+            top
+        }
+        val top = values.maxOrNull()?.takeIf { it > 0 } ?: 1
+        return FloatArray(bars) { (Math.round(maxOf(0.08, kotlin.math.sqrt(values[it].toDouble() / top)) * 1000) / 1000.0).toFloat() }
+    }
+
+    /** Read a recording and give its waveform – blocking, run it in the background. Only loudness
+     *  leaves this function, nothing is stored. */
+    fun waveform(file: File, bars: Int = BARS): FloatArray {
+        val extractor = android.media.MediaExtractor()
+        var codec: android.media.MediaCodec? = null
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val track = (0 until extractor.trackCount).first {
+                extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val rate = format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+            val channels = format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+            // Keep the loudest sample of every block, about WAVE_RATE values per second.
+            val block = maxOf(1, rate / WAVE_RATE) * channels
+            val kept = java.io.ByteArrayOutputStream()
+            var loudest = 0
+            var inBlock = 0
+            codec = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME)!!)
+            codec.configure(format, null, null, 0)
+            codec.start()
+            val info = android.media.MediaCodec.BufferInfo()
+            var inputDone = false
+            while (true) {
+                if (!inputDone) {
+                    val index = codec.dequeueInputBuffer(10_000)
+                    if (index >= 0) {
+                        val size = extractor.readSampleData(codec.getInputBuffer(index)!!, 0)
+                        if (size < 0) {
+                            codec.queueInputBuffer(index, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+                val out = codec.dequeueOutputBuffer(info, 10_000)
+                if (out >= 0) {
+                    val shorts = codec.getOutputBuffer(out)!!.order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                    while (shorts.hasRemaining()) {
+                        loudest = maxOf(loudest, kotlin.math.abs(shorts.get().toInt()))
+                        if (++inBlock == block) {
+                            val value = minOf(loudest, Short.MAX_VALUE.toInt())
+                            kept.write(value and 0xFF); kept.write(value shr 8 and 0xFF)
+                            loudest = 0; inBlock = 0
+                        }
+                    }
+                    codec.releaseOutputBuffer(out, false)
+                    if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                }
+            }
+            val bytes = kept.toByteArray()
+            val samples = ShortArray(bytes.size / 2) { ((bytes[2 * it].toInt() and 0xFF) or (bytes[2 * it + 1].toInt() shl 8)).toShort() }
+            return peaks(samples, bars)
+        } finally {
+            runCatching { codec?.stop() }
+            runCatching { codec?.release() }
+            extractor.release()
+        }
+    }
+
+    private val MONTHS = listOf(tr("Jan."), tr("Feb."), tr("März"), tr("Apr."), tr("Mai"), tr("Juni"), tr("Juli"), tr("Aug."), tr("Sept."), tr("Okt."), tr("Nov."), tr("Dez."))
+    private val NAME = Regex("^(.*?)\\s*(\\d{4})-(\\d{2})-(\\d{2})[ _](\\d{2})-(\\d{2})\\.\\w+$")
+
+    /** Title and the line below it on the player card, like Apple's: "Aufnahme", "4. Okt. 2026, 14:22 · 0:07".
+     *  Same rules as audio.recording_label on Ubuntu. */
+    fun label(block: JSONObject): Pair<String, String> {
+        val name = block.optString("n")
+        val duration = if (block.optDouble("d", 0.0) > 0) durationText(block.optDouble("d")) else ""
+        val match = NAME.find(name)
+        if (match != null && match.groupValues[3].toInt() in 1..12) {
+            val g = match.groupValues
+            val title = g[1].trim().ifEmpty { tr("Aufnahme") }
+            val date = "${g[4].toInt()}. ${MONTHS[g[3].toInt() - 1]} ${g[2]}, ${g[5]}:${g[6]}"
+            return title to listOf(date, duration).filter { it.isNotEmpty() }.joinToString(" · ")
+        }
+        val title = if ('.' in name) name.substringBeforeLast('.') else name
+        return title.ifEmpty { tr("Audioaufnahme") } to duration
+    }
+
     fun recordingName(): String =
         java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("'Aufnahme' yyyy-MM-dd HH-mm")) + ".$extension"
 }
@@ -116,12 +219,12 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
         val length = recorder.stop(keep)
         when {
             !keep -> onCancel()
-            length == null -> onFailed("Die Aufnahme war zu kurz.")
+            length == null -> onFailed(tr("Die Aufnahme war zu kurz."))
             else -> onDone(recorder.file, length)
         }
     }
     LaunchedEffect(recorder) {
-        if (recorder == null) { onFailed("Das Mikrofon lässt sich nicht öffnen."); return@LaunchedEffect }
+        if (recorder == null) { onFailed(tr("Das Mikrofon lässt sich nicht öffnen.")); return@LaunchedEffect }
         while (!finished) { elapsed = recorder.elapsed(); delay(250) }
     }
     DisposableEffect(Unit) { onDispose { finish(false) } }
@@ -132,7 +235,7 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Audioaufnahme", style = Type.headline, color = colors.label)
+                Text(tr("Audioaufnahme"), style = Type.headline, color = colors.label)
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(14.dp).background(colors.red, CircleShape))
@@ -140,25 +243,28 @@ fun RecordDialog(onDone: (File, Double) -> Unit, onFailed: (String) -> Unit, onC
                     Text(AudioNotes.durationText(elapsed), style = Type.title1, color = colors.label)
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Aufnahme läuft …", style = Type.footnote, color = colors.secondary)
+                Text(tr("Aufnahme läuft …"), style = Type.footnote, color = colors.secondary)
             }
             HorizontalDivider(thickness = 0.5.dp, color = colors.separator)
             Row(Modifier.fillMaxWidth().height(46.dp)) {
                 Box(Modifier.weight(1f).fillMaxSize().clickable { finish(false) }, contentAlignment = Alignment.Center) {
-                    Text("Abbrechen", style = Type.body, color = colors.accentText)
+                    Text(tr("Abbrechen"), style = Type.body, color = colors.accentText)
                 }
                 Box(Modifier.width(0.5.dp).fillMaxSize().background(colors.separator))
                 Box(Modifier.weight(1f).fillMaxSize().clickable { finish(true) }, contentAlignment = Alignment.Center) {
-                    Text("Fertig", style = Type.headline, color = colors.accentText)
+                    Text(tr("Fertig"), style = Type.headline, color = colors.accentText)
                 }
             }
         }
     }
 }
 
-/** Plays one recording at a time inside the note. */
+/** Plays one recording at a time inside the note; pause and seek (the message bubble in the note
+ *  shows it – RichEditor.showAudio). */
 class AudioPlayer {
-    var playing by mutableStateOf<String?>(null)  // file id
+    var playing by mutableStateOf<String?>(null)  // file id of the loaded recording (playing or paused)
+        private set
+    var paused by mutableStateOf(false)
         private set
     var position by mutableLongStateOf(0L)
     var length by mutableLongStateOf(0L)
@@ -173,7 +279,22 @@ class AudioPlayer {
             start()
         }
         length = player?.duration?.toLong() ?: 0L
+        paused = false
         playing = fileId
+    }
+
+    /** Pause or go on. */
+    fun toggle() {
+        val current = player ?: return
+        if (paused) current.start() else current.pause()
+        paused = !paused
+        update()
+    }
+
+    fun seek(millis: Long) {
+        val current = player ?: return
+        current.seekTo(millis.coerceIn(0L, maxOf(0L, length - 50)).toInt())
+        update()
     }
 
     fun update() { player?.let { position = it.currentPosition.toLong() } }
@@ -182,6 +303,7 @@ class AudioPlayer {
         player?.release()
         player = null
         playing = null
+        paused = false
         position = 0
     }
 }
@@ -196,8 +318,8 @@ fun PlayerBar(player: AudioPlayer) {
         Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("Audioaufnahme  ${AudioNotes.durationText(player.position / 1000.0)} / ${AudioNotes.durationText(player.length / 1000.0)}",
+        Text(tr("Audioaufnahme  {durationText} / {durationText2}", "durationText" to (AudioNotes.durationText(player.position / 1000.0)), "durationText2" to (AudioNotes.durationText(player.length / 1000.0))),
             style = Type.subheadline, color = colors.label)
-        Text("Stopp", style = Type.headline, color = colors.accentText, modifier = Modifier.clickable { player.stop() }.padding(6.dp))
+        Text(tr("Stopp"), style = Type.headline, color = colors.accentText, modifier = Modifier.clickable { player.stop() }.padding(6.dp))
     }
 }

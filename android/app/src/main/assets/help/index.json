@@ -1,0 +1,42 @@
+{
+ "Ohne Server": [
+  {
+   "light": "android-m-start.webp",
+   "dark": null
+  }
+ ],
+ "Formatieren": [
+  {
+   "light": "android-c-notiz.webp",
+   "dark": "android-dark-c-notiz.webp"
+  }
+ ],
+ "Auf dem Handy behalten": [
+  {
+   "light": "android-l-einstellungen.webp",
+   "dark": "android-dark-l-einstellungen.webp"
+  }
+ ],
+ "Listen": [
+  {
+   "light": "android-f-liste.webp",
+   "dark": "android-dark-f-liste.webp"
+  }
+ ],
+ "Aufgaben-Board": [
+  {
+   "light": "android-g-board.webp",
+   "dark": "android-dark-g-board.webp"
+  }
+ ],
+ "Pläne": [
+  {
+   "light": "android-k-dienstplan.webp",
+   "dark": "android-dark-k-dienstplan.webp"
+  },
+  {
+   "light": "android-j-projektplan.webp",
+   "dark": "android-dark-j-projektplan.webp"
+  }
+ ]
+}
