@@ -363,7 +363,6 @@
  "LiNotes – Notizen, Pläne und Aufgaben. Nur für dich.": "LiNotes – Notes, plans et tâches. Rien que pour vous.",
  "Sicherheit": "Sécurité",
  "Beispiele": "Exemples",
- "Neu in 2.2: Nachweise mit Prüfsumme für Entwicklungsprojekte": "Nouveau dans la 2.2 : justificatifs avec somme de contrôle pour les projets de développement",
  "Alles, was zählt.<br><span class=\"gradient-text\">Nur für dich.": "Tout ce qui compte.<br><span class=\"gradient-text\">Rien que pour vous.",
  "Notizen, Listen, Aufgaben und Pläne für Android und Ubuntu.<br>Ende-zu-Ende verschlüsselt. Auf deinem eigenen Server.": "Notes, listes, tâches et plans pour Android et Ubuntu.<br>Chiffrés de bout en bout. Sur votre propre serveur.",
  "Budget, Packliste, Vergleich: Tabelle einfügen, losschreiben, mit Tab zur nächsten Zelle. Am Ende der Tabelle entsteht die neue Zeile von selbst.": "Budget, liste de bagages, comparatif : insérez un tableau, écrivez, Tab pour la cellule suivante. À la fin du tableau, la nouvelle ligne apparaît d’elle-même.",
@@ -414,7 +413,6 @@
  "Verifizierte Personen": "Personnes vérifiées",
  "Bevor ihr teilt, bestätigt ihr euch einmal per Code oder QR-Code. So kann niemand einen falschen Schlüssel unterschieben.": "Avant de partager, vous vous confirmez mutuellement une fois par code ou QR code. Ainsi personne ne peut glisser une fausse clé.",
  "Geräte wie bei Signal": "Des appareils comme avec Signal",
- "Ab Android 8 · rund 10 MB": "À partir d’Android 8 · environ 10 Mo",
  "Quelle in F-Droid hinzufügen ›": "Ajouter le dépôt dans F-Droid ›",
  "APK laden": "Télécharger l’APK",
  "Fingerabdrücke": "Empreintes",
@@ -502,7 +500,6 @@
  "Ein Tipp aufs Mikrofon nimmt das Gespräch in der Notiz auf, abspielbar auf jedem Gerät. Elternbriefe, Rechnungen und Pläne hängen als PDF gleich daneben.": "Un toucher sur le micro enregistre la conversation dans la note, lisible sur chaque appareil. Courriers de l’école, factures et plans s’y joignent en PDF.",
  "Lange Notizen bleiben übersichtlich: Ein Pfeil vor der Überschrift klappt den ganzen Abschnitt ein, auf dem Handy wie am Rechner.": "Les longues notes restent lisibles : une flèche devant l’intertitre replie toute la section, sur le téléphone comme sur l’ordinateur.",
  "Als Liste oder als Galerie, nach Datum oder Titel sortiert, in Ordnern und Unterordnern. Angeheftetes bleibt oben.": "En liste ou en galerie, triées par date ou par titre, dans des dossiers et sous-dossiers. Les notes épinglées restent en haut.",
- "Neu in 2.1 und 2.2": "Nouveau dans 2.1 et 2.2",
  "Weitere Funktionen": "Autres fonctions",
  "Mit <code class=\"inline\">@Name</code> sprichst du in geteilten Notizen jemanden an. Die Person bekommt eine Mitteilung.": "Interpellez quelqu’un dans une note partagée avec <code class=\"inline\">@Name</code>. La personne reçoit une notification.",
  "Gelb, Orange, Rosa, Lila, Mint und Blau, dazu Textfarbe, Schriftart und Ausrichtung.": "Jaune, orange, rose, violet, menthe et bleu, plus couleur du texte, police et alignement.",
@@ -538,7 +535,6 @@
  "dein eigener Server oder ganz ohne": "Votre propre serveur ou aucun",
  "Ein neues Gerät meldest du mit einem sechsstelligen Code oder einem QR-Code an.": "Un nouvel appareil s’ajoute avec un code à six chiffres ou un code QR.",
  "Herunterladen": "Télécharger",
- "Kostenlos, Version 2.2.1 für Android und Ubuntu, mit oder ohne eigenen Server.": "Gratuit, version 2.2.1 pour Android et Ubuntu, avec ou sans votre propre serveur.",
  "Am bequemsten über F-Droid, dann kommen Updates automatisch.": "Le plus simple via F-Droid, les mises à jour arrivent alors automatiquement.",
  "Ohne Server wählst du beim ersten Start „Ohne Server nutzen“. Einen Server kannst du später jederzeit eintragen.": "Sans serveur, choisissez « Utiliser sans serveur » au premier lancement. Vous pourrez ajouter un serveur plus tard à tout moment.",
  "Notizen, Listen, Aufgaben und Pläne, zuerst für eine Familie entstanden.": "Notes, listes, tâches et plannings, d’abord créés pour une famille.",
@@ -663,5 +659,9 @@
  "Verschieben:</b> Notizen, Listen, Boards und Pläne auf einen Ordner ziehen, <span class=\"tag\">Android</span> gedrückt halten und ziehen, <span class=\"tag\">Ubuntu</span> mit der Maus. Oder lange drücken / Rechtsklick → „Verschieben nach …“.": "Déplacer :</b> faites glisser notes, listes, tableaux et plans sur un dossier, <span class=\"tag\">Android</span> maintenir puis glisser, <span class=\"tag\">Ubuntu</span> avec la souris. Ou appui long / clic droit → « Déplacer vers … ».",
  "Zusammenarbeit mit dem Kunden:</b> Auftraggeber ins Board einladen. Sie schreiben Wünsche als Karten und nehmen selbst ab, z. B. so vereinbart, dass nur sie nach „Erledigt“ schieben.": "La collaboration avec les clients :</b> invitez le donneur d’ordre au tableau. Il écrit ses souhaits sous forme de cartes et les valide lui-même, p. ex. avec la règle que lui seul déplace dans « Terminé ».",
  "Regelmäßig reflektieren: den Bericht als PDF erzeugen und gemeinsam durchgehen. Was lief gut, was ändern wir? Dokumentation nur so viel wie nötig: Auswirkungsanalyse, Verifikation und Nachweise sind für Projekte gedacht, die sie brauchen (z. B. nach ISO 26262 oder Automotive SPICE). Einfache Boards bleiben schlank.": "Prendre du recul régulièrement : générer le rapport en PDF et le parcourir ensemble. Qu’est-ce qui a bien marché, que changeons-nous ? De la documentation seulement autant que nécessaire : analyse d’impact, vérification et justificatifs sont destinés aux projets qui en ont besoin (p. ex. selon l’ISO 26262 ou Automotive SPICE). Les tableaux simples restent légers.",
- "Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel. Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer. Bis dahin liefert der Server sie nur noch an die Verbliebenen aus. Geteiltes erkennst du am Personen-Symbol.": "Appui long / clic droit sur une note, un dossier, une liste, un tableau ou un plan → <b>« Partager … »</b> et choisissez des personnes. Un dossier partagé partage tout son contenu. Si vous retirez quelqu’un, le partage reçoit une nouvelle clé. Votre contenu est chiffré à nouveau immédiatement, celui des autres personnes à leur prochaine synchronisation. D’ici là, le serveur ne le transmet plus qu’aux personnes restantes. Les éléments partagés se reconnaissent à l’icône Personnes."
+ "Notiz, Ordner, Liste, Board oder Plan lange drücken / Rechtsklick → <b>„Teilen …“</b> und Personen auswählen. Ein geteilter Ordner teilt alles darin mit. Entfernst du jemanden, bekommt die Freigabe einen neuen Schlüssel. Deine Inhalte werden sofort neu verschlüsselt, die anderer Personen beim nächsten Abgleich ihrer Besitzer. Bis dahin liefert der Server sie nur noch an die Verbliebenen aus. Geteiltes erkennst du am Personen-Symbol.": "Appui long / clic droit sur une note, un dossier, une liste, un tableau ou un plan → <b>« Partager … »</b> et choisissez des personnes. Un dossier partagé partage tout son contenu. Si vous retirez quelqu’un, le partage reçoit une nouvelle clé. Votre contenu est chiffré à nouveau immédiatement, celui des autres personnes à leur prochaine synchronisation. D’ici là, le serveur ne le transmet plus qu’aux personnes restantes. Les éléments partagés se reconnaissent à l’icône Personnes.",
+ "Neu in 2.3: Formeln, Vorlagen, Archiv und Link-Vorschau": "Nouveau dans 2.3 : formules, modèles, archives et aperçus de liens",
+ "Neu in 2.1 bis 2.3": "Nouveau dans 2.1 à 2.3",
+ "Kostenlos, Version 2.3.0 für Android und Ubuntu, mit oder ohne eigenen Server.": "Gratuit, version 2.3.0 pour Android et Ubuntu, avec ou sans votre propre serveur.",
+ "Ab Android 8 · rund 12 MB": "À partir d’Android 8 · environ 12 Mo"
 }
