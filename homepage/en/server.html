@@ -49,8 +49,8 @@
 <section class="hero" style="padding-bottom: 20px">
   <div class="narrow">
     <span class="badge reveal">Raspberry Pi · Debian · Ubuntu</span>
-    <h1 class="display reveal d1" style="font-size: clamp(40px, 6vw, 76px)">Your own server.<br><span class="gradient-text">One command.</span></h1>
-    <p class="lead reveal d2">Ten minutes, a small computer and an address on the internet – and your notes and your family’s live with you at home. Encrypted, backed up, no subscription.</p>
+    <h1 class="display reveal d1" style="font-size: clamp(40px, 6vw, 76px)">Your Own Server<br><span class="gradient-text">with One Command</span></h1>
+    <p class="lead reveal d2">You need about ten minutes, a small computer and an address on the internet. After that, your notes and your family’s are stored encrypted and backed up at your home.</p>
   </div>
 </section>
 
@@ -87,27 +87,27 @@
           <rect class="acc" x="640" y="60" width="112" height="110" rx="14"/><text x="696" y="98" text-anchor="middle">LiNotes</text><text x="696" y="118" text-anchor="middle">Server</text><text class="sub" x="696" y="142" text-anchor="middle">nur verschlüsselt</text>
         </svg>
       </div>
-      <p>No server at hand? LiNotes also runs entirely without one – choose “Use without server” on first launch. You can add a server at any time later, and your notes then move over.</p>
+      <p>LiNotes also works without a server: choose “Use without server” on first launch. You can add a server any time later, and your notes move along.</p>
     </section>
 
     <section id="brauchst">
       <h2>What you need</h2>
       <ul>
-        <li><b>A small computer that is always on</b> – ideally a Raspberry Pi 4 or 5 with Raspberry Pi OS. Any other computer with Debian or Ubuntu works too.</li>
-        <li><b>An address on the internet</b> pointing to your connection – e.g. free via DynDNS (goip.de, DuckDNS, the MyFRITZ! address of your FRITZ!Box …).</li>
+        <li><b>A small computer that is always on</b>, ideally a Raspberry Pi 4 or 5 with Raspberry Pi OS. Any other computer with Debian or Ubuntu works too.</li>
+        <li><b>An address on the internet</b> that points to your connection, for example free via DynDNS (goip.de, DuckDNS, your FRITZ!Box’s MyFRITZ! address …).</li>
         <li><b>Access to your router</b> to open two ports.</li>
-        <li>A terminal with <code class="inline">sudo</code> rights on the computer. That’s all.</li>
+        <li>A terminal with <code class="inline">sudo</code> rights on the computer.</li>
       </ul>
-      <div class="note">💡 Tip for the Raspberry Pi: put the data on a USB hard drive instead of the SD card – it spares the card. To do this, give the path as a second value, see step 3.</div>
+      <div class="note">Tip for the Raspberry Pi: keep the data on a USB drive instead of the SD card, which spares the card. Give the path as the second value, see step 3.</div>
     </section>
 
     <section id="domain">
       <h2>1 · An address on the internet</h2>
-      <p>Your devices must find the server on the go too. For that you need a name like <code class="inline">notes.example.org</code> that always points to your internet connection – even when your IP address changes.</p>
+      <p>Your devices must find the server on the go too. For that you need a name like <code class="inline">notizen.example.org</code> that always points to your internet connection, even when your IP address changes.</p>
       <ol class="steps-list">
         <li><b>Create a name</b>Create a name with a DynDNS provider, e.g. <code class="inline">familie-notizen.goip.de</code>. Many providers are free.</li>
         <li><b>Keep it current</b>Easiest is to enter it in the router (German FRITZ!Box: Internet → Freigaben → DynDNS). The router then reports every new IP address itself.</li>
-        <li><b>Check</b>On a computer enter <code class="inline">ping familie-notizen.goip.de</code> – your current internet IP must answer.</li>
+        <li><b>Check</b>On a computer, enter <code class="inline">ping familie-notizen.goip.de</code>. Your current internet IP must answer.</li>
       </ol>
     </section>
 
@@ -117,12 +117,12 @@
       <ol class="steps-list">
         <li><b>Open port sharing</b>Internet → Freigaben → Portfreigaben (port sharing) → “Gerät für Freigaben hinzufügen” (add device for sharing) and select the Raspberry Pi.</li>
         <li><b>Create two shares</b>“Neue Freigabe” (new share) → Portfreigabe → HTTP server (port <b>80</b>) and HTTPS server (port <b>443</b>). With IPv6, also activate “IPv6 freigeben” (share via IPv6).</li>
-        <li><b>Save</b>Done. Other ports stay closed – LiNotes needs nothing more.</li>
+        <li><b>Save</b>Other ports stay closed, LiNotes only needs these.</li>
       </ol>
     </section>
 
     <section id="installieren">
-      <h2>3 · Install – one command</h2>
+      <h2>3 · Install with One Command</h2>
       <p>Log in to the Raspberry Pi (directly or via SSH) and enter this command. Replace the domain with yours:</p>
       <div class="terminal" data-copy="curl -fsSL https://lisoftware.de/linotes/install-server.sh | sudo bash -s familie-notizen.goip.de">
         <div class="bar"><i></i><i></i><i></i><span>pi@raspberrypi: ~</span></div>
@@ -151,7 +151,7 @@ Fertig!
 In der App die Serveradresse eingeben, „Neues Konto erstellen“ wählen und den
 Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
       </div>
-      <p>Now set up: the LiNotes service (starts automatically), nginx with an HTTPS certificate from Let’s Encrypt, a nightly backup at 3:40 a.m. – and your first invitation code. The code above is only an example.</p>
+      <p>Now set up: the LiNotes service (starts automatically), nginx with an HTTPS certificate from Let's Encrypt, a nightly backup at 3:40 and your first invitation code. The code above is only an example.</p>
     </section>
 
     <section id="verbinden">
@@ -160,9 +160,9 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
         <div>
           <ol class="steps-list">
             <li><b>Enter the server address</b>Open LiNotes and enter your domain, e.g. <code class="inline">familie-notizen.goip.de</code>.</li>
-            <li><b>Create an account</b>Choose “Create new account”, enter the invitation code, a user name and your name. There is no password – your account is protected by a key that lives only on your devices.</li>
+            <li><b>Create an account</b>Choose “Create new account”, enter the invitation code, a user name and your name. There is no password: your account is protected by a key that exists only on your devices.</li>
             <li><b>Back up the key file</b>The app reminds you after a few days. With the file you can get back to your notes even after losing all your devices.</li>
-            <li><b>More devices</b>On the second device choose “Connect with another device” and confirm the code shown on the first device – just like with Signal.</li>
+            <li><b>More devices</b>On the second device, choose “Connect with another device” and confirm the code shown on the first device, as with Signal.</li>
           </ol>
         </div>
         <div class="phone"><img class="zoomable" src="../img/en/android-m-start.webp" alt="Start screen of the app with field for the server address" loading="lazy"></div>
@@ -171,8 +171,8 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
 
     <section id="einladen">
       <h2>5 · Invite the family</h2>
-      <p>In the app under <b>Settings → People and invitations</b> (Ubuntu: account menu → “Create invitation code …”) you get a new code. You pass it on – the person installs LiNotes, enters the server address and creates their account with the code.</p>
-      <p>Before you share anything, you verify each other once – by code or QR code. After that nobody can slip in a false key.</p>
+      <p>In the app under <b>Settings → People and Invitations</b> (Ubuntu: account menu → “Create invitation code…”) you get a new code. Pass it on. The person installs LiNotes, enters the server address and creates their account with the code.</p>
+      <p>Before you share anything, you verify each other once by code or QR code. After that, nobody can slip in a false key.</p>
       <p>It also works on the server:</p>
       <div class="terminal" data-copy="sudo -u linotes env LINOTES_DATA=/var/lib/linotes /opt/linotes/venv/bin/python -m linotes_server.admin invite">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
@@ -183,8 +183,8 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
 
     <section id="sicherung">
       <h2>Backup</h2>
-      <p>Every night at 3:40 a.m. the server makes a consistent copy of the database and all files – in <code class="inline">/var/lib/linotes-backup</code> (or next to your data folder). Database copies are kept for 14 days.</p>
-      <div class="note">💡 The backup is safest on a second hard drive. The backup is encrypted too – without the keys on your devices it is unreadable.</div>
+      <p>Every night at 3:40 the server makes a consistent copy of the database and all files in <code class="inline">/var/lib/linotes-backup</code> (or next to your data folder). Database copies are kept for 14 days.</p>
+      <div class="note">Tip: the backup is safest on a second drive. The backup is encrypted too and unreadable without the keys on your devices.</div>
     </section>
 
     <section id="update">
@@ -201,7 +201,7 @@ Code eingeben. Weitere Einladungen gibt es danach direkt in der App.</pre>
       <h3>“HTTPS konnte nicht eingerichtet werden” (HTTPS could not be set up)</h3>
       <p>Does the domain really point to your connection (step 1), and are ports 80 and 443 open (step 2)? Then simply run <code class="inline">sudo certbot --nginx -d your-domain</code>.</p>
       <h3>The app cannot find the server</h3>
-      <p>Open <code class="inline">https://your-domain/api/health</code> in the browser. If it says <code class="inline">"ok": true</code>, everything is running – then enter the address in the app without <code class="inline">https://</code> and without a slash.</p>
+      <p>Open <code class="inline">https://deine-domain/api/health</code> in the browser. If it shows <code class="inline">"ok": true</code>, everything runs. Then enter the address in the app without <code class="inline">https://</code> and without a slash.</p>
       <h3>The service does not start</h3>
       <div class="terminal" data-copy="sudo systemctl status linotes; sudo journalctl -u linotes -n 50">
         <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
@@ -226,7 +226,7 @@ sudo linotes-server/install.sh familie-notizen.goip.de">
 <span class="p">$</span> tar xzf linotes-server-2.1.0.tar.gz
 <span class="p">$</span> sudo linotes-server/install.sh familie-notizen.goip.de</pre>
       </div>
-      <p>The installer’s source code is in the package (<code class="inline">install.sh</code>) – you can read exactly what it does beforehand.</p>
+      <p>The installer’s source is in the package (<code class="inline">install.sh</code>). You can read exactly what it does beforehand.</p>
     </section>
   </article>
 </div>
