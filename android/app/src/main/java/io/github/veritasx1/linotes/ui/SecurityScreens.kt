@@ -77,7 +77,7 @@ fun errorText(error: Throwable): String = when {
     error is OfflineException -> tr("Der Server ist nicht erreichbar. Prüfe die Internetverbindung.")
     error is Pairing.PairingError -> error.message ?: tr("Abgebrochen")
     error is ApiException -> when (error.code) {
-        "wrong-credentials" -> tr("Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Konto.")
+        "wrong-credentials" -> tr("Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Account.")
         "too-many-attempts" -> tr("Zu viele Versuche. Bitte warte ein paar Minuten.")
         "invalid-invite" -> tr("Dieser Einladungscode ist ungültig oder wurde schon verwendet.")
         "invalid-username" -> tr("Der Benutzername darf nur aus Kleinbuchstaben, Ziffern, Punkt, Minus und Unterstrich bestehen (2–32 Zeichen).")
@@ -165,7 +165,7 @@ fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
             try {
                 withContext(Dispatchers.IO) { state.sync.connectLocal(url, response, account) }
             } catch (conflict: SyncEngine.VaultConflict) {
-                throw Pairing.PairingError(tr("Dieses Konto hat schon ein Notizen-Passwort. Entferne auf diesem Gerät zuerst die Sperre ") +
+                throw Pairing.PairingError(tr("Dieser Account hat schon ein Notizen-Passwort. Entferne auf diesem Gerät zuerst die Sperre ") +
                     tr("deiner gesperrten Notizen, dann verbinde erneut."))
             }
             state.lockAll()
@@ -268,14 +268,14 @@ fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
                 Explanation(server.removePrefix("https://"))
                 Spacer(Modifier.height(12.dp))
                 InsetGroup {
-                    GroupRow(tr("Neues Konto erstellen"), Glyph.Plus, subtitle = tr("Du hast einen Einladungscode bekommen.")) { step = "register" }
-                    GroupRow(tr("Mit anderem Gerät verbinden"), Glyph.Person, subtitle = tr("Dein Konto gibt es schon, z. B. am Computer.")) { cancelled = false; step = "link" }
+                    GroupRow(tr("Neuen Account erstellen"), Glyph.Plus, subtitle = tr("Du hast einen Einladungscode bekommen.")) { step = "register" }
+                    GroupRow(tr("Mit anderem Gerät verbinden"), Glyph.Person, subtitle = tr("Deinen Account gibt es schon, z. B. am Computer.")) { cancelled = false; step = "link" }
                     GroupRow(tr("Mit Schlüsseldatei wiederherstellen"), Glyph.Lock, subtitle = tr("Aus deiner Notfall-Sicherung."), divider = false) { step = "keyfile" }
                 }
             }
             "register" -> {
-                Text(tr("Neues Konto"), style = Type.title1, color = colors.label)
-                Explanation(tr("Es gibt kein Passwort: Dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."))
+                Text(tr("Neuer Account"), style = Type.title1, color = colors.label)
+                Explanation(tr("Es gibt kein Passwort: Dein Account ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."))
                 Spacer(Modifier.height(12.dp))
                 InsetGroup {
                     InputRow(invite, { invite = it }, tr("Einladungscode"))
@@ -284,7 +284,7 @@ fun OnboardingScreen(state: AppState, connecting: Boolean = false) {
                 }
                 ErrorText(error)
                 Spacer(Modifier.height(16.dp))
-                PrimaryButton(if (busy) tr("Einen Moment …") else tr("Konto erstellen"), enabled = !busy && invite.isNotBlank() && username.isNotBlank(),
+                PrimaryButton(if (busy) tr("Einen Moment …") else tr("Account erstellen"), enabled = !busy && invite.isNotBlank() && username.isNotBlank(),
                     modifier = Modifier.padding(horizontal = 16.dp)) {
                     run {
                         val url = server
@@ -446,7 +446,7 @@ fun PeopleScreen(state: AppState, revision: Long) {
                 }
             }
         }
-        section("invite", footer = tr("Mit einem Einladungscode kann sich jemand einmalig ein eigenes Konto auf deinem Server anlegen.")) {
+        section("invite", footer = tr("Mit einem Einladungscode kann sich jemand einmalig einen eigenen Account auf deinem Server anlegen.")) {
             GroupRow(tr("Jemanden einladen …"), Glyph.Plus, divider = false) {
                 scope.launch {
                     try {
@@ -460,7 +460,7 @@ fun PeopleScreen(state: AppState, revision: Long) {
     }
     inviteCode?.let { code ->
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-        AlertDialog(tr("Einladungscode"), tr("Einmalig gültig:\n\n{code}\n\nServer: {server}\n\nIn der App „Neues Konto erstellen“ wählen.", "code" to code, "server" to sync.server), tr("Kopieren"),
+        AlertDialog(tr("Einladungscode"), tr("Einmalig gültig:\n\n{code}\n\nServer: {server}\n\nIn der App „Neuen Account erstellen“ wählen.", "code" to code, "server" to sync.server), tr("Kopieren"),
             onDismiss = { inviteCode = null }) {
             clipboard.setText(androidx.compose.ui.text.AnnotatedString(code))
             inviteCode = null
@@ -565,7 +565,7 @@ fun IncomingRequests(state: AppState) {
     if (purpose == "link") {
         CodeDialog(
             tr("Neues Gerät verbinden?"),
-            tr("„{name}“ möchte sich mit deinem Konto verbinden. ", "name" to (request.optString("note").ifEmpty { "Ein neues Gerät" })) +
+            tr("„{name}“ möchte sich mit deinem Account verbinden. ", "name" to (request.optString("note").ifEmpty { "Ein neues Gerät" })) +
                 tr("Gib den 6-stelligen Code ein, der dort angezeigt wird, oder scanne den QR-Code. Warst du das nicht selbst, tippe auf „Ablehnen“."),
             confirm = tr("Verbinden"), cancel = tr("Ablehnen"),
             onScan = { scan() },
@@ -719,9 +719,9 @@ private val HELP = listOf(
         tr("Ohne Server") to tr("Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach eine Notizen-App, alles liegt ") +
             tr("verschlüsselt nur auf diesem Gerät. Später unter Einstellungen → „Mit Server verbinden …“ einen Server eintragen – ") +
             tr("deine Notizen werden dann hochgeladen und lassen sich teilen und auf anderen Geräten nutzen."),
-        tr("Konto anlegen") to tr("Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. ") +
+        tr("Account anlegen") to tr("Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neuen Account erstellen“. ") +
             tr("Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – ") +
-            tr("dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."),
+            tr("dein Account ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."),
         tr("Schlüsseldatei sichern") to tr("Speichere direkt danach die Schlüsseldatei (Einstellungen → „Schlüsseldatei sichern“) ") +
             tr("und lege sie z. B. auf einem USB-Stick an einen sicheren Ort. Ohne Gerät und ohne Schlüsseldatei kann niemand ") +
             tr("– auch nicht der Server-Betreiber – deine Notizen wiederherstellen."),
@@ -734,7 +734,7 @@ private val HELP = listOf(
         tr("Checklisten") to tr("Kreis antippen, um einen Punkt abzuhaken. Eine leere Zeile beendet die Liste. Über „Mehr“ kannst du ") +
             tr("abgehakte Punkte automatisch nach unten sortieren lassen."),
         tr("Tags") to tr("Schreibe #Wort in eine Notiz – der Tag erscheint in der Ordnerübersicht zum Filtern."),
-        tr("Profi-Funktionen") to tr("Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Einstellungen → „Profi-Funktionen“ einschalten – dann gibt es im Format-Feld (Aa) zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel antippen zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für dein Konto auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block."),
+        tr("Profi-Funktionen") to tr("Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Einstellungen → „Profi-Funktionen“ einschalten – dann gibt es im Format-Feld (Aa) zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel antippen zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für deinen Account auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block."),
         tr("Vorlagen") to tr("In einem Ordner „…“ → „Neue Notiz aus Vorlage …“: mitgeliefert sind Besprechung, Protokoll, Reisecheckliste und Tagebuch. Eigene Vorlage: Notiz lange drücken → „Als Vorlage verwenden“. {{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen durch die aktuellen Werte ersetzt, z. B. „Besprechung {{Datum}}“."),
         tr("Link-Vorschau") to tr("Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du Einstellungen → „Link-Vorschau“ einschaltest; ab Werk ist sie aus. Dafür ruft nur dieses Handy die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Vorschau antippen → „Im Browser öffnen“ oder „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau."),
         tr("Gesperrte Notizen") to tr("Über „Mehr“ → „Notiz sperren“ schützt du eine Notiz mit deinem Notizen-Passwort. In den ") +

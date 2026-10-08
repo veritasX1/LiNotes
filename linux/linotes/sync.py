@@ -587,7 +587,7 @@ class SyncEngine:
             for uid in [self.user_id] + member_ids:
                 user = self.user_by_id(uid)
                 if user is None or not user.get("identity"):
-                    raise ValueError(_("Unbekanntes Konto {uid}", uid=uid))
+                    raise ValueError(_("Unbekannter Account {uid}", uid=uid))
                 keys[str(uid)] = e2e.wrap_key(key, user["identity"], new_share)
             self.put("share", {"keys": keys, "target": object_id, "name": obj["data"].get("name") or obj["kind"]},
                      new_share, new_share, notify=False, members=member_ids)

@@ -125,7 +125,7 @@ def _peer_public(users, user_id):
     for user in users:
         if user["id"] == user_id:
             return user["identity"]
-    raise PairingError(_("Unbekanntes Konto"))
+    raise PairingError(_("Unbekannter Account"))
 
 
 class VerifyShow:
@@ -148,7 +148,7 @@ class VerifyShow:
             raise PairingError(_("Der eingegebene Code war falsch."))
         peer = _peer_public(users, self.other_id)
         if not hmac.compare_digest(reply.get("m", ""), mac(ke, VERIFY_B, peer)):
-            raise PairingError(_("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!"))
+            raise PairingError(_("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
         self.api.relay_post(self.channel, "A", json.dumps({"c": confirmation.hex(), "m": mac(ke, VERIFY_A, my_public)}))
         return e2e.fingerprint(peer)
 
@@ -165,5 +165,5 @@ def verify_enter(api, channel, code, other_id, my_public, users):
         raise PairingError(_("Der Code war falsch."))
     peer = _peer_public(users, other_id)
     if not hmac.compare_digest(done.get("m", ""), mac(ke, VERIFY_A, peer)):
-        raise PairingError(_("Der Schlüssel des anderen Kontos stimmt nicht mit dem Server überein!"))
+        raise PairingError(_("Der Schlüssel des anderen Accounts stimmt nicht mit dem Server überein!"))
     return e2e.fingerprint(peer)

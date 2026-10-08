@@ -213,7 +213,7 @@ class Onboarding(Gtk.Box):
         self.wrap(box, "server")
 
     def build_local(self):
-        box = page(_("Ohne Server"), _("Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Computer. Geht er verloren, sind sie weg – verbinde LiNotes später mit einem Server (Kontomenü), um sie zu sichern und zu teilen."))
+        box = page(_("Ohne Server"), _("Deine Notizen, Listen und Aufgaben liegen verschlüsselt nur auf diesem Computer. Geht er verloren, sind sie weg – verbinde LiNotes später mit einem Server (Account-Menü), um sie zu sichern und zu teilen."))
         group = Adw.PreferencesGroup()
         name_row = Adw.EntryRow(title=_("Dein Name (optional)"))
         group.add(name_row)
@@ -249,8 +249,8 @@ class Onboarding(Gtk.Box):
         box = page(_("Wie möchtest du starten?"))
         group = Adw.PreferencesGroup()
         for title, subtitle, target in (
-            (_("Neues Konto erstellen"), _("Du hast einen Einladungscode bekommen."), "register"),
-            (_("Mit anderem Gerät verbinden"), _("Dein Konto gibt es schon, z. B. auf dem Handy."), "link"),
+            (_("Neuen Account erstellen"), _("Du hast einen Einladungscode bekommen."), "register"),
+            (_("Mit anderem Gerät verbinden"), _("Deinen Account gibt es schon, z. B. auf dem Handy."), "link"),
             (_("Mit Schlüsseldatei wiederherstellen"), _("Aus deiner Notfall-Sicherung."), "keyfile"),
         ):
             row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
@@ -263,7 +263,7 @@ class Onboarding(Gtk.Box):
     # --- new account -------------------------------------------
 
     def build_register(self):
-        box = page(_("Neues Konto"), _("Es gibt kein Passwort: Dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."))
+        box = page(_("Neuer Account"), _("Es gibt kein Passwort: Dein Account ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt."))
         group = Adw.PreferencesGroup()
         self.invite_row = Adw.EntryRow(title=_("Einladungscode"))
         self.username_row = Adw.EntryRow(title=_("Benutzername (klein, ohne Leerzeichen)"))
@@ -273,7 +273,7 @@ class Onboarding(Gtk.Box):
         box.append(group)
         self.register_error = self.error_label()
         box.append(self.register_error)
-        button = pill(_("Konto erstellen"))
+        button = pill(_("Account erstellen"))
         button.connect("clicked", lambda _b: self.register())
         box.append(button)
         self.wrap(box, "register")
@@ -483,7 +483,7 @@ def approve_device(window, channel):
     sync = window.sync
     dialog = Adw.AlertDialog(
         heading=_("Neues Gerät verbinden?"),
-        body=_("„{value}“ möchte sich mit deinem Konto verbinden. Gib den 6-stelligen Code ein, der dort angezeigt wird. Wenn du das nicht selbst warst, tippe auf „Ablehnen“.", value=channel.get('note') or 'Ein neues Gerät'),
+        body=_("„{value}“ möchte sich mit deinem Account verbinden. Gib den 6-stelligen Code ein, der dort angezeigt wird. Wenn du das nicht selbst warst, tippe auf „Ablehnen“.", value=channel.get('note') or 'Ein neues Gerät'),
     )
     entry = Gtk.Entry(placeholder_text="123 456", max_length=7, input_purpose=Gtk.InputPurpose.DIGITS, activates_default=True)
     dialog.set_extra_child(entry)
@@ -534,7 +534,7 @@ class PeopleDialog(Adw.Dialog):
         )
         users = other_users(self.sync)
         if not users:
-            self.group.add(Adw.ActionRow(title=_("Noch niemand"), subtitle=_("Erzeuge einen Einladungscode im Kontomenü.")))
+            self.group.add(Adw.ActionRow(title=_("Noch niemand"), subtitle=_("Erzeuge einen Einladungscode im Account-Menü.")))
         for user in users:
             state = verified_state(self.sync, user)
             subtitle = {"verified": _("✓ verifiziert"), "unverified": _("noch nicht verifiziert"),
@@ -659,7 +659,7 @@ class ShareDialog(Adw.Dialog):
         users = other_users(self.sync)
         if not users:
             group.add(Adw.ActionRow(title=_("Noch niemand zum Teilen da"),
-                                    subtitle=_("Erzeuge im Kontomenü einen Einladungscode.")))
+                                    subtitle=_("Erzeuge im Account-Menü einen Einladungscode.")))
         for user in users:
             state = verified_state(self.sync, user)
             row = Adw.ActionRow(title=user["name"])
@@ -713,23 +713,23 @@ class ShareDialog(Adw.Dialog):
 
 HELP = [
     (_("Erste Schritte"), [
-        (_("Ohne Server"), _("Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach ein Notizen-Programm, alles liegt verschlüsselt nur auf diesem Computer. Später im Kontomenü „Mit Server verbinden …“ wählen – deine Notizen werden dann hochgeladen und lassen sich teilen und auf anderen Geräten nutzen.")),
-        (_("Konto anlegen"), _("Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neues Konto erstellen“. Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – dein Konto ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.")),
-        (_("Schlüsseldatei sichern"), _("Speichere direkt danach die Schlüsseldatei (Kontomenü → „Schlüsseldatei sichern“) und lege sie z. B. auf einem USB-Stick an einen sicheren Ort. Ohne Gerät und ohne Schlüsseldatei kann niemand – auch nicht der Server-Betreiber – deine Notizen wiederherstellen.")),
+        (_("Ohne Server"), _("Beim ersten Start „Ohne Server nutzen“ wählen: LiNotes ist dann einfach ein Notizen-Programm, alles liegt verschlüsselt nur auf diesem Computer. Später im Account-Menü „Mit Server verbinden …“ wählen – deine Notizen werden dann hochgeladen und lassen sich teilen und auf anderen Geräten nutzen.")),
+        (_("Account anlegen"), _("Beim ersten Start gibst du die Adresse deines LiNotes-Servers ein und wählst „Neuen Account erstellen“. Dafür brauchst du einen Einladungscode von der Person, die den Server betreibt. Ein Passwort gibt es nicht – dein Account ist durch einen Schlüssel geschützt, der nur auf deinen Geräten liegt.")),
+        (_("Schlüsseldatei sichern"), _("Speichere direkt danach die Schlüsseldatei (Account-Menü → „Schlüsseldatei sichern“) und lege sie z. B. auf einem USB-Stick an einen sicheren Ort. Ohne Gerät und ohne Schlüsseldatei kann niemand – auch nicht der Server-Betreiber – deine Notizen wiederherstellen.")),
         (_("Weiteres Gerät"), _("Auf dem neuen Gerät „Mit anderem Gerät verbinden“ wählen und deinen Benutzernamen eingeben. Auf einem Gerät, auf dem du schon angemeldet bist, erscheint dann eine Anfrage: dort den 6-stelligen Code eintippen oder mit dem Handy den QR-Code scannen.")),
     ]),
     (_("Notizen"), [
         (_("Formatieren"), _("Über „Aa“ wählst du Titel, Überschrift, Unterüberschrift, Text, Monospace, Listen oder Zitat. Tastenkürzel wie auf dem Mac: Strg+Umschalt+T (Titel), +H (Überschrift), +J (Unterüberschrift), +B (Text), +L (Checkliste), +7/8/9 (Listen); Strg+B/I/U für fett, kursiv, unterstrichen.")),
         (_("Checklisten"), _("Kreis anklicken, um einen Punkt abzuhaken. Tab rückt ein, Umschalt+Tab aus. Eine leere Zeile beendet die Liste. Im Format-Menü kannst du abgehakte Punkte automatisch nach unten sortieren lassen.")),
         (_("Tags"), _("Schreibe #Wort in eine Notiz – der Tag erscheint unten in der Seitenleiste zum Filtern.")),
-        (_("Profi-Funktionen"), _("Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Im Darstellungsmenü (⋯) „Profi-Funktionen“ einschalten – dann gibt es im Format-Menü zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel anklicken zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für dein Konto auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block.")),
+        (_("Profi-Funktionen"), _("Ab Werk zeigt LiNotes nur, was man im Alltag braucht. Im Darstellungsmenü (⋯) „Profi-Funktionen“ einschalten – dann gibt es im Format-Menü zusätzlich Code mit Syntaxfarben (Python, Kotlin, Shell, JSON) und Fußnoten/Quellen – hochgestellte Nummern im Text, die Liste „Fußnoten und Quellen“ unter der Notiz und im PDF; Nummer antippen zum Bearbeiten – sowie Formeln in LaTeX-Schreibweise („Formel (LaTeX) …“, z. B. \\frac{a}{b}, x^2, \\sqrt{x}, \\sum_{i=1}^{n}, Matrizen und Fallunterscheidungen), sauber gesetzt in der Notiz und im PDF, ohne Internet; Formel anklicken zum Ändern, unbekannte Befehle werden rot markiert. Der Schalter gilt für deinen Account auf allen Geräten. Notizen, die solche Elemente schon enthalten, werden immer richtig angezeigt. Ein leerer Code-Absatz mit Enter beendet den Code-Block.")),
         (_("Vorlagen"), _("„+“ über der Seitenleiste → „Neue Notiz aus Vorlage …“: mitgeliefert sind Besprechung, Protokoll, Reisecheckliste und Tagebuch. Eigene Vorlage: eine Notiz anlegen und Rechtsklick → „Als Vorlage verwenden“. {{Datum}}, {{Uhrzeit}} und {{Wochentag}} werden beim Anlegen durch die aktuellen Werte ersetzt, z. B. „Besprechung {{Datum}}“.")),
         (_("Link-Vorschau"), _("Steht eine Webadresse allein in einer Zeile, wird sie nach Enter zur Vorschau mit Titel, Bild und Domain – wenn du „Link-Vorschau (Webseite abrufen)“ im Darstellungsmenü (⋯) einschaltest; ab Werk ist sie aus. Dafür ruft nur dieser Computer die Seite ab, der Betreiber sieht dabei die Adresse deines Anschlusses. Die Vorschau liegt verschlüsselt in der Notiz, andere Geräte rufen nichts ab. Rechtsklick auf die Vorschau → „Nur als Adresse zeigen“. Gesperrte Notizen bekommen keine Vorschau.")),
         (_("Gesperrte Notizen"), _("Über das Schloss sperrst du eine Notiz mit deinem Notizen-Passwort. Sie wird zusätzlich verschlüsselt und sperrt sich nach 10 Minuten ohne Benutzung wieder. Geteilte Notizen können nicht gesperrt werden.")),
         (_("Gelöschte Notizen"), _("Gelöschte Notizen liegen 30 Tage in „Zuletzt gelöscht“ und lassen sich dort wiederherstellen.")),
     ]),
     (_("Teilen"), [
-        (_("Personen verifizieren"), _("Bevor du etwas teilst, verifiziert ihr euch einmal: Kontomenü → „Personen“ → „Verifizieren“. Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch nicht der Server – euch einen falschen Schlüssel unterschieben.")),
+        (_("Personen verifizieren"), _("Bevor du etwas teilst, verifiziert ihr euch einmal: Account-Menü → „Personen“ → „Verifizieren“. Dein Gerät zeigt einen Code, die andere Person tippt ihn ein oder scannt den QR-Code. So kann niemand – auch nicht der Server – euch einen falschen Schlüssel unterschieben.")),
         (_("Etwas teilen"), _("Rechtsklick auf einen Ordner, eine Liste, ein Board oder eine Notiz → „Teilen …“ und die Personen auswählen. Wird ein Ordner geteilt, gilt das für alle Notizen darin. Entfernst du jemanden, wird neu verschlüsselt.")),
     ]),
     (_("Listen und Aufgaben"), [

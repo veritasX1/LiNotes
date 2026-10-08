@@ -14,7 +14,7 @@ from .i18n import _
 
 
 ERRORS = {
-    "wrong-credentials": _("Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Konto."),
+    "wrong-credentials": _("Anmeldung fehlgeschlagen – der Schlüssel passt nicht zu diesem Account."),
     "too-many-attempts": _("Zu viele Versuche. Bitte warte ein paar Minuten."),
     "invalid-invite": _("Dieser Einladungscode ist ungültig oder wurde schon verwendet."),
     "invalid-username": _("Der Benutzername darf nur aus Kleinbuchstaben, Ziffern, Punkt, Minus und Unterstrich bestehen (2–32 Zeichen)."),

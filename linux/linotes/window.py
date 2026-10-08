@@ -232,7 +232,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
         header.pack_end(self.note_tools)
         content.add_top_bar(header)
         # A friendly reminder after a few days of use – never at the first start.
-        self.keyfile_banner = Adw.Banner(title=_("Sichere dein Konto mit einer Schlüsseldatei – falls ein Gerät verloren geht."),
+        self.keyfile_banner = Adw.Banner(title=_("Sichere deinen Account mit einer Schlüsseldatei – falls ein Gerät verloren geht."),
                                          button_label=_("Jetzt sichern"))
         self.keyfile_banner.connect("button-clicked", lambda _b: (self.keyfile_banner.set_revealed(False),
                                                                   security_ui.KeyfileDialog(self).present(self)))
@@ -477,7 +477,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
             # Used without a server so far: move everything into the account.
             def done(_result, error):
                 if isinstance(error, sync_module.VaultConflict):
-                    self.toast(_("Dieses Konto hat schon ein Notizen-Passwort. Entferne zuerst die Sperre deiner gesperrten Notizen."))
+                    self.toast(_("Dieser Account hat schon ein Notizen-Passwort. Entferne zuerst die Sperre deiner gesperrten Notizen."))
                     return
                 if error is not None:
                     self.toast(_("Verbinden fehlgeschlagen: {error_text}", error_text=error_text(error)))
@@ -502,7 +502,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
     def needs_server(self, then):
         """Sharing, people and key files only make sense with a server."""
         if self.sync.is_local:
-            self.toast(_("Dafür brauchst du einen Server – Kontomenü → „Mit Server verbinden …“"))
+            self.toast(_("Dafür brauchst du einen Server – Account-Menü → „Mit Server verbinden …“"))
         else:
             then()
 
@@ -574,7 +574,7 @@ class LiNotesWindow(Adw.ApplicationWindow):
                 return
             dialog = Adw.AlertDialog(
                 heading=_("Einladungscode"),
-                body=_("Mit diesem Code kann einmalig ein neues Konto erstellt werden:\n\n{code}\n\nServer: {server}\nIn der App „Neues Konto erstellen“ wählen.", code=code, server=self.sync.server),
+                body=_("Mit diesem Code kann einmalig ein neuer Account erstellt werden:\n\n{code}\n\nServer: {server}\nIn der App „Neuen Account erstellen“ wählen.", code=code, server=self.sync.server),
             )
             dialog.add_response("copy", _("Kopieren"))
             dialog.add_response("ok", _("Fertig"))

@@ -571,7 +571,7 @@ class SyncEngine(private val context: Context) {
             shareKeys[newShare] = key
             val keys = JSONObject()
             for (uid in listOf(userId) + members) {
-                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekanntes Konto"))
+                val target = userById(uid) ?: throw IllegalStateException(tr("Unbekannter Account"))
                 keys.put(uid.toString(), E2E.wrapKey(key, target.identity, newShare))
             }
             put("share", JSONObject().put("keys", keys).put("target", objectId)
