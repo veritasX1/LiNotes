@@ -9,6 +9,7 @@ Die Texte kommen aus der mitgelieferten Datei selbst (Kopf von qrcodegen.py) und
 /usr/share/common-licenses (GPL-3). Neue Bibliothek: unten eintragen, Skript laufen lassen, Datei committen."""
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,27 +34,39 @@ UBUNTU = [
 
 
 def reflow(text):
-    """Hard line breaks inside a paragraph become spaces so the text wraps in a narrow column (as in LiMail);
-    blank lines, indented lines and list items keep their own line."""
+    """Calm paragraphs like iOS „Rechtliches“ (Richard 08.10., Michelle 486dbb6a): hard line breaks inside a paragraph
+    become spaces, indentation goes, separator lines (----) are dropped; headings (ALL CAPS or centred) and list
+    items start their own line, the lines below an item join it."""
     out, para = [], []
     def flush():
         if para:
             out.append(" ".join(para))
             para.clear()
+    def blank():
+        flush()
+        if out and out[-1]:
+            out.append("")
     for line in text.splitlines():
         stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        letters = [c for c in stripped if c.isalpha()]
         if not stripped:
-            flush(); out.append("")
-        elif stripped[:2] in ("- ", "* ", "• ") or (stripped[:1].isdigit() and stripped[1:3].strip(". )") == ""):
-            flush(); out.append(line.rstrip())
-        elif line[:1] in (" ", "\t") and out and out[-1].strip() and not para:
-            out[-1] = out[-1].rstrip() + " " + stripped
-        elif line[:1] in (" ", "\t"):
-            flush(); out.append(line.rstrip())
+            blank()
+        elif re.match(r"^#{1,6}\s", stripped):
+            blank(); out.append(stripped.lstrip("#").strip()); out.append("")   # Markdown heading, without the #
+        elif len(stripped) >= 3 and not set(stripped) - set("-=_*~ "):
+            blank()                                   # ---------- separator
+        elif (letters and all(c.isupper() for c in letters) and len(stripped) <= 80) or (indent >= 8 and len(stripped) <= 60 and not para):
+            blank(); out.append(stripped); out.append("")   # heading
+        elif re.match(r"^([-*•]|\(?[0-9]{1,2}[.)]|\([a-z]{1,3}\))\s", stripped):
+            flush(); para.append(stripped)            # list item: own line, following lines join it
         else:
             para.append(stripped)
     flush()
-    return "\n".join(out).strip() + "\n"
+    while out and not out[-1]:
+        out.pop()
+    text = "\n".join(out)
+    return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
 
 def qrcodegen_text():
